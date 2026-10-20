@@ -1,12 +1,11 @@
 ![](icon_vacantagent.jpg)
 
-# vacantagent
+# VacantAgent
 
-## Context 
+## Getting Started
 
-## Goal
+Running the frontend locally on port 5173:
 
-## Solution
-
-
-
+1. ``npm i`` (before first start and after changes in dependencies)
+2. ``npm run dev``
+3. Visit [http://localhost:5173/](http://localhost:5173/) in browser

@@ -1,0 +1,30 @@
+{
+  "name": "vacantagent-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "generate:api": "openapi-ts"
+  },
+  "dependencies": {
+    "ag-grid-community": "^34.0.0",
+    "ag-grid-react": "^34.0.0",
+    "antd": "^5.25.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.97.3",
+    "@types/node": "^22.15.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "typescript": "~5.8.3",
+    "vite": "^6.3.0",
+    "vitest": "5.0.0-rc.2"
+  }
+}
