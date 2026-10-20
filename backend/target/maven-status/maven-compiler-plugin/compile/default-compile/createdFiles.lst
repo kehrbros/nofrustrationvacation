@@ -1,0 +1,6 @@
+com\vacantagent\market\entities\ProviderOffer.class
+com\vacantagent\App.class
+com\vacantagent\market\Broker.class
+com\vacantagent\market\entities\Agreement.class
+com\vacantagent\market\entities\ConsumerOrder.class
+com\vacantagent\consumer\entities\Consumer.class
