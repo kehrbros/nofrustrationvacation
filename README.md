@@ -1,4 +1,4 @@
-![](icon_vacantagent.jpg)
+![](backend/icon_vacantagent.jpg)
 
 # VacantAgent
 
