@@ -1,4 +1,4 @@
-package org.vacantagent;
+package com.vacantagent;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

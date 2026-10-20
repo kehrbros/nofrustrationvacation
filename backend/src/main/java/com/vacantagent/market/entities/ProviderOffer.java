@@ -1,4 +1,4 @@
-package org.vacantagent.market.entities;
+package com.vacantagent.market.entities;
 
 import lombok.Getter;
 import lombok.Setter;

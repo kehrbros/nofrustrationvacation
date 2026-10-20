@@ -1,4 +1,4 @@
-package org.vacantagent.market.entities;
+package com.vacantagent.market.entities;
 
 import java.math.BigDecimal;
 import java.time.Duration;
