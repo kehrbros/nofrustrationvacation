@@ -1,0 +1,124 @@
+{
+  "openapi" : "3.1.0",
+  "info" : {
+    "title" : "OpenAPI definition",
+    "version" : "v0"
+  },
+  "servers" : [ {
+    "url" : "http://localhost:8080",
+    "description" : "Generated server url"
+  } ],
+  "paths" : {
+    "/api/v1/users/me" : {
+      "get" : {
+        "operationId" : "getProfile",
+        "parameters" : [ {
+          "description" : "ISO 4217 code of the currency for monetary values, defaults to the preferred currency",
+          "in" : "query",
+          "name" : "currency",
+          "required" : false,
+          "schema" : {
+            "type" : [ "string", "null" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AppUserDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    },
+    "/api/v1/users/me/preferred-currency" : {
+      "put" : {
+        "operationId" : "changePreferredCurrency",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PreferredCurrencyDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AppUserDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "user-controller" ]
+      }
+    }
+  },
+  "components" : {
+    "schemas" : {
+      "AppUserDto" : {
+        "type" : "object",
+        "properties" : {
+          "accountBalance" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "preferredCurrency" : {
+            "type" : [ "string", "null" ]
+          },
+          "username" : {
+            "type" : "string"
+          }
+        }
+      },
+      "MoneyDto" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : "string",
+            "format" : "decimal",
+            "example" : "12.50"
+          },
+          "currency" : {
+            "type" : "string",
+            "description" : "ISO 4217 currency code",
+            "example" : "EUR"
+          },
+          "exchangeRate" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "0.9187000000"
+          },
+          "exchangeRateDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          }
+        },
+        "required" : [ "amount", "currency" ]
+      },
+      "PreferredCurrencyDto" : {
+        "type" : "object",
+        "properties" : {
+          "currency" : {
+            "type" : [ "string", "null" ],
+            "example" : "EUR"
+          }
+        }
+      }
+    }
+  }
+}

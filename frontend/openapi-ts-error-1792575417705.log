@@ -1,0 +1,23 @@
+[2026-10-21T09:36:57.705Z] Error: EPERM: operation not permitted, unlink '/sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/src/generated/api/client/client.gen.ts'
+Stack:
+Error: EPERM: operation not permitted, unlink '/sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/src/generated/api/client/client.gen.ts'
+    at unlinkSync (node:fs:1948:11)
+    at _unlinkSync (node:internal/fs/rimraf:215:14)
+    at rimrafSync (node:internal/fs/rimraf:196:7)
+    at node:internal/fs/rimraf:254:9
+    at Array.forEach (<anonymous>)
+    at _rmdirSync (node:internal/fs/rimraf:251:7)
+    at rimrafSync (node:internal/fs/rimraf:201:14)
+    at node:internal/fs/rimraf:254:9
+    at Array.forEach (<anonymous>)
+    at _rmdirSync (node:internal/fs/rimraf:251:7)
+    at rimrafSync (node:internal/fs/rimraf:201:14)
+    at Object.rmSync (node:fs:1239:10)
+    at generateOutput (file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/src-BeNy9O9X.mjs:16:37)
+    at createClient$1 (file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/src-BeNy9O9X.mjs:152:31)
+    at async file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/src-BeNy9O9X.mjs:212:12
+    at async Promise.all (index 0)
+    at async createClient (file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/src-BeNy9O9X.mjs:210:21)
+    at async Command.<anonymous> (file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/run.mjs:35:8)
+    at async Command.parseAsync (/sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/commander/lib/command.js:1122:5)
+    at async runCli (file:///sessions/rcw-012kywee45yxj16gmiscu1vw/mnt/vacantagent/frontend/node_modules/@hey-api/openapi-ts/dist/run.mjs:39:3)

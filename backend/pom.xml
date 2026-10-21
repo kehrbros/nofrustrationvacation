@@ -144,7 +144,8 @@
                     </execution>
                 </executions>
                 <configuration>
-                    <outputDir>${project.build.directory}</outputDir>
+                    <!-- Committed contract for the frontend, CI fails if it differs from the generated spec -->
+                    <outputDir>${project.basedir}/../frontend</outputDir>
                     <outputFileName>openapi.json</outputFileName>
                     <failOnError>true</failOnError>
                 </configuration>

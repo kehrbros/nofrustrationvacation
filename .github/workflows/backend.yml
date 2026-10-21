@@ -21,7 +21,16 @@ jobs:
           java-version: '25'
           cache: maven
           cache-dependency-path: backend/pom.xml
-      - run: mvn -B test
+      - name: Test and generate OpenAPI spec
+        run: mvn -B verify
+      - name: Check committed OpenAPI spec
+        working-directory: .
+        run: |
+          if [ -n "$(git status --porcelain -- frontend/openapi.json)" ]; then
+            git diff -- frontend/openapi.json
+            echo "::error file=frontend/openapi.json::OpenAPI spec is outdated. Run 'mvn verify' in backend/ and commit frontend/openapi.json."
+            exit 1
+          fi
 
   publish:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
