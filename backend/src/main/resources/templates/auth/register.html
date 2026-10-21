@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VacantAgent – Register</title>
+</head>
+<body>
+<h1>Create an account</h1>
+<p th:if="${error}" th:text="${error}"></p>
+<form th:action="@{/register}" method="post">
+    <label>Username <input type="text" name="username" th:value="${username}" autocomplete="username" required autofocus></label>
+    <label>E-mail <input type="email" name="email" th:value="${email}" autocomplete="email"></label>
+    <label>Password <input type="password" name="password" autocomplete="new-password" required minlength="8"></label>
+    <button type="submit">Register</button>
+</form>
+<p><a th:href="@{/login}">Back to sign in</a></p>
+</body>
+</html>
