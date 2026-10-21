@@ -13,9 +13,11 @@
     </parent>
 
     <properties>
-        <java.version>17</java.version>
-        <lombok.version>1.18.28</lombok.version>
+        <java.version>25</java.version>
+        <lombok.version>1.18.42</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
+        <!-- JDK 23+ no longer runs annotation processors (Lombok) from the classpath by default -->
+        <maven.compiler.proc>full</maven.compiler.proc>
     </properties>
 
     <dependencies>
@@ -28,6 +30,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-envers</artifactId>
         </dependency>
 
         <dependency>
@@ -73,12 +80,16 @@
                     <execution>
                         <id>start-for-openapi</id>
                         <phase>pre-integration-test</phase>
-                        <goals><goal>start</goal></goals>
+                        <goals>
+                            <goal>start</goal>
+                        </goals>
                     </execution>
                     <execution>
                         <id>stop-after-openapi</id>
                         <phase>post-integration-test</phase>
-                        <goals><goal>stop</goal></goals>
+                        <goals>
+                            <goal>stop</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -90,7 +101,9 @@
                     <execution>
                         <id>generate-openapi</id>
                         <phase>integration-test</phase>
-                        <goals><goal>generate</goal></goals>
+                        <goals>
+                            <goal>generate</goal>
+                        </goals>
                     </execution>
                 </executions>
                 <configuration>

@@ -1,24 +1,25 @@
 package com.vacantagent.market.entities;
 
+import com.vacantagent.common.data.AbstractEntity;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
 import lombok.Getter;
-import lombok.Setter;
 
 import java.math.BigDecimal;
-import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.time.ZonedDateTime;
 
 @Getter
-@Setter
-public class ProviderOffer {
-    private BigDecimal costPerToken;
-    // private BigDecimal lowerLimit for negotiation
+@Entity
+public class ProviderOffer extends AbstractEntity {
+    @Column(scale = 6)
+    private BigDecimal pricePerMillionInputTokens; // TODO PKE change to monetary value
+    @Column(scale = 6)
+    private BigDecimal pricePerMillionOutputTokens; // TODO PKE change to monetary value
+    private OffsetDateTime offeredUntil;
+
     private String modelProvider;
     private String modelName;
-    private Duration marketWaitTime;
-    private OffsetDateTime lastErrorAt;
 
-    private boolean isProviderOfferAvailable(){
-        return false;
-    }
+    private OffsetDateTime lastErrorAt;
+    private OffsetDateTime lastSuccessAt;
 }
