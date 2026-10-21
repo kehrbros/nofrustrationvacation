@@ -5,6 +5,7 @@ import com.vacantagent.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.hibernate.envers.Audited;
 import org.hibernate.envers.RelationTargetAuditMode;
@@ -14,6 +15,7 @@ import java.time.OffsetDateTime;
 @Getter
 @Entity
 @Audited
+@AllArgsConstructor
 public class Agreement extends AbstractEntity {
     @ManyToOne
     @Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)

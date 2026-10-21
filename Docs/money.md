@@ -19,7 +19,7 @@
 - **Umgestellt durch `V4__money.sql`** (vorher Entities `scale = 6`, Schema `NUMERIC(38, 2)`):
   - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` inkl. `agreement_aud`
   - `ProviderOffer.pricePerMillionInputTokens`, `pricePerMillionOutputTokens`
-  - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`
+  - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`; durch `V5__align_order_offer_columns.sql` ersetzt durch `maxCostPerMillionInputTokens`, `maxCostPerMillionOutputTokens` (ebenfalls `NUMERIC(19, 8)`)
   - `AppUser.accountBalance`, zusätzlich neues Feld `AppUser.preferredCurrency`
 - **Buchungen mit Umrechnung** (Ein-/Auszahlung, noch nicht umgesetzt): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). Alle Felder mit der Buchung speichern, nie neu berechnen.
 

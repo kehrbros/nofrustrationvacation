@@ -4,16 +4,21 @@ import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.Duration;
 
 @Getter
 @Entity
+@AllArgsConstructor
 public class ConsumerOrder extends AbstractEntity {
     @Column(precision = 19, scale = Money.SCALE)
-    private Money minCostPerMillionTokens;
+    private Money maxCostPerMillionInputTokens;
     @Column(precision = 19, scale = Money.SCALE)
-    private Money maxCostPerMillionTokens;
+    private Money maxCostPerMillionOutputTokens;
     private Duration marketWaitTime;
+
+    protected ConsumerOrder() {
+    }
 }

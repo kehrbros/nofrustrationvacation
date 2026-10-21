@@ -4,12 +4,14 @@ import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.OffsetDateTime;
 
 @Getter
 @Entity
+@AllArgsConstructor
 public class ProviderOffer extends AbstractEntity {
     @Column(precision = 19, scale = Money.SCALE)
     private Money pricePerMillionInputTokens;
@@ -22,4 +24,10 @@ public class ProviderOffer extends AbstractEntity {
 
     private OffsetDateTime lastErrorAt;
     private OffsetDateTime lastSuccessAt;
+
+    private Long availableTokens;
+    private Long totalTokens;
+
+    protected ProviderOffer() {
+    }
 }

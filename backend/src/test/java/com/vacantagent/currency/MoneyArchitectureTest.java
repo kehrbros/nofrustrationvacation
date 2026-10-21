@@ -5,6 +5,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.vacantagent.common.money.CurrencyAmount;
 import com.vacantagent.currency.dto.MoneyDto;
+import jakarta.persistence.Entity;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -32,7 +33,7 @@ class MoneyArchitectureTest {
 
     @Test
     void entitiesUseMoneyInsteadOfBigDecimal() {
-        fields().that().areDeclaredInClassesThat().resideInAPackage("..entities..")
+        fields().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
                 .and().areDeclaredInClassesThat().resideOutsideOfPackage(CURRENCY_MODULE)
                 .should().notHaveRawType(BigDecimal.class)
                 .because("monetary values are persisted as Money, see Docs/money.md")
