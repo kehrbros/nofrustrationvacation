@@ -1,67 +1,58 @@
-# Geldbeträge und Währungen (Konzept)
+# Geldbeträge und Währungen
 
-Status: Konzept, noch nicht umgesetzt. Betrifft die `// TODO PKE change to monetary value`-Felder in `market.entities` und `AppUser.accountBalance`.
-
-## Grundsatz
-
-- **Eine Basiswährung im Backend:** Logik, Persistenz, Matching und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur in `api`/`dto` und in der Kursverwaltung.
-- **Basiswährung: USD (Vorschlag).** LLM-Anbieter bepreisen und rechnen in USD ab, damit entfällt die Umrechnung auf der Anbieterseite. Alternative EUR, falls Zahlungsanbieter/Buchhaltung EUR erzwingen. Festgelegt als Konstante `Money.BASE_CURRENCY`, nicht konfigurierbar: ein späterer Wechsel erfordert eine Datenmigration.
-- **Warum nur eine Währung:** Vergleiche (`minCost ≤ price ≤ maxCost`) und Summen sind ohne Kurs eindeutig, Envers-Historie bleibt kursunabhängig, kein Mischen von Währungen in einer Rechnung.
+- **Grundsatz:** Logik, Persistenz, Matching und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.vacantagent.currency`.
+- **Basiswährung: USD**, fest in `Money.BASE_CURRENCY`. LLM-Anbieter bepreisen in USD, damit entfällt die Umrechnung auf der Anbieterseite. Nicht konfigurierbar: ein Wechsel erfordert eine Datenmigration.
+- **Warum nur eine Währung:** Vergleiche (`minCost ≤ price ≤ maxCost`) und Summen sind ohne Kurs eindeutig, die Envers-Historie bleibt kursunabhängig.
 
 ## Typ `Money` (`com.vacantagent.common.money`)
 
-- `record Money(BigDecimal amount)`, immer in Basiswährung, daher ohne Währungsfeld. Ersetzt rohe `BigDecimal` in Entities, Logik und Repositories.
-- **Skala:** fest 8 Nachkommastellen (`Money.SCALE = 8`), im Konstruktor per `setScale(8, HALF_EVEN)` normiert. Grund: Kosten einzelner Requests liegen im Bereich von Bruchteilen eines Cents (z. B. 1.000 Tokens × 0,10 USD/Mio. = 0,0001 USD).
-- **Operationen:** `plus`, `minus`, `times(BigDecimal)`, `dividedBy(BigDecimal)` (intern `MathContext.DECIMAL128`, danach Skala 8), `isNegative`, `compareTo`, `Money.ZERO`, `Money.of("1.25")`. Kein `double`, kein `equals` auf ungleich skalierten `BigDecimal`.
-- **Preis pro Mio. Tokens:** bleibt `Money` (Feldname trägt die Einheit, wie heute). Kostenberechnung zentral: `Money costFor(long tokens)` = `price.times(tokens).dividedBy(1_000_000)`.
-- **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, java.util.Currency currency)`, nur in `api`/`dto` und im Umrechnungsservice. ArchUnit-Regel: `CurrencyAmount` und `MoneyDto` nicht in `logic`, `data`, `entities`.
+- `record Money(BigDecimal amount)`, immer Basiswährung, daher ohne Währungsfeld. Für alle Geldbeträge in Entities, Logik und Repositories, nie rohe `BigDecimal`.
+- **Skala:** fest 8 Nachkommastellen (`Money.SCALE`), im Konstruktor per `HALF_EVEN` normiert, daher ist `equals` sicher. Grund: Kosten einzelner Requests liegen bei Bruchteilen eines Cents (1.000 Tokens × 0,10 USD/Mio. = 0,0001 USD).
+- **Operationen:** `plus`, `minus`, `times`, `dividedBy` (intern `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Nie `double`.
+- **Preise pro Mio. Tokens** sind `Money`, der Feldname trägt die Einheit. Kosten: `price.costFor(tokens)`.
+- **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, nur an der API und im Modul `currency`.
 
 ## Persistenz
 
-- **Mapping:** `MoneyConverter implements AttributeConverter<Money, BigDecimal>` mit `@Converter(autoApply = true)`, analog zu `DurationConverter`. Eine Spalte pro Betrag, keine Währungsspalte.
-- **Spaltentyp:** `NUMERIC(19, 8)` überall (max. ~10^11 Einheiten Basiswährung). In der Entity `@Column(precision = 19, scale = 8)`.
-- **Betroffene Felder:**
-  - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` (auch in `agreement_aud`; Envers übernimmt den Converter automatisch)
+- **Mapping:** `common.data.MoneyConverter` (`@Converter(autoApply = true)`, analog `DurationConverter`). Eine Spalte pro Betrag, keine Währungsspalte. Entity-Feld: `@Column(precision = 19, scale = Money.SCALE) private Money ...;`
+- **Spaltentyp:** `NUMERIC(19, 8)`. Neue Geldspalten in Migrationen ebenso anlegen, in `_aud`-Tabellen auch.
+- **Umgestellt durch `V4__money.sql`** (vorher Entities `scale = 6`, Schema `NUMERIC(38, 2)`):
+  - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` inkl. `agreement_aud`
   - `ProviderOffer.pricePerMillionInputTokens`, `pricePerMillionOutputTokens`
   - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`
-  - `AppUser.accountBalance`
-- **Ist-Abweichung:** Entities deklarieren `scale = 6`, `V1__initial_schema.sql` aber `NUMERIC(38, 2)`. Bei 2 Nachkommastellen gehen Token-Preise wie 0,075 USD/Mio. verloren. Neue Migration (`V3__money_columns.sql`, V2 ist durch Auth belegt) stellt alle oben genannten Spalten inkl. `_aud` auf `NUMERIC(19, 8)` um.
-- **Umrechnungen mit Buchungswirkung** (Einzahlung, Auszahlung) werden mit Originalbetrag, Originalwährung, Kurs, Kursdatum und Basisbetrag gespeichert (künftige Buchungs-/Transaktionstabelle), damit jede Buchung später nachvollziehbar ist.
+  - `AppUser.accountBalance`, zusätzlich neues Feld `AppUser.preferredCurrency`
+- **Buchungen mit Umrechnung** (Ein-/Auszahlung, noch nicht umgesetzt): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). Alle Felder mit der Buchung speichern, nie neu berechnen.
 
-## Wechselkurse
+## Wechselkurse (`com.vacantagent.currency`)
 
-- **Quelle:** EZB-Referenzkurse (kostenlos, ohne API-Key, ca. 30 Währungen, werktags ~16:00 MEZ, Basis EUR). USD-Kreuzkurse werden daraus berechnet (`EUR→X / EUR→USD`). Falls stündliche Kurse nötig werden: Wechsel auf kostenpflichtigen Anbieter (z. B. Open Exchange Rates) hinter demselben Interface `ExchangeRateProvider`.
-- **Speicherung:** Tabelle `exchange_rate(currency CHAR(3), rate NUMERIC(19, 10), rate_date DATE, fetched_at TIMESTAMP WITH TIME ZONE, source VARCHAR)`, eindeutig auf `(currency, rate_date)`. `rate` = Einheiten Fremdwährung je 1 Basiswährung. Nicht auditiert, die Tabelle ist selbst die Historie.
-- **Abruf:** `@Scheduled`-Job täglich (z. B. 17:00 Europe/Berlin) plus beim Start, falls der heutige Kurs fehlt. In-Memory-Cache für den jeweils neuesten Kurs.
-- **Veraltete Kurse:** Wochenende/Feiertage nutzen den letzten verfügbaren Kurs. Ist dieser älter als 4 Tage: Anzeige weiterhin erlaubt, buchungswirksame Umrechnung wird mit `BusinessException` abgelehnt.
-- **Unterstützte Währungen:** Whitelist in `application.properties` (`vacantagent.money.currencies=USD,EUR,GBP,CHF`). Nicht unterstützte Währung → 400.
+- **Quelle:** `EcbExchangeRateProvider`, EZB-Referenzkurse (ohne API-Key, werktags ~16:00 MEZ, Basis EUR). Kurse zur Basiswährung als Kreuzkurs `EUR→X / EUR→USD`. Andere Quelle: weitere Implementierung von `ExchangeRateProvider`.
+- **Speicherung:** Tabelle `exchange_rate(currency, rate NUMERIC(19, 10), rate_date, fetched_at, source)`, eindeutig auf `(currency, rate_date)`. `rate` = Einheiten Fremdwährung je 1 USD. Nicht auditiert, die Tabelle ist selbst die Historie.
+- **Abruf:** `ExchangeRateUpdater` beim Start und per Cron (`vacantagent.money.exchange-rates.update-cron`, Mo–Fr 17:00 Europe/Berlin). Fehler werden nur geloggt, es gilt dann der letzte gespeicherte Kurs. Abschaltbar mit `vacantagent.money.exchange-rates.update-enabled=false` (in Tests gesetzt über `src/test/resources/config/application.properties`).
+- **Cache:** neuester Kurs je Währung im `CurrencyConversionService`, nach jedem Abruf geleert.
+- **Veraltete Kurse:** Anzeige nutzt immer den letzten Kurs (Wochenende/Feiertage). Buchungswirksame Umrechnung (`toBaseForBooking`) lehnt Kurse älter als `vacantagent.money.exchange-rates.max-age-days` (4) mit `ExchangeRateUnavailableException` ab.
+- **Unterstützte Währungen:** `vacantagent.money.currencies=USD,EUR,GBP,CHF`. Andere Währung → `UnsupportedCurrencyException` → HTTP 400 (`CurrencyExceptionHandler`).
 
 ## Umrechnung an den Schnittstellen
 
-- **Ort:** ausschließlich im Controller-/DTO-Mapping über `CurrencyConversionService`. `logic` bekommt und liefert nur `Money`.
-- **API-Format:** `MoneyDto { amount: string, currency: string }`, `amount` als Dezimal-String (keine JSON-Floats, Frontend rechnet nicht mit `number`). In OpenAPI als `type: string, format: decimal` (`@Schema`), damit der generierte Frontend-Client korrekt typisiert.
-- **Eingehend (Request):** Client sendet Betrag + Währung. Backend rechnet mit dem aktuellen Kurs in Basiswährung um: `base = amount / rate`, Skala 8, `HALF_EVEN`. Ist `currency` bereits Basiswährung, keine Umrechnung.
-- **Ausgehend (Response):** Ziel-Währung = Query-Parameter `currency`, sonst `AppUser.preferredCurrency` (neues Feld), sonst Basiswährung. `amount = base × rate`.
-- **Rundung ausgehend:**
-  - Preise (pro Mio. Tokens) und Kosten einzelner Requests: 6 Nachkommastellen, `HALF_EVEN`, damit kleine Preise sichtbar bleiben.
-  - Kontostände, Rechnungs- und Zahlbeträge: Nachkommastellen der Währung (`Currency.getDefaultFractionDigits()`, z. B. 2 für EUR, 0 für JPY), `HALF_EVEN`.
-  - Auszahlungen: `DOWN`, damit nie mehr ausgezahlt wird als das Guthaben deckt.
+- **Ort:** nur in Controllern/DTO-Mapping über `CurrencyConversionService`. `logic`, `data` und `entities` kennen nur `Money` (ArchUnit-Test `MoneyArchitectureTest`).
+- **API-Format:** `MoneyDto { amount, currency, exchangeRate?, exchangeRateDate? }`. `amount` und `exchangeRate` sind Dezimal-Strings (`type: string, format: decimal` in OpenAPI), nie JSON-Zahlen. `exchangeRate`/`exchangeRateDate` nur bei umgerechneten Werten, für „Kurs vom …“ im Frontend.
+- **Eingehend:** `Money fromDto(MoneyDto)` bzw. `toBase(CurrencyAmount)`: `base = amount / rate`, Skala 8, `HALF_EVEN`.
+- **Ausgehend:** `toDto(money, currency, rounding)`: `amount = base × rate`. Ziel-Währung über `responseCurrency(requested, preferred)`: Query-Parameter `currency`, sonst `AppUser.preferredCurrency`, sonst USD.
+- **Rundung ausgehend (`MoneyRounding`):**
+  - `PRICE`: Preise pro Mio. Tokens, Kosten einzelner Requests: 6 Nachkommastellen, `HALF_EVEN`.
+  - `AMOUNT`: Kontostände, Rechnungs- und Zahlbeträge: Nachkommastellen der Währung (2 für EUR, 0 für JPY), `HALF_EVEN`.
+  - `PAYOUT`: Auszahlungen: wie `AMOUNT`, aber `DOWN`, damit nie mehr ausgezahlt wird als das Guthaben deckt.
   - Formatierung (Tausendertrenner, Symbol) macht das Frontend.
-- **Zeitbezug des Kurses:**
-  - Aktuelle Werte (Angebote, Kontostand): neuester Kurs.
-  - Historische Werte (z. B. Kosten einer vergangenen Abrechnung): Kurs zum Ereigniszeitpunkt (`rate_date ≤ Ereignisdatum`, neuester).
-  - Buchungen: der beim Buchen verwendete Kurs wird mitgespeichert und nie neu berechnet.
-- **Transparenz:** umgerechnete Responses enthalten `exchangeRate` und `exchangeRateDate` (optionale Felder im `MoneyDto` oder einmal pro Response), damit das Frontend „Kurs vom …“ anzeigen kann.
-- **Roundtrip:** Werte, die der Nutzer in Fremdwährung eingegeben hat, können nach Hin- und Rückrechnung minimal abweichen. Wo das stört (z. B. Max-Preis einer Order), Originaleingabe zusätzlich nur zur Anzeige speichern.
+- **Zeitbezug des Kurses:** aktuelle Werte mit dem neuesten Kurs, historische Werte mit `toDto(..., at)` zum Kurs am Ereignisdatum, Buchungen mit dem gespeicherten Kurs.
+- **Roundtrip:** Hin- und Rückrechnung kann minimal abweichen. Wo das stört (z. B. Max-Preis einer Order), die Originaleingabe zusätzlich zur Anzeige speichern.
+- **Beispiel:** `GET /api/v1/users/me?currency=EUR` liefert `accountBalance` in EUR. `PUT /api/v1/users/me/preferred-currency` mit `{"currency": "EUR"}` (oder `null` für USD) setzt die Standardwährung.
 
 ## Tests
 
-- Unit-Tests für `Money` (Skala, Rundung, Arithmetik) und `CurrencyConversionService` (Kreuzkurse, Rundungsregeln, veraltete Kurse).
-- ArchUnit-Regeln: keine `BigDecimal`-Geldfelder in Entities, keine Fremdwährungstypen außerhalb `api`/`dto`.
-- Migrationstest: Spalten inkl. `_aud` haben `NUMERIC(19, 8)`.
+- `MoneyTest` (Skala, Rundung, Arithmetik), `CurrencyConversionServiceTest` (Umrechnung, Rundungsregeln, veraltete Kurse), `EcbExchangeRateProviderTest` (Kreuzkurse)
+- `MoneyPersistenceTest` (alle Geldspalten inkl. `_aud` sind `NUMERIC(19, 8)`), `UserControllerCurrencyTest` (API-Umrechnung), `MoneyArchitectureTest`
 
-## Offene Entscheidungen
+## Offen
 
-- Basiswährung USD oder EUR.
-- Wechselkursaufschlag/Spread bei Ein- und Auszahlungen (hier nicht vorgesehen).
-- Ob Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum gerundet gebucht wird.
+- Wechselkursaufschlag/Spread bei Ein- und Auszahlungen.
+- Buchungstabelle für Ein-/Auszahlungen; Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum.

@@ -1,6 +1,7 @@
 package com.vacantagent.market.entities;
 
 import com.vacantagent.common.data.AbstractEntity;
+import com.vacantagent.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
@@ -8,7 +9,6 @@ import lombok.Getter;
 import org.hibernate.envers.Audited;
 import org.hibernate.envers.RelationTargetAuditMode;
 
-import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 @Getter
@@ -25,10 +25,10 @@ public class Agreement extends AbstractEntity {
     private OffsetDateTime agreedAt;
     private OffsetDateTime validUntil;
 
-    @Column(scale = 6)
-    private BigDecimal agreedPricePerMillionInputTokens; // TODO PKE change to monetary value
-    @Column(scale = 6)
-    private BigDecimal agreedPricePerMillionOutputTokens; // TODO PKE change to monetary value
+    @Column(precision = 19, scale = Money.SCALE)
+    private Money agreedPricePerMillionInputTokens;
+    @Column(precision = 19, scale = Money.SCALE)
+    private Money agreedPricePerMillionOutputTokens;
 
     protected Agreement() {
     }

@@ -22,4 +22,4 @@ Entities annotated with `@Audited` are historized by Hibernate Envers in `_aud` 
 
 Authentication (OAuth2/OIDC with an own identity provider that can be replaced by Keycloak) is described in [Docs/authentication.md](Docs/authentication.md).
 
-Monetary values (single base currency, `Money` type, currency conversion at the API boundary) are designed in [Docs/money.md](Docs/money.md).
+Monetary values (single base currency USD, `Money` type, exchange rates and currency conversion at the API boundary) are described in [Docs/money.md](Docs/money.md).

@@ -1,4 +1,7 @@
 package com.vacantagent.user.dto;
 
-public record AppUserDto(Long id, String username) {
+import com.vacantagent.currency.dto.MoneyDto;
+import jakarta.annotation.Nullable;
+
+public record AppUserDto(Long id, String username, @Nullable String preferredCurrency, MoneyDto accountBalance) {
 }
