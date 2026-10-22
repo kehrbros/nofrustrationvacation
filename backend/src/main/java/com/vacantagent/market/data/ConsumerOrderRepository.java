@@ -15,4 +15,6 @@ public interface ConsumerOrderRepository extends JpaRepository<ConsumerOrder, Lo
             ORDER BY o.id
             """)
     List<ConsumerOrder> findAllWithoutAgreement();
+
+    boolean existsByIdAndAppUserId(long id, long appUserId);
 }

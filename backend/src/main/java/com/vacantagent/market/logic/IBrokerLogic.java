@@ -13,13 +13,21 @@ import java.util.concurrent.CompletableFuture;
  * so the agreement carries its id.
  */
 public interface IBrokerLogic {
-    Submission acceptOrder(OrderDto order);
+    /** @param appUserId owner of the new order, the authenticated user */
+    Submission acceptOrder(OrderDto order, long appUserId);
 
     CompletableFuture<MatchResult> cancelOrder(long orderId);
 
-    Submission acceptOffer(OfferDto offer);
+    /** False if the order does not exist or belongs to someone else. */
+    boolean isOrderOwnedBy(long orderId, long appUserId);
+
+    /** @param appUserId owner of the new offer, the authenticated user */
+    Submission acceptOffer(OfferDto offer, long appUserId);
 
     CompletableFuture<MatchResult> cancelOffer(long offerId);
+
+    /** False if the offer does not exist or belongs to someone else. */
+    boolean isOfferOwnedBy(long offerId, long appUserId);
 
     /**
      * Records a successful call through the agreement, which keeps it from being closed as unused.

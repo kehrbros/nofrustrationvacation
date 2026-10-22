@@ -77,7 +77,7 @@ class AgreementReaperTest {
     private Agreement agreement(OffsetDateTime agreedAt) {
         Money price = Money.of("900.00");
         ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, "provider", "model",
-                null, null, 1000L, 1000L));
+                null, null, 1000L, 1000L, null));
         return agreements.save(new Agreement(orders.save(emptyOrder()), offer, agreedAt, null, price, price));
     }
 }

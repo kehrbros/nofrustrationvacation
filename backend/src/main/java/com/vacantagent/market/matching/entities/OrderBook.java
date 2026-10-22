@@ -39,6 +39,8 @@ public final class OrderBook {
     private final QuadrantIndex<BookOrder> orders = new QuadrantIndex<>();
     private final Map<Long, QuadrantIndex.Entry<BookOffer>> offerById = new HashMap<>();
     private final Map<Long, QuadrantIndex.Entry<BookOrder>> orderById = new HashMap<>();
+    /** Waiting orders that have an owner, see {@link BookOrder#ownerModelKey()}. */
+    private final Map<BookOrder.OwnerModelKey, Long> orderIdByOwnerModel = new HashMap<>();
     private final PriorityQueue<Expiry> offerExpiries = new PriorityQueue<>(Comparator.comparingLong(Expiry::at));
     private final PriorityQueue<Expiry> orderExpiries = new PriorityQueue<>(Comparator.comparingLong(Expiry::at));
     private long seq;
@@ -51,8 +53,20 @@ public final class OrderBook {
 
     public void addOrder(BookOrder order) {
         if (orderById.containsKey(order.id())) throw new IllegalArgumentException("Duplicate order id " + order.id());
+        BookOrder.OwnerModelKey key = order.ownerModelKey();
+        if (key != null && orderIdByOwnerModel.containsKey(key)) {
+            throw new IllegalArgumentException("Order " + orderIdByOwnerModel.get(key) + " already waits for " + key);
+        }
         orderById.put(order.id(), orders.add(-order.maxInput(), -order.maxOutput(), seq++, order));
+        if (key != null) orderIdByOwnerModel.put(key, order.id());
         if (order.expiresAt() != NO_EXPIRY) orderExpiries.add(new Expiry(order.expiresAt(), order.id()));
+    }
+
+    /** The waiting order of the same owner for the same provider and model, if any. Empty for orders without owner. */
+    public Optional<BookOrder> waitingOrderLike(BookOrder order) {
+        BookOrder.OwnerModelKey key = order.ownerModelKey();
+        Long id = (key == null) ? null : orderIdByOwnerModel.get(key);
+        return (id == null) ? Optional.empty() : Optional.of(orderById.get(id).value());
     }
 
     /** Cheapest waiting offer (by total, then oldest) that fits both of the order's limits and the filter. */
@@ -72,7 +86,10 @@ public final class OrderBook {
 
     public boolean removeOrder(long id) {
         QuadrantIndex.Entry<BookOrder> e = orderById.remove(id);
-        return e != null && orders.remove(e);
+        if (e == null) return false;
+        BookOrder.OwnerModelKey key = e.value().ownerModelKey();
+        if (key != null) orderIdByOwnerModel.remove(key);
+        return orders.remove(e);
     }
 
     /** Removes every waiting offer with {@code expiresAt <= nowMillis}; returns how many. */

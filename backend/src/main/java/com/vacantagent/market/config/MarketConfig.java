@@ -87,11 +87,14 @@ public class MarketConfig {
     /**
      * Loads every order without an agreement, oldest first. Orders whose wait time is over, or that
      * {@link MarketRules#isValid} refuses (invalid prices), are skipped, as the strategy would reject them.
+     * So is a second order of a user for the same provider and model (e.g. one was cancelled, which is not
+     * persisted); the older one is restored.
      */
     static void restoreOrders(MatchingEngine engine, ConsumerOrderRepository orders, MarketRules rules) {
         long now = rules.nowMillis();
         int restored = 0;
         int expired = 0;
+        int duplicates = 0;
         for (var order : orders.findAllWithoutAgreement()) {
             BookOrder bookOrder = BookOrder.from(order);
             if (rules.isExpired(bookOrder, now)) {
@@ -102,9 +105,13 @@ public class MarketConfig {
                 log.warn("Not restoring order {}: violates market rules", order.getId());
                 continue;
             }
-            engine.restoreOrder(bookOrder);
+            if (!engine.restoreOrder(bookOrder)) {
+                log.warn("Not restoring order {}: its user already has an order waiting for this model", order.getId());
+                duplicates++;
+                continue;
+            }
             restored++;
         }
-        log.info("Restored {} waiting orders, skipped {} expired", restored, expired);
+        log.info("Restored {} waiting orders, skipped {} expired and {} duplicates", restored, expired, duplicates);
     }
 }

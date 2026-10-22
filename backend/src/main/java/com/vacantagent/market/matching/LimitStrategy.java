@@ -10,11 +10,13 @@ import com.vacantagent.market.matching.entities.BookOrder;
 import com.vacantagent.market.matching.entities.OrderBook;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 
 /**
  * Limit matching:
  * <ul>
  *   <li>An entry is checked against {@link MarketRules} first and rejected if invalid.</li>
+ *   <li>An order is rejected while the same user has another order waiting for the same provider and model.</li>
  *   <li>It is paired with the best counterpart whose prices fit on both legs and which the rules allow:
  *       a new order gets the cheapest offer, a new offer gets the highest-paying order,
  *       oldest first on equal totals.</li>
@@ -38,6 +40,13 @@ public final class LimitStrategy implements MatchingStrategy {
         if (book.hasOrder(order.id())) return new Rejected("Duplicate order id " + order.id());
 
         long now = rules.nowMillis();
+        Optional<BookOrder> open = book.waitingOrderLike(order);
+        if (open.isPresent()) {
+            if (!rules.isExpired(open.get(), now)) {
+                return new Rejected("An order for this model provider and model is already waiting: " + open.get().id());
+            }
+            book.removeOrder(open.get().id());      // expired but not yet swept: no longer waiting
+        }
         return book.bestOfferFor(order, offer -> !rules.isExpired(offer, now) && rules.canMatch(order, offer))
                 .<MatchResult>map(offer -> {
                     book.removeOffer(offer.id());

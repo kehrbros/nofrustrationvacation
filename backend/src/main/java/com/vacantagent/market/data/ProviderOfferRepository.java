@@ -23,4 +23,6 @@ public interface ProviderOfferRepository extends JpaRepository<ProviderOffer, Lo
             ORDER BY o.id
             """)
     List<ProviderOffer> findAllAvailable();
+
+    boolean existsByIdAndAppUserId(long id, long appUserId);
 }

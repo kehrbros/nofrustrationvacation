@@ -63,10 +63,15 @@ public final class MatchingEngine {
         book.addOffer(offer);
     }
 
-    /** Loads a waiting order from the database. Call before {@link #start}, in creation order. */
-    public void restoreOrder(BookOrder order) {
+    /**
+     * Loads a waiting order from the database. Call before {@link #start}, in creation order.
+     * Returns false and skips it if the same user already has an order waiting for the same provider and model.
+     */
+    public boolean restoreOrder(BookOrder order) {
         requireNotRunning();
+        if (book.waitingOrderLike(order).isPresent()) return false;
         book.addOrder(order);
+        return true;
     }
 
     // ------------------------------------------------------------------ lifecycle

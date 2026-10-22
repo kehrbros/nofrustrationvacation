@@ -1,6 +1,8 @@
 package com.vacantagent.market.matching.entities;
 
 import com.vacantagent.market.entities.ConsumerOrder;
+import com.vacantagent.user.entities.AppUser;
+import jakarta.annotation.Nullable;
 
 import java.math.RoundingMode;
 import java.time.DateTimeException;
@@ -31,6 +33,18 @@ public record BookOrder(ConsumerOrder order, long maxInput, long maxOutput, long
     public long id() { return order.getId(); }
 
     public long total() { return maxInput + maxOutput; }
+
+    /**
+     * One user may have only one waiting order per provider + model. {@code null} if the order has no owner.
+     * Reading the id of the lazy owner reference does not load it.
+     */
+    public @Nullable OwnerModelKey ownerModelKey() {
+        AppUser owner = order.getAppUser();
+        return owner == null ? null : new OwnerModelKey(owner.getId(), order.getModelProvider(), order.getModelName());
+    }
+
+    /** {@code null} provider or model ("any") is a value of its own. */
+    public record OwnerModelKey(long appUserId, @Nullable String modelProvider, @Nullable String modelName) {}
 
     /** Price fit on both legs. Business restrictions live in {@link com.vacantagent.market.logic.MarketRules}. */
     public boolean acceptsPrices(BookOffer offer) {

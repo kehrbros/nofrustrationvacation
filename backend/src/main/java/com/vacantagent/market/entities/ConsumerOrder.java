@@ -2,8 +2,11 @@ package com.vacantagent.market.entities;
 
 import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
+import com.vacantagent.user.entities.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.ManyToOne;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -24,6 +27,10 @@ public class ConsumerOrder extends AbstractEntity {
 
     private String modelProvider;
     private String modelName;
+
+    /** Who placed it; set from the authenticated request. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    private AppUser appUser;
 
     protected ConsumerOrder() {
     }

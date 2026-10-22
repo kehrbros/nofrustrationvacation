@@ -9,6 +9,8 @@ import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.matching.MatchResult;
+import com.vacantagent.user.logic.AppUserProvisioning;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,7 +22,10 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** End to end: broker persists -> engine thread -> agreement writer thread -> H2. */
+/**
+ * End to end: broker persists -> engine thread -> agreement writer thread -> H2. The engine is shared between tests,
+ * so each test uses its own model name: waiting orders of one test must not count as duplicates in another.
+ */
 @SpringBootTest
 class BrokerLogicTest {
 
@@ -32,15 +37,24 @@ class BrokerLogicTest {
     private ProviderOfferRepository offers;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private AppUserProvisioning appUserProvisioning;
+
+    private long user;
+
+    @BeforeEach
+    void setUp() {
+        user = appUserProvisioning.findOrCreate("broker-user", null, null).getId();
+    }
 
     @Test
     void offerAndOrderArePersistedAgreeAndTheAgreementIsPersisted() {
         Submission offer = broker.acceptOffer(new OfferDto(usd("10.00"), usd("12.50"),
-                null, "provider", "model", 1_000_000L));
+                null, "provider", "agree-model", 1_000_000L), user);
         assertThat(offer.result().join()).isInstanceOf(MatchResult.Resting.class);
 
         Submission order = broker.acceptOrder(new OrderDto(usd("11.00"), usd("13.00"),
-                Duration.ofMinutes(5), "provider", "model"));
+                Duration.ofMinutes(5), "provider", "agree-model"), user);
         MatchResult result = order.result().join();
 
         assertThat(result).isInstanceOf(MatchResult.Matched.class);
@@ -58,9 +72,9 @@ class BrokerLogicTest {
 
     @Test
     void entitiesArePersistedBeforeMatching() {
-        Submission order = broker.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null, "provider", "model"));
+        Submission order = broker.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null, "provider", "persist-model"), user);
         Submission offer = broker.acceptOffer(new OfferDto(usd("50.00"), usd("50.00"),
-                null, "provider", "model", 500L));
+                null, "provider", "persist-model", 500L), user);
 
         assertThat(orders.findById(order.id())).isPresent();
         ProviderOffer saved = offers.findById(offer.id()).orElseThrow();
@@ -72,10 +86,43 @@ class BrokerLogicTest {
 
     @Test
     void orderWithoutPricesIsPersistedButRejected() {
-        Submission order = broker.acceptOrder(new OrderDto(null, null, null, null, null));
+        Submission order = broker.acceptOrder(new OrderDto(null, null, null, null, null), user);
 
         assertThat(orders.findById(order.id())).isPresent();
         assertThat(order.result().join()).isInstanceOf(MatchResult.Rejected.class);
+    }
+
+    @Test
+    void ordersAndOffersBelongToTheUserWhoPlacedThem() {
+        long otherUser = appUserProvisioning.findOrCreate("other-broker-user", null, null).getId();
+        Submission order = broker.acceptOrder(new OrderDto(null, null, null, null, null), user);
+        Submission offer = broker.acceptOffer(new OfferDto(null, null, null, "provider", "owner-model", 1L), user);
+        order.result().join();
+        offer.result().join();
+
+        assertThat(broker.isOrderOwnedBy(order.id(), user)).isTrue();
+        assertThat(broker.isOrderOwnedBy(order.id(), otherUser)).isFalse();
+        assertThat(broker.isOrderOwnedBy(Long.MAX_VALUE, user)).isFalse();
+        assertThat(broker.isOfferOwnedBy(offer.id(), user)).isTrue();
+        assertThat(broker.isOfferOwnedBy(offer.id(), otherUser)).isFalse();
+        assertThat(broker.isOfferOwnedBy(Long.MAX_VALUE, user)).isFalse();
+        assertThat(jdbcTemplate.queryForObject("SELECT app_user_id FROM consumer_order WHERE id = ?",
+                Long.class, order.id())).isEqualTo(user);
+    }
+
+    @Test
+    void secondWaitingOrderForTheSameModelIsRejected() {
+        // No offers for this provider exist in the shared engine, so the first order keeps waiting.
+        OrderDto dto = new OrderDto(usd("1.00"), usd("1.00"), null, "duplicate-provider", "model");
+        Submission first = broker.acceptOrder(dto, user);
+        assertThat(first.result().join()).isInstanceOf(MatchResult.Resting.class);
+
+        MatchResult second = broker.acceptOrder(dto, user).result().join();
+
+        assertThat(second).isInstanceOf(MatchResult.Rejected.class);
+        assertThat(((MatchResult.Rejected) second).reason()).endsWith(": " + first.id());
+        assertThat(broker.cancelOrder(first.id()).join()).isInstanceOf(MatchResult.Cancelled.class);
+        assertThat(broker.acceptOrder(dto, user).result().join()).isInstanceOf(MatchResult.Resting.class);
     }
 
     private static MoneyDto usd(String amount) {

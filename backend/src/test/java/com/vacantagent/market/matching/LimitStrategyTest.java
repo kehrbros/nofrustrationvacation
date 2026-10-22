@@ -22,6 +22,7 @@ import java.time.ZoneOffset;
 import static com.vacantagent.market.MarketFixtures.bookOffer;
 import static com.vacantagent.market.MarketFixtures.bookOrder;
 import static com.vacantagent.market.MarketFixtures.emptyOffer;
+import static com.vacantagent.market.MarketFixtures.ownedBookOrder;
 import static com.vacantagent.market.MarketFixtures.withId;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -171,6 +172,58 @@ class LimitStrategyTest {
     void duplicateWaitingIdIsRejected() {
         offer(1, 50_00, 50_00);
         assertThat(offer(1, 60_00, 60_00)).isInstanceOf(Rejected.class);
+    }
+
+    @Test
+    void secondWaitingOrderOfTheSameUserForTheSameModelIsRejected() {
+        assertThat(ownedOrder(100, 1, "openai", "gpt-5")).isInstanceOf(Resting.class);
+
+        MatchResult second = ownedOrder(101, 1, "openai", "gpt-5");
+
+        assertThat(second).isInstanceOf(Rejected.class);
+        assertThat(((Rejected) second).reason()).endsWith(": 100");
+        assertThat(book.hasOrder(101)).isFalse();
+    }
+
+    @Test
+    void otherModelsAndOtherUsersAreNotDuplicates() {
+        ownedOrder(100, 1, "openai", "gpt-5");
+
+        assertThat(ownedOrder(101, 1, "openai", "gpt-4")).isInstanceOf(Resting.class);
+        assertThat(ownedOrder(102, 1, "openai", null)).isInstanceOf(Resting.class);
+        assertThat(ownedOrder(103, 1, null, null)).isInstanceOf(Resting.class);
+        assertThat(ownedOrder(104, 2, "openai", "gpt-5")).isInstanceOf(Resting.class);
+    }
+
+    @Test
+    void ordersForAnyModelBlockEachOther() {
+        ownedOrder(100, 1, null, null);
+
+        assertThat(ownedOrder(101, 1, null, null)).isInstanceOf(Rejected.class);
+    }
+
+    @Test
+    void newOrderIsAcceptedOnceTheFirstWasMatchedOrCancelled() {
+        ownedOrder(100, 1, null, null);
+        assertThat(pairOf(offer(1, 5_00, 5_00))).isEqualTo(matched(100, 1));
+
+        assertThat(ownedOrder(101, 1, null, null)).isInstanceOf(Resting.class);
+        book.removeOrder(101);                                                      // cancel
+        assertThat(ownedOrder(102, 1, null, null)).isInstanceOf(Resting.class);
+    }
+
+    @Test
+    void expiredWaitingOrderDoesNotBlockAndIsRemoved() {
+        strategy = new LimitStrategy(new MarketRules(100_00, Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC)));
+        BookOrder expired = ownedBookOrder(100, 10_00, 10_00, 1, "openai", "gpt-5");
+        book.addOrder(new BookOrder(expired.order(), expired.maxInput(), expired.maxOutput(), NOW - 1));
+
+        assertThat(ownedOrder(101, 1, "openai", "gpt-5")).isInstanceOf(Resting.class);
+        assertThat(book.hasOrder(100)).isFalse();
+    }
+
+    private MatchResult ownedOrder(long id, long appUserId, String modelProvider, String modelName) {
+        return strategy.onOrder(ownedBookOrder(id, 10_00, 10_00, appUserId, modelProvider, modelName), book);
     }
 
     private MatchResult offer(long id, long priceInput, long priceOutput) {

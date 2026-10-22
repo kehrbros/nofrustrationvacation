@@ -40,8 +40,8 @@ public class BrokerLogic implements IBrokerLogic {
     private final Clock clock;
 
     @Override
-    public Submission acceptOrder(OrderDto dto) {
-        ConsumerOrder order = orders.save(orderMapper.toEntity(dto));
+    public Submission acceptOrder(OrderDto dto, long appUserId) {
+        ConsumerOrder order = orders.save(orderMapper.toEntity(dto, appUserId));
         return new Submission(order.getId(), engine.submit(new MatchingEngine.SubmitOrder(BookOrder.from(order))));
     }
 
@@ -51,14 +51,24 @@ public class BrokerLogic implements IBrokerLogic {
     }
 
     @Override
-    public Submission acceptOffer(OfferDto dto) {
-        ProviderOffer offer = offers.save(offerMapper.toEntity(dto));
+    public boolean isOrderOwnedBy(long orderId, long appUserId) {
+        return orders.existsByIdAndAppUserId(orderId, appUserId);
+    }
+
+    @Override
+    public Submission acceptOffer(OfferDto dto, long appUserId) {
+        ProviderOffer offer = offers.save(offerMapper.toEntity(dto, appUserId));
         return new Submission(offer.getId(), engine.submit(new MatchingEngine.SubmitOffer(BookOffer.from(offer))));
     }
 
     @Override
     public CompletableFuture<MatchResult> cancelOffer(long offerId) {
         return engine.submit(new MatchingEngine.CancelOffer(offerId));
+    }
+
+    @Override
+    public boolean isOfferOwnedBy(long offerId, long appUserId) {
+        return offers.existsByIdAndAppUserId(offerId, appUserId);
     }
 
     @Override

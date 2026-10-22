@@ -11,6 +11,8 @@ import com.vacantagent.market.logic.MarketRules;
 import com.vacantagent.market.matching.LimitStrategy;
 import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.market.matching.entities.OrderBook;
+import com.vacantagent.user.entities.AppUser;
+import com.vacantagent.user.logic.AppUserProvisioning;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,6 +40,8 @@ class MarketConfigTest {
     private EntityManager entityManager;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    @Autowired
+    private AppUserProvisioning appUserProvisioning;
 
     @Test
     void restoresOnlyAvailableOffers() {
@@ -55,7 +59,7 @@ class MarketConfigTest {
         abandoned.markError(OffsetDateTime.now());
         persist(abandoned);
         ProviderOffer expired = persist(new ProviderOffer(Money.of("10.00"), Money.of("10.00"),
-                OffsetDateTime.now().minusMinutes(1), null, null, null, null, 1000L, 1000L));
+                OffsetDateTime.now().minusMinutes(1), null, null, null, null, 1000L, 1000L, null));
 
         MatchingEngine engine = newEngine();
         MarketConfig.restoreOffers(engine, offers, rules);
@@ -78,9 +82,9 @@ class MarketConfigTest {
         ProviderOffer offer = persist(offer("10.00", null, "1000"));
         persist(new Agreement(agreed, offer, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
         ConsumerOrder expired = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null));
+                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null, null));
         ConsumerOrder stillWaiting = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null));
+                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null));
 
         MatchingEngine engine = newEngine();
         MarketConfig.restoreOrders(engine, orders, rules);
@@ -90,6 +94,21 @@ class MarketConfigTest {
         assertThat(cancel(engine, agreed)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, expired)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, stillWaiting)).isInstanceOf(MatchResult.Cancelled.class);
+    }
+
+    @Test
+    void restoresOnlyTheOldestOrderOfAUserPerModel() {
+        AppUser owner = appUserProvisioning.findOrCreate("restore-user", null, null);
+        ConsumerOrder older = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
+                "restore-provider", "model", owner));
+        ConsumerOrder newer = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
+                "restore-provider", "model", owner));
+
+        MatchingEngine engine = newEngine();
+        MarketConfig.restoreOrders(engine, orders, rules);
+
+        assertThat(cancel(engine, older)).isInstanceOf(MatchResult.Cancelled.class);
+        assertThat(cancel(engine, newer)).isInstanceOf(MatchResult.NotFound.class);
     }
 
     private MatchingEngine newEngine() {
@@ -106,13 +125,13 @@ class MarketConfigTest {
 
     private static ConsumerOrder order(String maxPrice) {
         Money value = maxPrice == null ? null : Money.of(maxPrice);
-        return new ConsumerOrder(value, value, null, null, null, null);
+        return new ConsumerOrder(value, value, null, null, null, null, null);
     }
 
     private static ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {
         Money value = price == null ? null : Money.of(price);
         Long tokens = availableTokens == null ? null : Long.valueOf(availableTokens);
-        return new ProviderOffer(value, value, null, null, null, lastErrorAt, null, tokens, tokens);
+        return new ProviderOffer(value, value, null, null, null, lastErrorAt, null, tokens, tokens, null);
     }
 
     private <T> T persist(T entity) {

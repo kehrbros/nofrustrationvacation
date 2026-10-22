@@ -12,6 +12,10 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
               ◄──────── future completes once the agreement is saved ◄──┘
 ```
 
+- **`api/MarketController`**: REST API under `/api/v1/market` (JWT required). `POST /orders`, `POST /offers` return `201` (`MATCHED` with the agreement, or `RESTING`), `422` (`REJECTED` with reason) or `400`. `DELETE /orders/{id}`, `DELETE /offers/{id}` return `204` or `404`.
+  - Orders and offers belong to the authenticated user (`appUser`, from `CurrentUser`). Only the owner may cancel; anyone else gets `404`, so ids of other users stay hidden.
+  - `MarketRequestPreparer` trims model values, turns empty ones into `null` and refuses (`400`) an order with `modelName` but no `modelProvider`, and an offer without both.
+  - Agreed prices in responses are in the user's preferred currency (`SubmissionDtoMapper`).
 - **`logic/BrokerLogic`**: entry point. Takes an `OrderDto`/`OfferDto`, maps it with `mapper/OrderMapper`/`OfferMapper` to a `ConsumerOrder`/`ProviderOffer` (a new offer starts with all its tokens available) and saves it, then submits it as a `BookOrder`/`BookOffer`. Returns a `Submission`: the new entity's id plus a `CompletableFuture<MatchResult>`.
 - **`engine/MatchingEngine`**: a single thread owns the book. Commands are queued and run in arrival order, so no locks are needed.
 - **`matching/LimitStrategy`**: decides what happens to an entry: match, rest or reject. Builds the `Agreement`.
@@ -44,6 +48,7 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
   - On equal totals, the **oldest** entry wins.
 - **No fit**: the entry is `Resting` in the book until a counterpart arrives, it expires, or it is cancelled.
 - **Duplicate id** of a waiting entry: `Rejected`.
+- **One waiting order per user and model**: an order is `Rejected` while the same user has another order waiting for the same `modelProvider` and `modelName` (`null` counts as a value, so one "any" order at a time). `OrderBook` indexes waiting orders by `BookOrder.ownerModelKey()`. An expired waiting order does not block and is removed on the spot. Orders without owner are exempt.
 
 ## Agreement
 
@@ -69,6 +74,7 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
   - Orders re-enter if they have no agreement yet. Orders whose wait time is over or with invalid prices are skipped.
   - If the app stops between closing an agreement and resubmitting its offer, the offer comes back on this reload.
   - Cancelled offers and orders come back after a restart, because a cancel is not persisted.
+    - If a user cancelled an order and placed a new one for the same model, only the older (cancelled) one comes back; the newer one is skipped as a duplicate and logged.
 - The book holds entity snapshots: a provider error recorded after an offer entered the book is not seen. Cancel the offer (`BrokerLogic.cancelOffer`) to take it out.
 - Run on a single instance, because each instance would have its own book.
 - The expiry queue drops matched or cancelled entries only when their expiry comes up, so an offer whose `offeredUntil` is far in the future keeps a small record in memory until then.
