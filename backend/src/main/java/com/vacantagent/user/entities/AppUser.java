@@ -1,7 +1,6 @@
 package com.vacantagent.user.entities;
 
 import com.vacantagent.common.data.AbstractEntity;
-import com.vacantagent.common.money.Money;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
@@ -9,7 +8,8 @@ import lombok.Getter;
 
 /**
  * Application side of a user account. Mapped to the JWT of incoming requests by {@link #username},
- * created on the first authenticated request, see Docs/authentication.md.
+ * created on the first authenticated request, see Docs/authentication.md. Balances are kept by the accounting
+ * module, see Docs/accounting.md.
  */
 @Getter
 @Entity
@@ -19,8 +19,6 @@ public class AppUser extends AbstractEntity {
     private String username;
     private String name;
     private String mail;
-    @Column(precision = 19, scale = Money.SCALE)
-    private Money accountBalance;
     /**
      * ISO 4217 code of the currency API responses are converted to, if no other currency is requested.
      * {@code null} means base currency, see Docs/money.md.
@@ -36,7 +34,6 @@ public class AppUser extends AbstractEntity {
         user.username = username;
         user.name = name;
         user.mail = mail;
-        user.accountBalance = Money.ZERO;
         return user;
     }
 

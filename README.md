@@ -23,3 +23,7 @@ Entities annotated with `@Audited` are historized by Hibernate Envers in `_aud` 
 Authentication (OAuth2/OIDC with an own identity provider that can be replaced by Keycloak) is described in [Docs/authentication.md](Docs/authentication.md).
 
 Monetary values (single base currency USD, `Money` type, exchange rates and currency conversion at the API boundary) are described in [Docs/money.md](Docs/money.md).
+
+Accounting (credit and earnings accounts, top-ups and payouts via PayPal) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).
+
+Providers complete an onboarding checklist (PayPal account, at least one agent with API key) before placing offers, see [Docs/onboarding.md](Docs/onboarding.md) and [Docs/agents.md](Docs/agents.md).

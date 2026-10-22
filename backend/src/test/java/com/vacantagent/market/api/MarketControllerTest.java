@@ -1,5 +1,6 @@
 package com.vacantagent.market.api;
 
+import com.vacantagent.onboarding.logic.ProviderOnboarding;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
@@ -72,6 +73,8 @@ class MarketControllerTest {
     private AppUserProvisioning appUserProvisioning;
     @MockitoBean
     private IMarketLogic market;
+    @MockitoBean
+    private ProviderOnboarding providerOnboarding;
 
     private long appUserId;
     private RequestPostProcessor user;
@@ -83,6 +86,7 @@ class MarketControllerTest {
         appUserId = appUser.getId();
         Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject("market-user").build();
         user = authentication(new AppUserAuthentication(new CurrentUser(appUserId, "market-user"), jwt, List.of()));
+        when(providerOnboarding.mayPlaceOffers(appUserId)).thenReturn(true);
     }
 
     @Test
@@ -174,6 +178,16 @@ class MarketControllerTest {
     }
 
     @Test
+    void offerRequiresACompletedProviderOnboarding() throws Exception {
+        when(providerOnboarding.mayPlaceOffers(appUserId)).thenReturn(false);
+
+        performAsync(post("/api/v1/market/offers").content(OFFER.formatted("openai", "gpt-5")))
+                .andExpect(status().isForbidden());
+
+        verify(market, never()).acceptOffer(any(), anyLong());
+    }
+
+    @Test
     void offerWithoutProviderOrModelIsRefused() throws Exception {
         mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted("openai", " ")))
                 .andExpect(status().isBadRequest());
@@ -245,4 +259,4 @@ class MarketControllerTest {
                 null, null, 1000L, 1000L, null), 7);
         return withId(new Agreement(order, offer, OffsetDateTime.now(), null, Money.of("10.00"), Money.of("12.50")), 99);
     }
-}
+}

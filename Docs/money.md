@@ -20,8 +20,8 @@
   - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` inkl. `agreement_aud`
   - `ProviderOffer.pricePerMillionInputTokens`, `pricePerMillionOutputTokens`
   - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`; durch `V5__align_order_offer_columns.sql` ersetzt durch `maxCostPerMillionInputTokens`, `maxCostPerMillionOutputTokens` (ebenfalls `NUMERIC(19, 8)`)
-  - `AppUser.accountBalance`, zusätzlich neues Feld `AppUser.preferredCurrency`
-- **Buchungen mit Umrechnung** (Ein-/Auszahlung, noch nicht umgesetzt): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). Alle Felder mit der Buchung speichern, nie neu berechnen.
+  - `AppUser.accountBalance` (seit `V11__accounting.sql` ersetzt durch `accounting_account.balance`), zusätzlich neues Feld `AppUser.preferredCurrency`
+- **Buchungen mit Umrechnung** (Ein-/Auszahlung, siehe [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). In der API zu `common.money.OriginalAmount` (`@Embeddable`, Spalten `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) gemappt und mit der Buchung gespeichert, nie neu berechnet.
 
 ## Wechselkurse (`com.vacantagent.currency`)
 
@@ -45,14 +45,14 @@
   - Formatierung (Tausendertrenner, Symbol) macht das Frontend.
 - **Zeitbezug des Kurses:** aktuelle Werte mit dem neuesten Kurs, historische Werte mit `toDto(..., at)` zum Kurs am Ereignisdatum, Buchungen mit dem gespeicherten Kurs.
 - **Roundtrip:** Hin- und Rückrechnung kann minimal abweichen. Wo das stört (z. B. Max-Preis einer Order), die Originaleingabe zusätzlich zur Anzeige speichern.
-- **Beispiel:** `GET /api/v1/users/me?currency=EUR` liefert `accountBalance` in EUR. `PUT /api/v1/users/me/preferred-currency` mit `{"currency": "EUR"}` (oder `null` für USD) setzt die Standardwährung.
+- **Beispiel:** `GET /api/v1/accounting/balances?currency=EUR` liefert Guthaben und Einnahmen in EUR. `PUT /api/v1/users/me/preferred-currency` mit `{"currency": "EUR"}` (oder `null` für USD) setzt die Standardwährung.
 
 ## Tests
 
 - `MoneyTest` (Skala, Rundung, Arithmetik), `CurrencyConversionServiceTest` (Umrechnung, Rundungsregeln, veraltete Kurse), `EcbExchangeRateProviderTest` (Kreuzkurse)
-- `MoneyPersistenceTest` (alle Geldspalten inkl. `_aud` sind `NUMERIC(19, 8)`), `UserControllerCurrencyTest` (API-Umrechnung), `MoneyArchitectureTest`
+- `MoneyPersistenceTest` (alle Geldspalten inkl. `_aud` sind `NUMERIC(19, 8)`), `AccountingFlowTest` (API-Umrechnung der Kontostände), `MoneyArchitectureTest`
 
 ## Offen
 
 - Wechselkursaufschlag/Spread bei Ein- und Auszahlungen.
-- Buchungstabelle für Ein-/Auszahlungen; Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum.
+- Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum (`UsageBilling` bucht derzeit je Aufruf, siehe [accounting.md](accounting.md)).

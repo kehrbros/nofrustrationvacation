@@ -1,5 +1,6 @@
 package com.vacantagent.market.api;
 
+import com.vacantagent.onboarding.logic.ProviderOnboarding;
 import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
 import com.vacantagent.market.dto.SubmissionDto;
@@ -13,6 +14,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -27,7 +29,8 @@ import java.util.concurrent.CompletableFuture;
 
 /**
  * The market's API for consumers and providers. Orders and offers belong to the authenticated user, only the owner
- * may cancel them. Responses wait for the matching result without blocking a request thread.
+ * may cancel them. Offers require a completed provider onboarding (payout account and agent).
+ * Responses wait for the matching result without blocking a request thread.
  */
 @Tag(name = "Market", description = "Place and cancel consumer orders and provider offers")
 @RestController
@@ -37,6 +40,7 @@ public class MarketController {
     private final IMarketLogic market;
     private final MarketRequestPreparer preparer;
     private final SubmissionDtoMapper submissionMapper;
+    private final ProviderOnboarding providerOnboarding;
 
     @Operation(summary = "Place an order",
             description = "Matched against the cheapest fitting offer for the requested model. If none fits, "
@@ -79,9 +83,14 @@ public class MarketController {
             content = @Content(schema = @Schema(implementation = SubmissionDto.class)))
     @ApiResponse(responseCode = "400", description = "modelProvider or modelName missing, or unsupported currency",
             content = @Content)
+    @ApiResponse(responseCode = "403", description = "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider",
+            content = @Content)
     @PostMapping("/offers")
     public CompletableFuture<ResponseEntity<SubmissionDto>> placeOffer(@AuthenticationPrincipal CurrentUser user,
                                                                        @RequestBody OfferDto offer) {
+        if (!providerOnboarding.mayPlaceOffers(user.appUserId())) {
+            return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.FORBIDDEN).build());
+        }
         OfferDto prepared = preparer.prepare(offer);
         Currency currency = submissionMapper.responseCurrency(user);
         Submission submission = market.acceptOffer(prepared, user.appUserId());
@@ -101,4 +110,4 @@ public class MarketController {
         }
         return market.cancelOffer(id).thenApply(SubmissionDtoMapper::toCancelResponse);
     }
-}
+}
