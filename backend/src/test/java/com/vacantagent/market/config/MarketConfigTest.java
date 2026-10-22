@@ -78,9 +78,9 @@ class MarketConfigTest {
         ProviderOffer offer = persist(offer("10.00", null, "1000"));
         persist(new Agreement(agreed, offer, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
         ConsumerOrder expired = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1)));
+                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null));
         ConsumerOrder stillWaiting = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1)));
+                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null));
 
         MatchingEngine engine = newEngine();
         MarketConfig.restoreOrders(engine, orders, rules);
@@ -106,7 +106,7 @@ class MarketConfigTest {
 
     private static ConsumerOrder order(String maxPrice) {
         Money value = maxPrice == null ? null : Money.of(maxPrice);
-        return new ConsumerOrder(value, value, null, null);
+        return new ConsumerOrder(value, value, null, null, null, null);
     }
 
     private static ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {

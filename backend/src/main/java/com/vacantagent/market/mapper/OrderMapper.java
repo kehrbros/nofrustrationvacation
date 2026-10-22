@@ -21,7 +21,7 @@ public class OrderMapper {
     /** Limits are converted to the base currency. The market wait time starts now. */
     public ConsumerOrder toEntity(OrderDto dto) {
         return new ConsumerOrder(toMoney(dto.maxCostPerMillionInputTokens()), toMoney(dto.maxCostPerMillionOutputTokens()),
-                dto.marketWaitTime(), OffsetDateTime.now(clock));
+                dto.marketWaitTime(), OffsetDateTime.now(clock), dto.modelProvider(), dto.modelName());
     }
 
     /** Missing limits stay {@code null}, so the market rejects the order instead of failing here. */

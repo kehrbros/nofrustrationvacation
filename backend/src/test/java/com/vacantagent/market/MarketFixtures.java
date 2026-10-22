@@ -35,7 +35,7 @@ public final class MarketFixtures {
     }
 
     public static ConsumerOrder emptyOrder() {
-        return new ConsumerOrder(null, null, null, null);
+        return new ConsumerOrder(null, null, null, null, null, null);
     }
 
     public static <T> T withId(T entity, long id) {

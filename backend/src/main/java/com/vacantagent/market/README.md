@@ -36,7 +36,8 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
   - An order whose wait time is already over (e.g. zero) still gets one chance to match on arrival. If nothing fits, it is `Rejected` instead of resting.
   - `BookExpirySweeper` submits `MatchingEngine.ExpireEntries` every `expiry-sweep-interval` (default 10s), which removes expired entries from the book (result `Expired`). `OrderBook` keeps a queue sorted by expiry, so this doesn't scan the book. Matching already skips expired entries, so the sweep only frees memory.
 - **Fit**: an order and an offer fit when `priceInput <= maxInput` **and** `priceOutput <= maxOutput`.
-- **Business veto** (`MarketRules.canMatch`): can block a fitting pair, never loosen the fit. The next-best candidate is then tried. Currently it allows everything.
+- **Business veto** (`MarketRules.canMatch`): can block a fitting pair, never loosen the fit. The next-best candidate is then tried.
+  - **Model**: an order may leave `modelName`, or both `modelProvider` and `modelName`, empty to accept any value. A value that is given must equal the offer's exactly (case-sensitive). Rejecting a model without a provider and blank values is up to the controller.
 - **Priority**:
   - A new order gets the **cheapest** fitting offer (lowest input + output total).
   - A new offer gets the **highest-paying** fitting order (highest max total).

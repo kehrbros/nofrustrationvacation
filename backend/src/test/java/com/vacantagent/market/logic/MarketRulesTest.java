@@ -61,13 +61,43 @@ class MarketRulesTest {
     @Test
     void orderExpiresAfterItsWaitTime() {
         OffsetDateTime createdAt = OffsetDateTime.parse("2026-01-01T00:00:00Z");
-        BookOrder order = new BookOrder(new ConsumerOrder(null, null, Duration.ofSeconds(30), createdAt), 1_00, 1_00);
+        BookOrder order = new BookOrder(new ConsumerOrder(null, null, Duration.ofSeconds(30), createdAt, null, null), 1_00, 1_00);
         long expiresAt = createdAt.plusSeconds(30).toInstant().toEpochMilli();
 
         assertThat(rules.isExpired(order, expiresAt - 1)).isFalse();
         assertThat(rules.isExpired(order, expiresAt)).isTrue();
         assertThat(rules.isValid(order)).isTrue();                        // may still match on arrival
         assertThat(rules.isExpired(new BookOrder(emptyOrder(), 1_00, 1_00), Long.MAX_VALUE - 1)).isFalse();
+    }
+
+    @Test
+    void orderWithProviderAndModelMatchesOnlyThatModel() {
+        assertThat(canMatch("openai", "gpt-5", "openai", "gpt-5")).isTrue();
+        assertThat(canMatch("openai", "gpt-5", "openai", "gpt-4")).isFalse();
+        assertThat(canMatch("openai", "gpt-5", "azure", "gpt-5")).isFalse();
+        assertThat(canMatch("openai", "gpt-5", null, null)).isFalse();
+    }
+
+    @Test
+    void orderWithoutModelMatchesAnyModelOfItsProvider() {
+        assertThat(canMatch("openai", null, "openai", "gpt-5")).isTrue();
+        assertThat(canMatch("openai", null, "openai", "gpt-4")).isTrue();
+        assertThat(canMatch("openai", null, "azure", "gpt-5")).isFalse();
+    }
+
+    @Test
+    void orderWithoutProviderAndModelMatchesAnyOffer() {
+        assertThat(canMatch(null, null, "openai", "gpt-5")).isTrue();
+        assertThat(canMatch(null, null, "azure", "gpt-4")).isTrue();
+        assertThat(canMatch(null, null, null, null)).isTrue();
+    }
+
+    private boolean canMatch(String orderProvider, String orderModel, String offerProvider, String offerModel) {
+        BookOrder order = new BookOrder(withId(new ConsumerOrder(null, null, null, null, orderProvider, orderModel), 1),
+                1_00, 1_00);
+        BookOffer offer = new BookOffer(withId(new ProviderOffer(null, null, null, offerProvider, offerModel,
+                null, null, null, null), 1), 1_00, 1_00);
+        return rules.canMatch(order, offer);
     }
 
     private static ProviderOffer offerWithLastError(OffsetDateTime lastErrorAt) {

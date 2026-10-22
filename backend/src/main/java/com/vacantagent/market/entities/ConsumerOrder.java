@@ -22,6 +22,9 @@ public class ConsumerOrder extends AbstractEntity {
     /** Start of {@link #marketWaitTime}. */
     private OffsetDateTime createdAt;
 
+    private String modelProvider;
+    private String modelName;
+
     protected ConsumerOrder() {
     }
 }

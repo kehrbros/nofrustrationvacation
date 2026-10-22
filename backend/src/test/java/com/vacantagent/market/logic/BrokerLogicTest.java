@@ -40,7 +40,7 @@ class BrokerLogicTest {
         assertThat(offer.result().join()).isInstanceOf(MatchResult.Resting.class);
 
         Submission order = broker.acceptOrder(new OrderDto(usd("11.00"), usd("13.00"),
-                Duration.ofMinutes(5)));
+                Duration.ofMinutes(5), "provider", "model"));
         MatchResult result = order.result().join();
 
         assertThat(result).isInstanceOf(MatchResult.Matched.class);
@@ -58,7 +58,7 @@ class BrokerLogicTest {
 
     @Test
     void entitiesArePersistedBeforeMatching() {
-        Submission order = broker.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null));
+        Submission order = broker.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null, "provider", "model"));
         Submission offer = broker.acceptOffer(new OfferDto(usd("50.00"), usd("50.00"),
                 null, "provider", "model", 500L));
 
@@ -72,7 +72,7 @@ class BrokerLogicTest {
 
     @Test
     void orderWithoutPricesIsPersistedButRejected() {
-        Submission order = broker.acceptOrder(new OrderDto(null, null, null));
+        Submission order = broker.acceptOrder(new OrderDto(null, null, null, null, null));
 
         assertThat(orders.findById(order.id())).isPresent();
         assertThat(order.result().join()).isInstanceOf(MatchResult.Rejected.class);

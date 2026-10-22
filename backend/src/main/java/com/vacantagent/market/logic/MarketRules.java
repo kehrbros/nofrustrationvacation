@@ -68,9 +68,18 @@ public class MarketRules {
         return order.expiresAt() <= nowMillis;
     }
 
-    /** May this specific order be paired with this specific offer? Prices already fit when this is called. */
+    /**
+     * May this specific order be paired with this specific offer? Prices already fit when this is called.
+     * The order may leave provider and/or model empty to accept any; given values must match exactly.
+     */
     public boolean canMatch(BookOrder order, BookOffer offer) {
-        return true;
+        return acceptsValue(order.order().getModelProvider(), offer.offer().getModelProvider())
+                && acceptsValue(order.order().getModelName(), offer.offer().getModelName());
+    }
+
+    /** An order that leaves a field empty accepts any value for it. */
+    private static boolean acceptsValue(String requested, String offered) {
+        return requested == null || requested.equals(offered);
     }
 
     protected boolean isValidPrice(long price) {
