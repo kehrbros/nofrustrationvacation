@@ -15,6 +15,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+import java.time.Clock;
 
 /**
  * The only place the matching core meets Spring. Everything created here is plain Java,
@@ -22,12 +25,13 @@ import org.springframework.context.annotation.Configuration;
  */
 @Slf4j
 @Configuration
+@EnableScheduling
 @EnableConfigurationProperties(MarketProperties.class)
 public class MarketConfig {
 
     @Bean
-    public MarketRules marketRules(MarketProperties props) {
-        return new MarketRules(props.maxPrice());
+    public MarketRules marketRules(MarketProperties props, Clock clock) {
+        return new MarketRules(props.maxPrice(), clock);
     }
 
     /** Swap this bean to change how matching works; the engine only knows the interface. */
@@ -56,14 +60,20 @@ public class MarketConfig {
     }
 
     /**
-     * Loads every available offer (tokens left, no agreement yet), oldest first. Offers that
-     * {@link MarketRules#isValid} refuses (provider failed, invalid prices) are skipped, as the strategy
-     * would reject them.
+     * Loads every available offer (tokens left, no open agreement), oldest first. Offers that
+     * have expired, or that {@link MarketRules#isValid} refuses (provider failed, invalid prices), are skipped,
+     * as the strategy would reject them.
      */
     static void restoreOffers(MatchingEngine engine, ProviderOfferRepository offers, MarketRules rules) {
+        long now = rules.nowMillis();
         int restored = 0;
+        int expired = 0;
         for (var offer : offers.findAllAvailable()) {
             BookOffer bookOffer = BookOffer.from(offer);
+            if (rules.isExpired(bookOffer, now)) {
+                expired++;
+                continue;
+            }
             if (!rules.isValid(bookOffer)) {
                 log.warn("Not restoring offer {}: violates market rules", offer.getId());
                 continue;
@@ -71,17 +81,23 @@ public class MarketConfig {
             engine.restoreOffer(bookOffer);
             restored++;
         }
-        log.info("Restored {} waiting offers", restored);
+        log.info("Restored {} waiting offers, skipped {} expired", restored, expired);
     }
 
     /**
-     * Loads every order without an agreement, oldest first. Orders that {@link MarketRules#isValid} refuses
-     * (invalid prices) are skipped, as the strategy would reject them.
+     * Loads every order without an agreement, oldest first. Orders whose wait time is over, or that
+     * {@link MarketRules#isValid} refuses (invalid prices), are skipped, as the strategy would reject them.
      */
     static void restoreOrders(MatchingEngine engine, ConsumerOrderRepository orders, MarketRules rules) {
+        long now = rules.nowMillis();
         int restored = 0;
+        int expired = 0;
         for (var order : orders.findAllWithoutAgreement()) {
             BookOrder bookOrder = BookOrder.from(order);
+            if (rules.isExpired(bookOrder, now)) {
+                expired++;
+                continue;
+            }
             if (!rules.isValid(bookOrder)) {
                 log.warn("Not restoring order {}: violates market rules", order.getId());
                 continue;
@@ -89,6 +105,6 @@ public class MarketConfig {
             engine.restoreOrder(bookOrder);
             restored++;
         }
-        log.info("Restored {} waiting orders", restored);
+        log.info("Restored {} waiting orders, skipped {} expired", restored, expired);
     }
 }

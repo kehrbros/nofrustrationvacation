@@ -8,6 +8,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.Duration;
+import java.time.OffsetDateTime;
 
 @Getter
 @Entity
@@ -18,6 +19,8 @@ public class ConsumerOrder extends AbstractEntity {
     @Column(precision = 19, scale = Money.SCALE)
     private Money maxCostPerMillionOutputTokens;
     private Duration marketWaitTime;
+    /** Start of {@link #marketWaitTime}. */
+    private OffsetDateTime createdAt;
 
     protected ConsumerOrder() {
     }

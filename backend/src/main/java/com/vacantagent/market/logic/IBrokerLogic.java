@@ -20,4 +20,11 @@ public interface IBrokerLogic {
     Submission acceptOffer(OfferDto offer);
 
     CompletableFuture<MatchResult> cancelOffer(long offerId);
+
+    /**
+     * Records a successful call through the agreement, which keeps it from being closed as unused.
+     *
+     * @return false if the agreement does not exist or was closed, the call must then be refused
+     */
+    boolean recordAgreementSuccess(long agreementId);
 }

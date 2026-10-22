@@ -29,6 +29,8 @@ public final class MatchingEngine {
     public record SubmitOrder(BookOrder order) implements Command {}
     public record CancelOffer(long offerId) implements Command {}
     public record CancelOrder(long orderId) implements Command {}
+    /** Removes waiting entries that expired at or before {@code nowMillis}; the engine itself has no clock. */
+    public record ExpireEntries(long nowMillis) implements Command {}
 
     private record Envelope(Command command, CompletableFuture<MatchResult> reply) {}
 
@@ -129,6 +131,8 @@ public final class MatchingEngine {
             case SubmitOrder c -> strategy.onOrder(c.order(), book);
             case CancelOffer c -> book.removeOffer(c.offerId()) ? new MatchResult.Cancelled() : new MatchResult.NotFound();
             case CancelOrder c -> book.removeOrder(c.orderId()) ? new MatchResult.Cancelled() : new MatchResult.NotFound();
+            case ExpireEntries c -> new MatchResult.Expired(book.removeExpiredOffers(c.nowMillis()),
+                    book.removeExpiredOrders(c.nowMillis()));
         };
     }
 

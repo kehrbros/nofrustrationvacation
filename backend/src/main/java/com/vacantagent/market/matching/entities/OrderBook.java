@@ -3,9 +3,11 @@ package com.vacantagent.market.matching.entities;
 import com.vacantagent.market.matching.MatchingStrategy;
 import com.vacantagent.market.engine.QuadrantIndex;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.PriorityQueue;
 import java.util.function.Predicate;
 
 /**
@@ -19,25 +21,38 @@ import java.util.function.Predicate;
  * </ul>
  * Arrival order is kept with a sequence number, so equal totals go to the oldest entry.
  *
+ * <p>Entries that expire are also kept in a queue by expiry, so {@link #removeExpiredOffers} and
+ * {@link #removeExpiredOrders} do not scan the book. Matched or cancelled entries are dropped from that queue
+ * lazily, when their expiry comes up.
+ *
  * <p>Holds state only; what to do with an incoming entry is decided by a {@link MatchingStrategy}.
  * Not thread-safe: owned by the single matching thread.
  */
 public final class OrderBook {
 
+    /** Expiry of entries that never expire. */
+    public static final long NO_EXPIRY = Long.MAX_VALUE;
+
+    private record Expiry(long at, long id) {}
+
     private final QuadrantIndex<BookOffer> offers = new QuadrantIndex<>();
     private final QuadrantIndex<BookOrder> orders = new QuadrantIndex<>();
     private final Map<Long, QuadrantIndex.Entry<BookOffer>> offerById = new HashMap<>();
     private final Map<Long, QuadrantIndex.Entry<BookOrder>> orderById = new HashMap<>();
+    private final PriorityQueue<Expiry> offerExpiries = new PriorityQueue<>(Comparator.comparingLong(Expiry::at));
+    private final PriorityQueue<Expiry> orderExpiries = new PriorityQueue<>(Comparator.comparingLong(Expiry::at));
     private long seq;
 
     public void addOffer(BookOffer offer) {
         if (offerById.containsKey(offer.id())) throw new IllegalArgumentException("Duplicate offer id " + offer.id());
         offerById.put(offer.id(), offers.add(offer.priceInput(), offer.priceOutput(), seq++, offer));
+        if (offer.expiresAt() != NO_EXPIRY) offerExpiries.add(new Expiry(offer.expiresAt(), offer.id()));
     }
 
     public void addOrder(BookOrder order) {
         if (orderById.containsKey(order.id())) throw new IllegalArgumentException("Duplicate order id " + order.id());
         orderById.put(order.id(), orders.add(-order.maxInput(), -order.maxOutput(), seq++, order));
+        if (order.expiresAt() != NO_EXPIRY) orderExpiries.add(new Expiry(order.expiresAt(), order.id()));
     }
 
     /** Cheapest waiting offer (by total, then oldest) that fits both of the order's limits and the filter. */
@@ -58,6 +73,29 @@ public final class OrderBook {
     public boolean removeOrder(long id) {
         QuadrantIndex.Entry<BookOrder> e = orderById.remove(id);
         return e != null && orders.remove(e);
+    }
+
+    /** Removes every waiting offer with {@code expiresAt <= nowMillis}; returns how many. */
+    public int removeExpiredOffers(long nowMillis) {
+        int removed = 0;
+        while (!offerExpiries.isEmpty() && offerExpiries.peek().at() <= nowMillis) {
+            Expiry e = offerExpiries.poll();
+            QuadrantIndex.Entry<BookOffer> entry = offerById.get(e.id());
+            // The id may have left and re-entered the book since; only remove the entry this expiry belongs to.
+            if (entry != null && entry.value().expiresAt() == e.at() && removeOffer(e.id())) removed++;
+        }
+        return removed;
+    }
+
+    /** Removes every waiting order with {@code expiresAt <= nowMillis}; returns how many. */
+    public int removeExpiredOrders(long nowMillis) {
+        int removed = 0;
+        while (!orderExpiries.isEmpty() && orderExpiries.peek().at() <= nowMillis) {
+            Expiry e = orderExpiries.poll();
+            QuadrantIndex.Entry<BookOrder> entry = orderById.get(e.id());
+            if (entry != null && entry.value().expiresAt() == e.at() && removeOrder(e.id())) removed++;
+        }
+        return removed;
     }
 
     public boolean hasOffer(long id) { return offerById.containsKey(id); }

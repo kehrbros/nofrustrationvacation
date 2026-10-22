@@ -26,18 +26,19 @@ class MapperTest {
 
     @Test
     void mapsOrderDtoToEntity() {
-        ConsumerOrder order = new OrderMapper(currencyConversionService).toEntity(
+        ConsumerOrder order = new OrderMapper(currencyConversionService, Clock.systemUTC()).toEntity(
                 new OrderDto(usd("1.5"), usd("2.5"), Duration.ofMinutes(3)));
 
         assertThat(order.getId()).isZero();
         assertThat(order.getMaxCostPerMillionInputTokens()).isEqualTo(Money.of("1.5"));
         assertThat(order.getMaxCostPerMillionOutputTokens()).isEqualTo(Money.of("2.5"));
         assertThat(order.getMarketWaitTime()).isEqualTo(Duration.ofMinutes(3));
+        assertThat(order.getCreatedAt()).isNotNull();
     }
 
     @Test
     void mapsMissingOrderLimitsToNull() {
-        ConsumerOrder order = new OrderMapper(currencyConversionService).toEntity(new OrderDto(null, null, null));
+        ConsumerOrder order = new OrderMapper(currencyConversionService, Clock.systemUTC()).toEntity(new OrderDto(null, null, null));
 
         assertThat(order.getMaxCostPerMillionInputTokens()).isNull();
         assertThat(order.getMaxCostPerMillionOutputTokens()).isNull();

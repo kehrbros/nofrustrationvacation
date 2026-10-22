@@ -19,4 +19,7 @@ public sealed interface MatchResult {
 
     /** A cancel named an id that is not waiting (already matched, cancelled or unknown). */
     record NotFound() implements MatchResult {}
+
+    /** Waiting entries removed because their time ran out. */
+    record Expired(int offers, int orders) implements MatchResult {}
 }

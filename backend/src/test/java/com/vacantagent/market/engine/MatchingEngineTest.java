@@ -50,6 +50,31 @@ class MatchingEngineTest {
     }
 
     @Test
+    void expireRemovesOnlyEntriesWhoseTimeIsUp() {
+        engine.restoreOffer(bookOffer(1, 50_00, 50_00, 100));
+        engine.restoreOffer(bookOffer(2, 50_00, 50_00, 200));
+        engine.restoreOffer(bookOffer(3, 50_00, 50_00));
+        engine.restoreOrder(bookOrder(100, 1_00, 1_00, 100));
+        engine.restoreOrder(bookOrder(101, 1_00, 1_00));
+
+        assertThat(engine.handle(new MatchingEngine.ExpireEntries(100))).isEqualTo(new MatchResult.Expired(1, 1));
+        assertThat(engine.handle(new MatchingEngine.ExpireEntries(100))).isEqualTo(new MatchResult.Expired(0, 0));
+        assertThat(engine.waitingOffers()).isEqualTo(2);
+        assertThat(engine.waitingOrders()).isEqualTo(1);
+    }
+
+    @Test
+    void expireIgnoresEntriesThatAlreadyLeftTheBook() {
+        engine.restoreOffer(bookOffer(1, 50_00, 50_00, 100));
+        engine.handle(new MatchingEngine.CancelOffer(1));
+        engine.restoreOffer(bookOffer(1, 50_00, 50_00, 300));    // same id back with a later expiry
+
+        assertThat(engine.handle(new MatchingEngine.ExpireEntries(200))).isEqualTo(new MatchResult.Expired(0, 0));
+        assertThat(engine.waitingOffers()).isEqualTo(1);
+        assertThat(engine.handle(new MatchingEngine.ExpireEntries(300))).isEqualTo(new MatchResult.Expired(1, 0));
+    }
+
+    @Test
     void matchedReplyWaitsUntilTheAgreementIsStored() throws Exception {
         stored = new CompletableFuture<>();
         engine.start();

@@ -17,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
@@ -48,16 +49,25 @@ class MarketConfigTest {
         ProviderOffer agreed = persist(offer("10.00", null, "1000"));
         ConsumerOrder order = persist(emptyOrder());
         persist(new Agreement(order, agreed, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
+        ProviderOffer released = persist(offer("10.00", null, "1000"));
+        Agreement abandoned = new Agreement(persist(emptyOrder()), released, OffsetDateTime.now(), null,
+                Money.of("10"), Money.of("10"));
+        abandoned.markError(OffsetDateTime.now());
+        persist(abandoned);
+        ProviderOffer expired = persist(new ProviderOffer(Money.of("10.00"), Money.of("10.00"),
+                OffsetDateTime.now().minusMinutes(1), null, null, null, null, 1000L, 1000L));
 
         MatchingEngine engine = newEngine();
         MarketConfig.restoreOffers(engine, offers, rules);
 
         assertThat(cancel(engine, waiting)).isInstanceOf(MatchResult.Cancelled.class);
+        assertThat(cancel(engine, released)).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(cancel(engine, failed)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, invalid)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, noTokens)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, unknownTokens)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, agreed)).isInstanceOf(MatchResult.NotFound.class);
+        assertThat(cancel(engine, expired)).isInstanceOf(MatchResult.NotFound.class);
     }
 
     @Test
@@ -67,6 +77,10 @@ class MarketConfigTest {
         ConsumerOrder agreed = persist(order("10.00"));
         ProviderOffer offer = persist(offer("10.00", null, "1000"));
         persist(new Agreement(agreed, offer, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
+        ConsumerOrder expired = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
+                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1)));
+        ConsumerOrder stillWaiting = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
+                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1)));
 
         MatchingEngine engine = newEngine();
         MarketConfig.restoreOrders(engine, orders, rules);
@@ -74,6 +88,8 @@ class MarketConfigTest {
         assertThat(cancel(engine, waiting)).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(cancel(engine, invalid)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, agreed)).isInstanceOf(MatchResult.NotFound.class);
+        assertThat(cancel(engine, expired)).isInstanceOf(MatchResult.NotFound.class);
+        assertThat(cancel(engine, stillWaiting)).isInstanceOf(MatchResult.Cancelled.class);
     }
 
     private MatchingEngine newEngine() {
@@ -90,7 +106,7 @@ class MarketConfigTest {
 
     private static ConsumerOrder order(String maxPrice) {
         Money value = maxPrice == null ? null : Money.of(maxPrice);
-        return new ConsumerOrder(value, value, null);
+        return new ConsumerOrder(value, value, null, null);
     }
 
     private static ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {

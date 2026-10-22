@@ -20,12 +20,22 @@ public final class MarketFixtures {
         return new BookOrder(withId(emptyOrder(), id), maxInput, maxOutput);
     }
 
+    /** Expires at {@code expiresAt} epoch millis. */
+    public static BookOffer bookOffer(long id, long priceInput, long priceOutput, long expiresAt) {
+        return new BookOffer(withId(emptyOffer(), id), priceInput, priceOutput, expiresAt);
+    }
+
+    /** Expires at {@code expiresAt} epoch millis. */
+    public static BookOrder bookOrder(long id, long maxInput, long maxOutput, long expiresAt) {
+        return new BookOrder(withId(emptyOrder(), id), maxInput, maxOutput, expiresAt);
+    }
+
     public static ProviderOffer emptyOffer() {
         return new ProviderOffer(null, null, null, null, null, null, null, null, null);
     }
 
     public static ConsumerOrder emptyOrder() {
-        return new ConsumerOrder(null, null, null);
+        return new ConsumerOrder(null, null, null, null);
     }
 
     public static <T> T withId(T entity, long id) {

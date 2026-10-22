@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.ConsumerOrderRepository;
 import com.vacantagent.market.data.ProviderOfferRepository;
 import com.vacantagent.market.dto.OfferDto;
@@ -17,6 +18,8 @@ import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -31,8 +34,10 @@ public class BrokerLogic implements IBrokerLogic {
     private final MatchingEngine engine;
     private final ConsumerOrderRepository orders;
     private final ProviderOfferRepository offers;
+    private final AgreementRepository agreements;
     private final OrderMapper orderMapper;
     private final OfferMapper offerMapper;
+    private final Clock clock;
 
     @Override
     public Submission acceptOrder(OrderDto dto) {
@@ -54,5 +59,10 @@ public class BrokerLogic implements IBrokerLogic {
     @Override
     public CompletableFuture<MatchResult> cancelOffer(long offerId) {
         return engine.submit(new MatchingEngine.CancelOffer(offerId));
+    }
+
+    @Override
+    public boolean recordAgreementSuccess(long agreementId) {
+        return agreements.markSuccess(agreementId, OffsetDateTime.now(clock)) == 1;
     }
 }

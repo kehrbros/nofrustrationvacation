@@ -9,15 +9,19 @@ import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
+
 @Component
 @RequiredArgsConstructor
 public class OrderMapper {
     private final CurrencyConversionService currencyConversionService;
+    private final Clock clock;
 
-    /** Limits are converted to the base currency. */
+    /** Limits are converted to the base currency. The market wait time starts now. */
     public ConsumerOrder toEntity(OrderDto dto) {
         return new ConsumerOrder(toMoney(dto.maxCostPerMillionInputTokens()), toMoney(dto.maxCostPerMillionOutputTokens()),
-                dto.marketWaitTime());
+                dto.marketWaitTime(), OffsetDateTime.now(clock));
     }
 
     /** Missing limits stay {@code null}, so the market rejects the order instead of failing here. */

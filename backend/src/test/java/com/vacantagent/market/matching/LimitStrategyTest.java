@@ -14,7 +14,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.Clock;
+import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import static com.vacantagent.market.MarketFixtures.bookOffer;
 import static com.vacantagent.market.MarketFixtures.bookOrder;
@@ -24,6 +27,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Pure unit tests: no Spring, no threads, no database. Each test builds a fresh book. */
 class LimitStrategyTest {
+
+    private static final long NOW = 1_000_000L;
 
     private OrderBook book;
     private LimitStrategy strategy;
@@ -127,6 +132,39 @@ class LimitStrategyTest {
         assertThat(order(100, 5_00, 200_00)).isInstanceOf(Rejected.class);
         assertThat(book.offerCount()).isZero();
         assertThat(book.orderCount()).isZero();
+    }
+
+    @Test
+    void expiredWaitingEntriesAreSkipped() {
+        strategy = new LimitStrategy(new MarketRules(100_00, Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC)));
+        book.addOffer(bookOffer(1, 5_00, 5_00, NOW));          // cheapest, but expires right now
+        book.addOffer(bookOffer(2, 6_00, 6_00, NOW + 1));
+        book.addOrder(bookOrder(200, 50_00, 50_00, NOW - 1));  // highest paying, but expired
+        book.addOrder(bookOrder(201, 10_00, 10_00));
+
+        assertThat(pairOf(order(100, 10_00, 10_00))).isEqualTo(matched(100, 2));
+        assertThat(pairOf(offer(3, 7_00, 7_00))).isEqualTo(matched(201, 3));
+        assertThat(book.hasOffer(1)).isTrue();                   // left for ExpireEntries
+        assertThat(book.hasOrder(200)).isTrue();
+    }
+
+    @Test
+    void orderWhoseWaitTimeIsOverStillMatchesOnArrivalButDoesNotWait() {
+        strategy = new LimitStrategy(new MarketRules(100_00, Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC)));
+        book.addOffer(bookOffer(1, 5_00, 5_00));
+
+        assertThat(pairOf(strategy.onOrder(bookOrder(100, 10_00, 10_00, NOW), book))).isEqualTo(matched(100, 1));
+        assertThat(strategy.onOrder(bookOrder(101, 10_00, 10_00, NOW), book)).isInstanceOf(Rejected.class);
+        assertThat(book.hasOrder(101)).isFalse();
+    }
+
+    @Test
+    void expiredOfferIsRejected() {
+        strategy = new LimitStrategy(new MarketRules(100_00, Clock.fixed(Instant.ofEpochMilli(NOW), ZoneOffset.UTC)));
+        book.addOrder(bookOrder(200, 10_00, 10_00));
+
+        assertThat(strategy.onOffer(bookOffer(1, 5_00, 5_00, NOW), book)).isInstanceOf(Rejected.class);
+        assertThat(book.hasOrder(200)).isTrue();
     }
 
     @Test
