@@ -9,10 +9,472 @@
     "description" : "Generated server url"
   } ],
   "tags" : [ {
+    "description" : "Link the PayPal account for payouts",
+    "name" : "Payout account"
+  }, {
+    "description" : "Pay out earnings via PayPal",
+    "name" : "Payouts"
+  }, {
+    "description" : "Steps before a user can act in a role",
+    "name" : "Onboarding"
+  }, {
+    "description" : "Top up platform credit via PayPal",
+    "name" : "Top-ups"
+  }, {
+    "description" : "LLM accesses of providers",
+    "name" : "Agents"
+  }, {
     "description" : "Place and cancel consumer orders and provider offers",
     "name" : "Market"
+  }, {
+    "description" : "Balances and bookings of the authenticated user",
+    "name" : "Accounting"
   } ],
   "paths" : {
+    "/api/v1/accounting/balances" : {
+      "get" : {
+        "description" : "Credit rounded commercially, earnings rounded down (what can be paid out).",
+        "operationId" : "getBalances",
+        "parameters" : [ {
+          "description" : "ISO 4217 code, defaults to the preferred currency",
+          "in" : "query",
+          "name" : "currency",
+          "required" : false,
+          "schema" : {
+            "type" : [ "string", "null" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BalancesDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Credit and earnings",
+        "tags" : [ "Accounting" ]
+      }
+    },
+    "/api/v1/accounting/entries" : {
+      "get" : {
+        "description" : "The 50 latest bookings on all accounts of the user, newest first.",
+        "operationId" : "getEntries",
+        "parameters" : [ {
+          "description" : "ISO 4217 code, defaults to the preferred currency",
+          "in" : "query",
+          "name" : "currency",
+          "required" : false,
+          "schema" : {
+            "type" : [ "string", "null" ]
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/LedgerEntryDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Latest bookings",
+        "tags" : [ "Accounting" ]
+      }
+    },
+    "/api/v1/accounting/payout-account" : {
+      "delete" : {
+        "description" : "Offers can no longer be placed afterwards.",
+        "operationId" : "unlinkPayoutAccount",
+        "responses" : {
+          "204" : {
+            "description" : "Unlinked or nothing was linked"
+          },
+          "409" : {
+            "description" : "Payouts are still in progress (PAYOUTS_OPEN)"
+          }
+        },
+        "summary" : "Unlink the payout account",
+        "tags" : [ "Payout account" ]
+      },
+      "get" : {
+        "description" : "Also tells whether PayPal is available on the server.",
+        "operationId" : "getPayoutAccount",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PayoutAccountStatusDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Linked payout account",
+        "tags" : [ "Payout account" ]
+      }
+    },
+    "/api/v1/accounting/payout-account/paypal" : {
+      "post" : {
+        "description" : "Replaces a PayPal account linked before.",
+        "operationId" : "completePayPalLink",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PayPalLinkDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PayoutAccountStatusDto"
+                }
+              }
+            },
+            "description" : "Linked"
+          },
+          "400" : {
+            "description" : "State unknown, expired or of another user (LINK_STATE_INVALID)"
+          },
+          "409" : {
+            "description" : "PayPal account linked to another user (PAYPAL_ACCOUNT_IN_USE)"
+          },
+          "502" : {
+            "description" : "PayPal refused the code or could not be reached"
+          }
+        },
+        "summary" : "Complete linking a PayPal account",
+        "tags" : [ "Payout account" ]
+      }
+    },
+    "/api/v1/accounting/payout-account/paypal/authorization" : {
+      "post" : {
+        "description" : "Returns the PayPal login URL. PayPal sends the user back to the configured redirect URI with code and state, which the frontend passes to POST /payout-account/paypal within 15 minutes.",
+        "operationId" : "startPayPalLink",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PayPalAuthorizationDto"
+                }
+              }
+            },
+            "description" : "Send the user to authorizationUrl"
+          },
+          "503" : {
+            "description" : "PayPal is not configured"
+          }
+        },
+        "summary" : "Start linking a PayPal account",
+        "tags" : [ "Payout account" ]
+      }
+    },
+    "/api/v1/accounting/payouts" : {
+      "get" : {
+        "description" : "The 20 latest payouts, newest first.",
+        "operationId" : "getPayouts",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/PayoutDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Latest payouts",
+        "tags" : [ "Payouts" ]
+      },
+      "post" : {
+        "description" : "Debits the earnings and sends the amount to the linked PayPal account. PayPal processes payouts asynchronously: SUBMITTED becomes COMPLETED or FAILED (booked back) later.",
+        "operationId" : "requestPayout",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PayoutRequestDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PayoutDto"
+                }
+              }
+            },
+            "description" : "Payout created, see status"
+          },
+          "400" : {
+            "description" : "Invalid amount or unsupported currency (INVALID_AMOUNT)"
+          },
+          "409" : {
+            "description" : "No PayPal account linked (PAYOUT_ACCOUNT_REQUIRED) or earnings too low (INSUFFICIENT_BALANCE)"
+          },
+          "422" : {
+            "description" : "Amount below the minimum (AMOUNT_OUT_OF_RANGE)"
+          }
+        },
+        "summary" : "Request a payout",
+        "tags" : [ "Payouts" ]
+      }
+    },
+    "/api/v1/accounting/top-ups" : {
+      "get" : {
+        "description" : "The 20 latest top-ups, newest first.",
+        "operationId" : "getTopUps",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/TopUpDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Latest top-ups",
+        "tags" : [ "Top-ups" ]
+      },
+      "post" : {
+        "description" : "Creates a PayPal order over the amount. Send the user to approveUrl; PayPal returns to the configured return URL with the order id as query parameter token, then call capture.",
+        "operationId" : "startTopUp",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TopUpRequestDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TopUpStartedDto"
+                }
+              }
+            },
+            "description" : "PayPal order created"
+          },
+          "400" : {
+            "description" : "Invalid amount or unsupported currency (INVALID_AMOUNT)"
+          },
+          "422" : {
+            "description" : "Amount below the minimum or above the maximum (AMOUNT_OUT_OF_RANGE)"
+          },
+          "503" : {
+            "description" : "PayPal not configured or no current exchange rate"
+          }
+        },
+        "summary" : "Start a top-up",
+        "tags" : [ "Top-ups" ]
+      }
+    },
+    "/api/v1/accounting/top-ups/paypal/{orderId}/cancel" : {
+      "post" : {
+        "description" : "After the user cancelled at PayPal. Paid top-ups stay as they are.",
+        "operationId" : "cancelTopUp",
+        "parameters" : [ {
+          "description" : "PayPal order id, query parameter token of the cancel URL",
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "404" : {
+            "description" : "No top-up of the user for this order (TOP_UP_NOT_FOUND)"
+          }
+        },
+        "summary" : "Cancel a top-up",
+        "tags" : [ "Top-ups" ]
+      }
+    },
+    "/api/v1/accounting/top-ups/paypal/{orderId}/capture" : {
+      "post" : {
+        "description" : "Idempotent. Status COMPLETED means credited; PENDING is credited automatically once PayPal releases the money.",
+        "operationId" : "captureTopUp",
+        "parameters" : [ {
+          "description" : "PayPal order id, query parameter token of the return URL",
+          "in" : "path",
+          "name" : "orderId",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TopUpDto"
+                }
+              }
+            },
+            "description" : "Current state of the top-up"
+          },
+          "404" : {
+            "description" : "No top-up of the user for this order (TOP_UP_NOT_FOUND)"
+          },
+          "422" : {
+            "description" : "Not approved or declined (PAYMENT_NOT_APPROVED, PAYMENT_DECLINED)"
+          }
+        },
+        "summary" : "Capture an approved top-up",
+        "tags" : [ "Top-ups" ]
+      }
+    },
+    "/api/v1/agents" : {
+      "get" : {
+        "operationId" : "getAgents",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/AgentDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "My agents",
+        "tags" : [ "Agents" ]
+      },
+      "post" : {
+        "description" : "The API key is stored encrypted and never returned.",
+        "operationId" : "createAgent",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateAgentDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AgentDto"
+                }
+              }
+            },
+            "description" : "Created"
+          },
+          "400" : {
+            "description" : "Field missing, API key too short or baseUrl not https"
+          }
+        },
+        "summary" : "Add an agent",
+        "tags" : [ "Agents" ]
+      }
+    },
+    "/api/v1/agents/{id}" : {
+      "delete" : {
+        "operationId" : "deleteAgent",
+        "parameters" : [ {
+          "description" : "Agent id",
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "Removed"
+          },
+          "404" : {
+            "description" : "Unknown or of another user"
+          }
+        },
+        "summary" : "Remove an agent",
+        "tags" : [ "Agents" ]
+      }
+    },
+    "/api/v1/agents/{id}/api-key" : {
+      "put" : {
+        "operationId" : "changeApiKey",
+        "parameters" : [ {
+          "description" : "Agent id",
+          "in" : "path",
+          "name" : "id",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ApiKeyDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "404" : {
+            "description" : "Unknown or of another user"
+          }
+        },
+        "summary" : "Replace the API key of an agent",
+        "tags" : [ "Agents" ]
+      }
+    },
     "/api/v1/market/offers" : {
       "post" : {
         "description" : "Matched against the highest-paying fitting order for its model. If none fits, the offer waits in the market until offeredUntil.",
@@ -40,6 +502,9 @@
           },
           "400" : {
             "description" : "modelProvider or modelName missing, or unsupported currency"
+          },
+          "403" : {
+            "description" : "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider"
           },
           "422" : {
             "content" : {
@@ -149,18 +614,29 @@
         "tags" : [ "Market" ]
       }
     },
+    "/api/v1/onboarding/provider" : {
+      "get" : {
+        "description" : "Registration, PayPal account for payouts, at least one agent with API key. Offers require all.",
+        "operationId" : "getProviderOnboarding",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProviderOnboardingDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Provider onboarding checklist",
+        "tags" : [ "Onboarding" ]
+      }
+    },
     "/api/v1/users/me" : {
       "get" : {
         "operationId" : "getProfile",
-        "parameters" : [ {
-          "description" : "ISO 4217 code of the currency for monetary values, defaults to the preferred currency",
-          "in" : "query",
-          "name" : "currency",
-          "required" : false,
-          "schema" : {
-            "type" : [ "string", "null" ]
-          }
-        } ],
         "responses" : {
           "200" : {
             "content" : {
@@ -207,6 +683,34 @@
   },
   "components" : {
     "schemas" : {
+      "AgentDto" : {
+        "type" : "object",
+        "properties" : {
+          "apiKeyHint" : {
+            "type" : "string",
+            "example" : "x7Qa"
+          },
+          "baseUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "modelProvider" : {
+            "type" : "string",
+            "example" : "openai"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "apiKeyHint", "createdAt", "id", "modelProvider", "name" ]
+      },
       "AgreementDto" : {
         "type" : "null",
         "properties" : {
@@ -247,12 +751,19 @@
           }
         }
       },
+      "ApiKeyDto" : {
+        "type" : "object",
+        "properties" : {
+          "apiKey" : {
+            "type" : "string",
+            "format" : "password"
+          }
+        },
+        "required" : [ "apiKey" ]
+      },
       "AppUserDto" : {
         "type" : "object",
         "properties" : {
-          "accountBalance" : {
-            "$ref" : "#/components/schemas/MoneyDto"
-          },
           "id" : {
             "type" : "integer",
             "format" : "int64"
@@ -264,6 +775,68 @@
             "type" : "string"
           }
         }
+      },
+      "BalancesDto" : {
+        "type" : "object",
+        "properties" : {
+          "credit" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "earnings" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          }
+        },
+        "required" : [ "credit", "earnings" ]
+      },
+      "CreateAgentDto" : {
+        "type" : "object",
+        "properties" : {
+          "apiKey" : {
+            "type" : "string",
+            "format" : "password"
+          },
+          "baseUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "modelProvider" : {
+            "type" : "string",
+            "example" : "openai"
+          },
+          "name" : {
+            "type" : "string",
+            "example" : "Mein OpenAI-Zugang"
+          }
+        },
+        "required" : [ "apiKey", "modelProvider", "name" ]
+      },
+      "LedgerEntryDto" : {
+        "type" : "object",
+        "properties" : {
+          "account" : {
+            "type" : "string",
+            "enum" : [ "CREDIT", "EARNINGS" ]
+          },
+          "amount" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "bookedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "referenceId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "TOP_UP", "PAYOUT", "PAYOUT_REVERSAL", "USAGE_CHARGE", "USAGE_EARNING", "OPENING_BALANCE" ]
+          }
+        },
+        "required" : [ "account", "amount", "bookedAt", "id", "type" ]
       },
       "MoneyDto" : {
         "type" : "object",
@@ -353,6 +926,95 @@
         },
         "required" : [ "maxCostPerMillionInputTokens", "maxCostPerMillionOutputTokens" ]
       },
+      "PayPalAuthorizationDto" : {
+        "type" : "object",
+        "properties" : {
+          "authorizationUrl" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "authorizationUrl" ]
+      },
+      "PayPalLinkDto" : {
+        "type" : "object",
+        "properties" : {
+          "code" : {
+            "type" : "string"
+          },
+          "state" : {
+            "type" : "string"
+          }
+        },
+        "required" : [ "code", "state" ]
+      },
+      "PayoutAccountStatusDto" : {
+        "type" : "object",
+        "properties" : {
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "linked" : {
+            "type" : "boolean"
+          },
+          "linkedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "payPalAvailable" : {
+            "type" : "boolean"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "verified" : {
+            "type" : [ "boolean", "null" ]
+          }
+        },
+        "required" : [ "linked", "payPalAvailable" ]
+      },
+      "PayoutDto" : {
+        "type" : "object",
+        "properties" : {
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "failureReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paidOut" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "requestedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "REQUESTED", "SUBMITTED", "COMPLETED", "FAILED", "UNKNOWN" ]
+          }
+        },
+        "required" : [ "id", "paidOut", "requestedAt", "status" ]
+      },
+      "PayoutRequestDto" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "50.00"
+          },
+          "currency" : {
+            "type" : "string",
+            "example" : "EUR"
+          }
+        },
+        "required" : [ "currency" ]
+      },
       "PreferredCurrencyDto" : {
         "type" : "object",
         "properties" : {
@@ -361,6 +1023,25 @@
             "example" : "EUR"
           }
         }
+      },
+      "ProviderOnboardingDto" : {
+        "type" : "object",
+        "properties" : {
+          "agentConfigured" : {
+            "type" : "boolean"
+          },
+          "complete" : {
+            "type" : "boolean",
+            "description" : "All steps done, offers can be placed"
+          },
+          "payoutAccountLinked" : {
+            "type" : "boolean"
+          },
+          "registered" : {
+            "type" : "boolean"
+          }
+        },
+        "required" : [ "agentConfigured", "complete", "payoutAccountLinked", "registered" ]
       },
       "SubmissionDto" : {
         "type" : "object",
@@ -383,6 +1064,61 @@
             "enum" : [ "MATCHED", "RESTING", "REJECTED" ]
           }
         }
+      },
+      "TopUpDto" : {
+        "type" : "object",
+        "properties" : {
+          "completedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "credited" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "failureReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "paid" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          },
+          "paypalOrderId" : {
+            "type" : [ "string", "null" ]
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "CREATED", "PENDING", "COMPLETED", "CANCELLED", "FAILED" ]
+          }
+        },
+        "required" : [ "createdAt", "credited", "id", "paid", "status" ]
+      },
+      "TopUpRequestDto" : {
+        "type" : "object",
+        "properties" : {
+          "amount" : {
+            "$ref" : "#/components/schemas/MoneyDto"
+          }
+        },
+        "required" : [ "amount" ]
+      },
+      "TopUpStartedDto" : {
+        "type" : "object",
+        "properties" : {
+          "approveUrl" : {
+            "type" : "string"
+          },
+          "topUp" : {
+            "$ref" : "#/components/schemas/TopUpDto"
+          }
+        },
+        "required" : [ "approveUrl", "topUp" ]
       }
     }
   }

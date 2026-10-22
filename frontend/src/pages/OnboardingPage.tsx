@@ -1,9 +1,10 @@
 import { CheckOutlined, CloudServerOutlined, ShoppingCartOutlined } from '@ant-design/icons';
-import { Button, Flex, Layout, Typography } from 'antd';
+import { Button, Flex, Typography } from 'antd';
 import { useState, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 import { useNavigate } from 'react-router';
 
+import OnboardingShell from '../components/OnboardingShell';
 import { roleHome } from '../role/navigation';
 import { useRole, type Role } from '../role/RoleContext';
 import { brand } from '../theme';
@@ -34,6 +35,7 @@ const options: RoleOption[] = [
 
 /**
  * First page after the first login: the user picks the primary role. It can be switched later in the header.
+ * Providers then see the onboarding checklist next to their pages, see {@link OnboardingChecklist}.
  */
 export default function OnboardingPage() {
   const auth = useAuth();
@@ -48,11 +50,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Layout.Header style={{ borderBottom: `2px solid ${brand.ink}`, display: 'flex', alignItems: 'center' }}>
-        <span style={{ fontWeight: 800, fontSize: 24, letterSpacing: '-0.01em' }}>VacantAgent</span>
-      </Layout.Header>
-      <Layout.Content style={{ width: '100%', maxWidth: 1000, margin: '0 auto', padding: '56px 32px', boxSizing: 'border-box' }}>
+    <OnboardingShell>
         <Flex vertical gap={36}>
           <div style={{ textAlign: 'center' }}>
             <Typography.Title level={1} style={{ margin: 0, fontSize: 48, fontWeight: 800, letterSpacing: '-0.02em' }}>
@@ -121,7 +119,6 @@ export default function OnboardingPage() {
             </Button>
           </Flex>
         </Flex>
-      </Layout.Content>
-    </Layout>
+    </OnboardingShell>
   );
 }

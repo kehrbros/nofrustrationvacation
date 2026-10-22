@@ -1,5 +1,7 @@
 package com.vacantagent.currency;
 
+import com.vacantagent.accounting.data.AccountRepository;
+import com.vacantagent.accounting.entities.AccountType;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.currency.data.ExchangeRateRepository;
 import com.vacantagent.currency.entities.ExchangeRate;
@@ -26,15 +28,17 @@ class MoneyPersistenceTest {
     private AppUserRepository appUserRepository;
     @Autowired
     private ExchangeRateRepository exchangeRateRepository;
+    @Autowired
+    private AccountRepository accountRepository;
 
     @Test
     void allMoneyColumnsHaveScale8() {
         List<Map<String, Object>> columns = jdbcTemplate.queryForList("""
                 SELECT table_name, column_name, numeric_precision, numeric_scale FROM information_schema.columns
                 WHERE table_schema = 'PUBLIC' AND (column_name LIKE '%PRICE%' OR column_name LIKE '%COST%'
-                    OR column_name = 'ACCOUNT_BALANCE')""");
+                    OR column_name IN ('BALANCE', 'AMOUNT', 'ORIGINAL_AMOUNT'))""");
 
-        assertEquals(9, columns.size(), columns.toString());
+        assertEquals(18, columns.size(), columns.toString());
         for (Map<String, Object> column : columns) {
             assertEquals(19, ((Number) column.get("NUMERIC_PRECISION")).intValue(), column.toString());
             assertEquals(Money.SCALE, ((Number) column.get("NUMERIC_SCALE")).intValue(), column.toString());
@@ -44,9 +48,11 @@ class MoneyPersistenceTest {
     @Test
     void moneyIsStoredWithFullPrecision() {
         AppUser user = appUserRepository.save(AppUser.firstLogin("money-precision", null, null));
-        jdbcTemplate.update("UPDATE app_user SET account_balance = 0.00000075 WHERE id = ?", user.getId());
+        jdbcTemplate.update("INSERT INTO accounting_account (app_user_id, type, balance, created_at) VALUES (?, 'CREDIT', 0.00000075, CURRENT_TIMESTAMP)",
+                user.getId());
 
-        assertEquals(Money.of("0.00000075"), appUserRepository.findById(user.getId()).orElseThrow().getAccountBalance());
+        assertEquals(Money.of("0.00000075"), accountRepository.findByAppUserIdAndType(user.getId(), AccountType.CREDIT)
+                .orElseThrow().getBalance());
     }
 
     @Test
