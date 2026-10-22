@@ -1,0 +1,34 @@
+body {
+  margin: 0;
+}
+
+/* selected entry of the top navigation: black text, yellow bar */
+.va-nav.ant-menu-horizontal > .ant-menu-item-selected {
+  font-weight: 700;
+}
+.va-nav.ant-menu-horizontal > .ant-menu-item-selected::after,
+.va-nav.ant-menu-horizontal > .ant-menu-item:hover::after {
+  border-bottom-color: #f2b705 !important;
+}
+
+/* role switcher: outlined pill */
+.va-role-switch.ant-segmented {
+  border: 2px solid #111111;
+  border-radius: 999px;
+}
+.va-role-switch .ant-segmented-item,
+.va-role-switch .ant-segmented-thumb {
+  border-radius: 999px;
+}
+
+/* call to action in the accent color */
+.ant-btn.va-accent,
+.ant-btn.va-accent:not(:disabled):hover {
+  background: #f2b705;
+  border-color: #f2b705;
+  color: #111111;
+  font-weight: 700;
+}
+.ant-btn.va-accent:not(:disabled):hover {
+  filter: brightness(0.95);
+}
