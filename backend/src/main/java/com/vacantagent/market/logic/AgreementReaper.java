@@ -2,10 +2,8 @@ package com.vacantagent.market.logic;
 
 import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
-import com.vacantagent.market.engine.MatchingEngine;
 import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ProviderOffer;
-import com.vacantagent.market.matching.entities.BookOffer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -25,7 +23,7 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class AgreementReaper {
     private final AgreementRepository agreements;
-    private final MatchingEngine engine;
+    private final IMarketLogic market;
     private final MarketProperties props;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
@@ -45,7 +43,7 @@ public class AgreementReaper {
                 ProviderOffer offer = transactionTemplate.execute(status -> close(id, now, cutoff));
                 if (offer == null) continue;
                 closed++;
-                engine.submit(new MatchingEngine.SubmitOffer(BookOffer.from(offer))).whenComplete((result, e) -> {
+                market.resubmitOffer(offer).whenComplete((result, e) -> {
                     if (e == null) log.info("Agreement {} unused, offer {} back in the market: {}", id, offer.getId(), result);
                     else log.warn("Agreement {} unused, resubmitting offer {} failed", id, offer.getId(), e);
                 });

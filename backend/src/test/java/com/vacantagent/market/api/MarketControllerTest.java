@@ -7,7 +7,7 @@ import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
-import com.vacantagent.market.logic.IBrokerLogic;
+import com.vacantagent.market.logic.IMarketLogic;
 import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.user.entities.AppUser;
 import com.vacantagent.user.logic.AppUserProvisioning;
@@ -50,7 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** HTTP mapping of the market API. The broker is mocked, matching itself is covered by the broker and engine tests. */
+/** HTTP mapping of the market API. MarketLogic is mocked, matching itself is covered by the market and engine tests. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class MarketControllerTest {
@@ -71,7 +71,7 @@ class MarketControllerTest {
     @Autowired
     private AppUserProvisioning appUserProvisioning;
     @MockitoBean
-    private IBrokerLogic broker;
+    private IMarketLogic market;
 
     private long appUserId;
     private RequestPostProcessor user;
@@ -87,7 +87,7 @@ class MarketControllerTest {
 
     @Test
     void matchedOrderReturnsTheAgreement() throws Exception {
-        when(broker.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Matched(agreement())));
+        when(market.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Matched(agreement())));
 
         performAsync(post("/api/v1/market/orders").content(ORDER.formatted("openai", "gpt-5")))
                 .andExpect(status().isCreated())
@@ -105,7 +105,7 @@ class MarketControllerTest {
 
     @Test
     void orderWithoutMatchRestsAndBlankModelValuesMeanAny() throws Exception {
-        when(broker.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Resting()));
+        when(market.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Resting()));
 
         performAsync(post("/api/v1/market/orders").content(ORDER.formatted(" ", "")))
                 .andExpect(status().isCreated())
@@ -113,15 +113,15 @@ class MarketControllerTest {
                 .andExpect(jsonPath("$.agreement").doesNotExist());
 
         ArgumentCaptor<OrderDto> order = ArgumentCaptor.forClass(OrderDto.class);
-        verify(broker).acceptOrder(order.capture(), eq(appUserId));
+        verify(market).acceptOrder(order.capture(), eq(appUserId));
         assertThat(order.getValue().modelProvider()).isNull();
         assertThat(order.getValue().modelName()).isNull();
     }
 
     @Test
     void modelValuesAreTrimmed() throws Exception {
-        when(broker.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Resting()));
-        when(broker.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
+        when(market.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Resting()));
+        when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
 
         performAsync(post("/api/v1/market/orders").content(ORDER.formatted("  openai ", "\\tgpt-5 ")))
                 .andExpect(status().isCreated());
@@ -129,18 +129,18 @@ class MarketControllerTest {
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<OrderDto> order = ArgumentCaptor.forClass(OrderDto.class);
-        verify(broker).acceptOrder(order.capture(), eq(appUserId));
+        verify(market).acceptOrder(order.capture(), eq(appUserId));
         assertThat(order.getValue().modelProvider()).isEqualTo("openai");
         assertThat(order.getValue().modelName()).isEqualTo("gpt-5");
         ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
-        verify(broker).acceptOffer(offer.capture(), eq(appUserId));
+        verify(market).acceptOffer(offer.capture(), eq(appUserId));
         assertThat(offer.getValue().modelProvider()).isEqualTo("openai");
         assertThat(offer.getValue().modelName()).isEqualTo("gpt-5");
     }
 
     @Test
     void rejectedOrderReturns422WithReason() throws Exception {
-        when(broker.acceptOrder(any(), eq(appUserId)))
+        when(market.acceptOrder(any(), eq(appUserId)))
                 .thenReturn(submission(5, new MatchResult.Rejected("Order violates market rules")));
 
         performAsync(post("/api/v1/market/orders").content(ORDER.formatted("openai", "gpt-5")))
@@ -155,12 +155,12 @@ class MarketControllerTest {
         mockMvc.perform(json(post("/api/v1/market/orders")).content(ORDER.formatted("", "gpt-5")))
                 .andExpect(status().isBadRequest());
 
-        verify(broker, never()).acceptOrder(any(), anyLong());
+        verify(market, never()).acceptOrder(any(), anyLong());
     }
 
     @Test
     void offerIsPlacedForTheAuthenticatedUser() throws Exception {
-        when(broker.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
+        when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
 
         performAsync(post("/api/v1/market/offers").content(OFFER.formatted("openai", "gpt-5")))
                 .andExpect(status().isCreated())
@@ -168,7 +168,7 @@ class MarketControllerTest {
                 .andExpect(jsonPath("$.status").value("RESTING"));
 
         ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
-        verify(broker).acceptOffer(offer.capture(), eq(appUserId));
+        verify(market).acceptOffer(offer.capture(), eq(appUserId));
         assertThat(offer.getValue().modelProvider()).isEqualTo("openai");
         assertThat(offer.getValue().modelName()).isEqualTo("gpt-5");
     }
@@ -180,49 +180,49 @@ class MarketControllerTest {
         mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted("", "gpt-5")))
                 .andExpect(status().isBadRequest());
 
-        verify(broker, never()).acceptOffer(any(), anyLong());
+        verify(market, never()).acceptOffer(any(), anyLong());
     }
 
     @Test
     void ownerCancelsWaitingOrder() throws Exception {
-        when(broker.isOrderOwnedBy(5, appUserId)).thenReturn(true);
-        when(broker.cancelOrder(5)).thenReturn(CompletableFuture.completedFuture(new MatchResult.Cancelled()));
+        when(market.isOrderOwnedBy(5, appUserId)).thenReturn(true);
+        when(market.cancelOrder(5)).thenReturn(CompletableFuture.completedFuture(new MatchResult.Cancelled()));
 
         performAsync(delete("/api/v1/market/orders/5")).andExpect(status().isNoContent());
     }
 
     @Test
     void cancellingAnOrderThatIsNotWaitingReturns404() throws Exception {
-        when(broker.isOrderOwnedBy(5, appUserId)).thenReturn(true);
-        when(broker.cancelOrder(5)).thenReturn(CompletableFuture.completedFuture(new MatchResult.NotFound()));
+        when(market.isOrderOwnedBy(5, appUserId)).thenReturn(true);
+        when(market.cancelOrder(5)).thenReturn(CompletableFuture.completedFuture(new MatchResult.NotFound()));
 
         performAsync(delete("/api/v1/market/orders/5")).andExpect(status().isNotFound());
     }
 
     @Test
     void ordersOfOtherUsersCannotBeCancelled() throws Exception {
-        when(broker.isOrderOwnedBy(5, appUserId)).thenReturn(false);
+        when(market.isOrderOwnedBy(5, appUserId)).thenReturn(false);
 
         performAsync(delete("/api/v1/market/orders/5")).andExpect(status().isNotFound());
 
-        verify(broker, never()).cancelOrder(anyLong());
+        verify(market, never()).cancelOrder(anyLong());
     }
 
     @Test
     void ownerCancelsWaitingOffer() throws Exception {
-        when(broker.isOfferOwnedBy(7, appUserId)).thenReturn(true);
-        when(broker.cancelOffer(7)).thenReturn(CompletableFuture.completedFuture(new MatchResult.Cancelled()));
+        when(market.isOfferOwnedBy(7, appUserId)).thenReturn(true);
+        when(market.cancelOffer(7)).thenReturn(CompletableFuture.completedFuture(new MatchResult.Cancelled()));
 
         performAsync(delete("/api/v1/market/offers/7")).andExpect(status().isNoContent());
     }
 
     @Test
     void offersOfOtherUsersCannotBeCancelled() throws Exception {
-        when(broker.isOfferOwnedBy(7, appUserId)).thenReturn(false);
+        when(market.isOfferOwnedBy(7, appUserId)).thenReturn(false);
 
         performAsync(delete("/api/v1/market/offers/7")).andExpect(status().isNotFound());
 
-        verify(broker, never()).cancelOffer(anyLong());
+        verify(market, never()).cancelOffer(anyLong());
     }
 
     /** The endpoints return futures: perform, then dispatch the completed async result. */

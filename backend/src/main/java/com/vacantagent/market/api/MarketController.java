@@ -4,7 +4,7 @@ import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
 import com.vacantagent.market.dto.SubmissionDto;
 import com.vacantagent.market.entities.Submission;
-import com.vacantagent.market.logic.IBrokerLogic;
+import com.vacantagent.market.logic.IMarketLogic;
 import com.vacantagent.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -26,7 +26,7 @@ import java.util.Currency;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The broker's API for consumers and providers. Orders and offers belong to the authenticated user, only the owner
+ * The market's API for consumers and providers. Orders and offers belong to the authenticated user, only the owner
  * may cancel them. Responses wait for the matching result without blocking a request thread.
  */
 @Tag(name = "Market", description = "Place and cancel consumer orders and provider offers")
@@ -34,7 +34,7 @@ import java.util.concurrent.CompletableFuture;
 @RequestMapping("/api/v1/market")
 @RequiredArgsConstructor
 public class MarketController {
-    private final IBrokerLogic broker;
+    private final IMarketLogic market;
     private final MarketRequestPreparer preparer;
     private final SubmissionDtoMapper submissionMapper;
 
@@ -53,7 +53,7 @@ public class MarketController {
                                                                        @RequestBody OrderDto order) {
         OrderDto prepared = preparer.prepare(order);
         Currency currency = submissionMapper.responseCurrency(user);
-        Submission submission = broker.acceptOrder(prepared, user.appUserId());
+        Submission submission = market.acceptOrder(prepared, user.appUserId());
         return submission.result().thenApply(result -> submissionMapper.toResponse(submission.id(), result, currency));
     }
 
@@ -65,10 +65,10 @@ public class MarketController {
     public CompletableFuture<ResponseEntity<Void>> cancelOrder(@AuthenticationPrincipal CurrentUser user,
                                                                @Parameter(description = "Order id from placing it")
                                                                @PathVariable long id) {
-        if (!broker.isOrderOwnedBy(id, user.appUserId())) {
+        if (!market.isOrderOwnedBy(id, user.appUserId())) {
             return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
         }
-        return broker.cancelOrder(id).thenApply(SubmissionDtoMapper::toCancelResponse);
+        return market.cancelOrder(id).thenApply(SubmissionDtoMapper::toCancelResponse);
     }
 
     @Operation(summary = "Place an offer",
@@ -84,7 +84,7 @@ public class MarketController {
                                                                        @RequestBody OfferDto offer) {
         OfferDto prepared = preparer.prepare(offer);
         Currency currency = submissionMapper.responseCurrency(user);
-        Submission submission = broker.acceptOffer(prepared, user.appUserId());
+        Submission submission = market.acceptOffer(prepared, user.appUserId());
         return submission.result().thenApply(result -> submissionMapper.toResponse(submission.id(), result, currency));
     }
 
@@ -96,9 +96,9 @@ public class MarketController {
     public CompletableFuture<ResponseEntity<Void>> cancelOffer(@AuthenticationPrincipal CurrentUser user,
                                                                @Parameter(description = "Offer id from placing it")
                                                                @PathVariable long id) {
-        if (!broker.isOfferOwnedBy(id, user.appUserId())) {
+        if (!market.isOfferOwnedBy(id, user.appUserId())) {
             return CompletableFuture.completedFuture(ResponseEntity.notFound().build());
         }
-        return broker.cancelOffer(id).thenApply(SubmissionDtoMapper::toCancelResponse);
+        return market.cancelOffer(id).thenApply(SubmissionDtoMapper::toCancelResponse);
     }
 }

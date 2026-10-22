@@ -1,6 +1,5 @@
 package com.vacantagent.market.engine;
 
-import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.matching.entities.BookOffer;
 import com.vacantagent.market.matching.entities.BookOrder;
 import com.vacantagent.market.matching.MatchResult;
@@ -11,15 +10,19 @@ import java.util.Objects;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
 
 /**
- * Runs matching on one dedicated thread. Any number of threads (web requests, listeners) call
- * {@link #submit}; commands are queued and processed strictly one at a time in arrival order,
- * so the book and strategy need no locking.
+ * Solely responsible for matching: owns the {@link OrderBook} and runs the {@link MatchingStrategy} on one dedicated
+ * thread. Commands are queued and processed strictly one at a time in arrival order, so the book and strategy need
+ * no locking.
  *
- * <p>Plain Java on purpose: Spring creates it as a bean and calls {@link #start}/{@link #stop},
- * while tests can construct it directly or call {@link #handle} synchronously without a thread.
+ * <p>Everything around matching is coordinated by {@code MarketLogic}, the only caller: persisting orders and
+ * offers, persisting agreements, restoring the book at startup and starting/stopping the engine. The engine does no
+ * I/O. A {@code Matched} result carries an agreement that is <b>not yet persisted</b>; calling the engine directly
+ * instead of through {@code MarketLogic} would lose it.
+ *
+ * <p>Plain Java on purpose: Spring creates it as a bean, while tests can construct it directly or call
+ * {@link #handle} synchronously without a thread.
  */
 public final class MatchingEngine {
 
@@ -38,33 +41,25 @@ public final class MatchingEngine {
 
     private final OrderBook book;
     private final MatchingStrategy strategy;
-    private final Function<Agreement, CompletableFuture<Agreement>> agreementSink;
     private final BlockingQueue<Envelope> inbox;
     private volatile Thread thread;
 
-    /**
-     * @param agreementSink receives every agreement on the engine thread and returns a future that completes
-     *                      once it is stored; must be fast and non-blocking (e.g. hand off to
-     *                      {@code AgreementWriter}), or it slows down all matching
-     */
-    public MatchingEngine(OrderBook book, MatchingStrategy strategy,
-                          Function<Agreement, CompletableFuture<Agreement>> agreementSink, int inboxCapacity) {
+    public MatchingEngine(OrderBook book, MatchingStrategy strategy, int inboxCapacity) {
         this.book = Objects.requireNonNull(book);
         this.strategy = Objects.requireNonNull(strategy);
-        this.agreementSink = Objects.requireNonNull(agreementSink);
         this.inbox = new ArrayBlockingQueue<>(inboxCapacity);
     }
 
     // ------------------------------------------------------------------ startup restore
 
-    /** Loads a waiting offer from the database. Call before {@link #start}, in creation order. */
+    /** Puts a waiting offer loaded from the database into the book. Call before {@link #start}, in creation order. */
     public void restoreOffer(BookOffer offer) {
         requireNotRunning();
         book.addOffer(offer);
     }
 
     /**
-     * Loads a waiting order from the database. Call before {@link #start}, in creation order.
+     * Puts a waiting order loaded from the database into the book. Call before {@link #start}, in creation order.
      * Returns false and skips it if the same user already has an order waiting for the same provider and model.
      */
     public boolean restoreOrder(BookOrder order) {
@@ -96,10 +91,9 @@ public final class MatchingEngine {
     // ------------------------------------------------------------------ API
 
     /**
-     * Queues a command and returns its result asynchronously. A {@code Matched} result completes only once
-     * the agreement is stored, so callers see its id; if storing fails, the future fails although the pair
-     * has already left the book. Blocks the caller if the inbox is full, which applies backpressure to
-     * producers during bursts.
+     * Queues a command and returns its result asynchronously; the future completes on the engine thread as soon as
+     * the command is processed. A {@code Matched} result's agreement is not persisted yet. Blocks the caller if the
+     * inbox is full, which applies backpressure to producers during bursts.
      */
     public CompletableFuture<MatchResult> submit(Command command) {
         Objects.requireNonNull(command);
@@ -115,13 +109,11 @@ public final class MatchingEngine {
     }
 
     /**
-     * Executes one command without waiting for the agreement to be stored. Tests may call it directly
-     * when the engine is not started, which makes matching fully synchronous and deterministic.
+     * Executes one command synchronously on the calling thread. Tests may call it directly when the engine is not
+     * started, which makes matching fully synchronous and deterministic.
      */
     public MatchResult handle(Command command) {
-        MatchResult result = match(command);
-        if (result instanceof MatchResult.Matched m) agreementSink.apply(m.agreement());
-        return result;
+        return match(command);
     }
 
     public int waitingOffers() { return book.offerCount(); }
@@ -151,16 +143,7 @@ public final class MatchingEngine {
             }
             if (env == POISON) return;
             try {
-                MatchResult result = match(env.command());
-                if (result instanceof MatchResult.Matched m) {
-                    // Reply once the agreement is stored; the engine thread moves on without waiting.
-                    agreementSink.apply(m.agreement()).whenComplete((stored, e) -> {
-                        if (e == null) env.reply().complete(result);
-                        else env.reply().completeExceptionally(e);
-                    });
-                } else {
-                    env.reply().complete(result);
-                }
+                env.reply().complete(match(env.command()));
             } catch (RuntimeException e) {
                 env.reply().completeExceptionally(e);     // one bad command must not kill the engine
             }

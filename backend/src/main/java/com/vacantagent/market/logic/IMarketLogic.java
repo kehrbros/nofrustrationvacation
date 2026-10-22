@@ -2,6 +2,7 @@ package com.vacantagent.market.logic;
 
 import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
+import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.matching.MatchResult;
 
@@ -12,7 +13,7 @@ import java.util.concurrent.CompletableFuture;
  * before they enter the market. A {@code Matched} result completes only once its agreement is persisted,
  * so the agreement carries its id.
  */
-public interface IBrokerLogic {
+public interface IMarketLogic {
     /** @param appUserId owner of the new order, the authenticated user */
     Submission acceptOrder(OrderDto order, long appUserId);
 
@@ -28,6 +29,12 @@ public interface IBrokerLogic {
 
     /** False if the offer does not exist or belongs to someone else. */
     boolean isOfferOwnedBy(long offerId, long appUserId);
+
+    /** Sends an already persisted offer back into the market, e.g. after its agreement was closed as unused. */
+    CompletableFuture<MatchResult> resubmitOffer(ProviderOffer offer);
+
+    /** Removes expired waiting entries from the book; completes with {@code Expired(0, 0)} if the market is stopped. */
+    CompletableFuture<MatchResult> expireEntries();
 
     /**
      * Records a successful call through the agreement, which keeps it from being closed as unused.

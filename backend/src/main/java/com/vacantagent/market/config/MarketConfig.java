@@ -2,16 +2,11 @@ package com.vacantagent.market.config;
 
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
-import com.vacantagent.market.data.ConsumerOrderRepository;
-import com.vacantagent.market.data.ProviderOfferRepository;
 import com.vacantagent.market.engine.MatchingEngine;
 import com.vacantagent.market.logic.MarketRules;
 import com.vacantagent.market.matching.LimitStrategy;
 import com.vacantagent.market.matching.MatchingStrategy;
-import com.vacantagent.market.matching.entities.BookOffer;
-import com.vacantagent.market.matching.entities.BookOrder;
 import com.vacantagent.market.matching.entities.OrderBook;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,7 +18,6 @@ import java.time.Clock;
  * The only place the matching core meets Spring. Everything created here is plain Java,
  * so it can be built the same way in unit tests without a Spring context.
  */
-@Slf4j
 @Configuration
 @EnableScheduling
 @EnableConfigurationProperties(MarketProperties.class)
@@ -45,73 +39,9 @@ public class MarketConfig {
         return new AgreementWriter(repository, props.writerBatchSize());
     }
 
-    /**
-     * Depends on the writer, so Spring stops the engine first and the writer can flush the last agreements.
-     * Waiting offers and orders are reloaded before start runs.
-     */
-    @Bean(initMethod = "start", destroyMethod = "stop")
-    public MatchingEngine matchingEngine(MatchingStrategy strategy, AgreementWriter writer, MarketProperties props,
-                                         ProviderOfferRepository offers, ConsumerOrderRepository orders,
-                                         MarketRules rules) {
-        MatchingEngine engine = new MatchingEngine(new OrderBook(), strategy, writer::enqueue, props.inboxCapacity());
-        restoreOffers(engine, offers, rules);
-        restoreOrders(engine, orders, rules);
-        return engine;
-    }
-
-    /**
-     * Loads every available offer (tokens left, no open agreement), oldest first. Offers that
-     * have expired, or that {@link MarketRules#isValid} refuses (provider failed, invalid prices), are skipped,
-     * as the strategy would reject them.
-     */
-    static void restoreOffers(MatchingEngine engine, ProviderOfferRepository offers, MarketRules rules) {
-        long now = rules.nowMillis();
-        int restored = 0;
-        int expired = 0;
-        for (var offer : offers.findAllAvailable()) {
-            BookOffer bookOffer = BookOffer.from(offer);
-            if (rules.isExpired(bookOffer, now)) {
-                expired++;
-                continue;
-            }
-            if (!rules.isValid(bookOffer)) {
-                log.warn("Not restoring offer {}: violates market rules", offer.getId());
-                continue;
-            }
-            engine.restoreOffer(bookOffer);
-            restored++;
-        }
-        log.info("Restored {} waiting offers, skipped {} expired", restored, expired);
-    }
-
-    /**
-     * Loads every order without an agreement, oldest first. Orders whose wait time is over, or that
-     * {@link MarketRules#isValid} refuses (invalid prices), are skipped, as the strategy would reject them.
-     * So is a second order of a user for the same provider and model (e.g. one was cancelled, which is not
-     * persisted); the older one is restored.
-     */
-    static void restoreOrders(MatchingEngine engine, ConsumerOrderRepository orders, MarketRules rules) {
-        long now = rules.nowMillis();
-        int restored = 0;
-        int expired = 0;
-        int duplicates = 0;
-        for (var order : orders.findAllWithoutAgreement()) {
-            BookOrder bookOrder = BookOrder.from(order);
-            if (rules.isExpired(bookOrder, now)) {
-                expired++;
-                continue;
-            }
-            if (!rules.isValid(bookOrder)) {
-                log.warn("Not restoring order {}: violates market rules", order.getId());
-                continue;
-            }
-            if (!engine.restoreOrder(bookOrder)) {
-                log.warn("Not restoring order {}: its user already has an order waiting for this model", order.getId());
-                duplicates++;
-                continue;
-            }
-            restored++;
-        }
-        log.info("Restored {} waiting orders, skipped {} expired and {} duplicates", restored, expired, duplicates);
+    /** Restored, started and stopped by {@code MarketLogic}, which coordinates everything around matching. */
+    @Bean
+    public MatchingEngine matchingEngine(MatchingStrategy strategy, MarketProperties props) {
+        return new MatchingEngine(new OrderBook(), strategy, props.inboxCapacity());
     }
 }

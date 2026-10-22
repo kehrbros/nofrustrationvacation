@@ -24,7 +24,7 @@ class AgreementReaperTest {
     @Autowired
     private AgreementReaper reaper;
     @Autowired
-    private IBrokerLogic broker;
+    private IMarketLogic market;
     @Autowired
     private AgreementRepository agreements;
     @Autowired
@@ -42,7 +42,7 @@ class AgreementReaperTest {
 
         Agreement closed = agreements.findById(agreement.getId()).orElseThrow();
         assertThat(closed.getLastErrorAt()).isNotNull();
-        assertThat(broker.cancelOffer(agreement.getProviderOffer().getId()).join())
+        assertThat(market.cancelOffer(agreement.getProviderOffer().getId()).join())
                 .isInstanceOf(MatchResult.Cancelled.class);
         assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM agreement_aud WHERE id = ?",
                 Integer.class, agreement.getId())).isEqualTo(2);
@@ -54,14 +54,14 @@ class AgreementReaperTest {
 
         reaper.sweep();
 
-        assertThat(broker.recordAgreementSuccess(agreement.getId())).isFalse();
+        assertThat(market.recordAgreementSuccess(agreement.getId())).isFalse();
     }
 
     @Test
     void recentlyAgreedOrUsedAgreementStaysOpen() {
         Agreement fresh = agreement(OffsetDateTime.now());
         Agreement used = agreement(OffsetDateTime.now().minusHours(1));
-        assertThat(broker.recordAgreementSuccess(used.getId())).isTrue();
+        assertThat(market.recordAgreementSuccess(used.getId())).isTrue();
 
         reaper.sweep();
 
@@ -69,7 +69,7 @@ class AgreementReaperTest {
         Agreement stillOpen = agreements.findById(used.getId()).orElseThrow();
         assertThat(stillOpen.getLastErrorAt()).isNull();
         assertThat(stillOpen.getLastSuccessAt()).isNotNull();
-        assertThat(broker.cancelOffer(used.getProviderOffer().getId()).join())
+        assertThat(market.cancelOffer(used.getProviderOffer().getId()).join())
                 .isInstanceOf(MatchResult.NotFound.class);
     }
 

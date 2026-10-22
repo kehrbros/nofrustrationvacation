@@ -5,19 +5,28 @@ Pairs consumer orders with provider offers 1:1 and persists each pairing as an `
 ## Architecture
 
 ```
-caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► AgreementWriter (1 thread) ──► agreement table
-              │                 │                              │
-              │ entity → Book*  │ LimitStrategy + OrderBook    │ AgreementRepository.saveAll
-              │                 │ MarketRules                  │ (Envers audits)
-              ◄──────── future completes once the agreement is saved ◄──┘
+caller ──► MarketLogic ──── command ────► MatchingEngine (1 thread)
+           (coordinates)  ◄── MatchResult ── LimitStrategy + OrderBook + MarketRules
+              │
+              │ Matched → agreement
+              ▼
+           AgreementWriter (1 thread) ──► agreement table (AgreementRepository.saveAll, Envers audits)
+              │
+              ◄──── caller's future completes once the agreement is saved
 ```
+
+`MatchingEngine` is solely responsible for matching and does no I/O. Everything around it is coordinated by
+`MarketLogic`, the only caller of the engine: persisting entries, persisting agreements, restoring the book at
+startup and starting/stopping the engine. `AgreementReaper` and `BookExpirySweeper` also go through `MarketLogic`.
 
 - **`api/MarketController`**: REST API under `/api/v1/market` (JWT required). `POST /orders`, `POST /offers` return `201` (`MATCHED` with the agreement, or `RESTING`), `422` (`REJECTED` with reason) or `400`. `DELETE /orders/{id}`, `DELETE /offers/{id}` return `204` or `404`.
   - Orders and offers belong to the authenticated user (`appUser`, from `CurrentUser`). Only the owner may cancel; anyone else gets `404`, so ids of other users stay hidden.
   - `MarketRequestPreparer` trims model values, turns empty ones into `null` and refuses (`400`) an order with `modelName` but no `modelProvider`, and an offer without both.
   - Agreed prices in responses are in the user's preferred currency (`SubmissionDtoMapper`).
-- **`logic/BrokerLogic`**: entry point. Takes an `OrderDto`/`OfferDto`, maps it with `mapper/OrderMapper`/`OfferMapper` to a `ConsumerOrder`/`ProviderOffer` (a new offer starts with all its tokens available) and saves it, then submits it as a `BookOrder`/`BookOffer`. Returns a `Submission`: the new entity's id plus a `CompletableFuture<MatchResult>`.
-- **`engine/MatchingEngine`**: a single thread owns the book. Commands are queued and run in arrival order, so no locks are needed.
+- **`logic/MarketLogic`**: entry point. Takes an `OrderDto`/`OfferDto`, maps it with `mapper/OrderMapper`/`OfferMapper` to a `ConsumerOrder`/`ProviderOffer` (a new offer starts with all its tokens available) and saves it, then submits it as a `BookOrder`/`BookOffer`. Returns a `Submission`: the new entity's id plus a `CompletableFuture<MatchResult>`.
+  - Coordinates the engine: hands each `Matched` agreement to the `AgreementWriter`, and the result completes only once it is saved.
+  - Lifecycle: on startup (`@PostConstruct`) restores waiting offers and orders into the book, then starts the engine; on shutdown (`@PreDestroy`) stops it before the writer flushes.
+- **`engine/MatchingEngine`**: matching only. A single thread owns the book. Commands are queued and run in arrival order, so no locks are needed. Its `Matched` results carry agreements that are not saved yet.
 - **`matching/LimitStrategy`**: decides what happens to an entry: match, rest or reject. Builds the `Agreement`.
 - **`matching/OrderBook`**: waiting offers and orders, each kept in a `QuadrantIndex` (2D segment tree).
 - **`logic/MarketRules`**: plain boolean business checks, run inside the matching loop. Holds the `Clock` for expiry checks.
@@ -60,7 +69,7 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
 
 ### Unused agreements
 
-- `lastSuccessAt`: time of the last call through the agreement. Not audited, as it changes on every call. The LLM proxy records it with `IBrokerLogic.recordAgreementSuccess(agreementId)`. A `false` result means the agreement is closed, and the call must be refused.
+- `lastSuccessAt`: time of the last call through the agreement. Not audited, as it changes on every call. The LLM proxy records it with `IMarketLogic.recordAgreementSuccess(agreementId)`. A `false` result means the agreement is closed, and the call must be refused.
 - `AgreementReaper` runs every `agreement-sweep-interval` (default 5s). An open agreement (still before `validUntil`) without a call for `agreement-idle-timeout` (default 30s) is closed. "Last call" is `lastSuccessAt`, or `agreedAt` if it was never used.
   - Closing locks the row and checks again, sets `lastErrorAt` and commits. Only then is the offer resubmitted, where it passes the entry checks again (an expired offer is rejected).
   - `recordAgreementSuccess` only updates open agreements, so an agreement can't be used and closed at the same moment.
@@ -68,13 +77,13 @@ caller ──► BrokerLogic ──► MatchingEngine (1 thread) ──► Agree
 
 ## Limits
 
-- The book lives in memory only. On startup, `MarketConfig` reloads every offer with `availableTokens > 0` and no open agreement (a closed agreement, `lastErrorAt` set, releases its offer), oldest first.
+- The book lives in memory only. On startup, `MarketLogic` reloads every offer with `availableTokens > 0` and no open agreement (a closed agreement, `lastErrorAt` set, releases its offer), oldest first.
   - TODO: an agreement may not use all of an offer's tokens. Then the offer should re-enter the market with the rest, which the reload query and the 1:1 pairing don't support yet.
   - Offers that have expired or fail the entry checks (provider failed, invalid prices) are skipped.
   - Orders re-enter if they have no agreement yet. Orders whose wait time is over or with invalid prices are skipped.
   - If the app stops between closing an agreement and resubmitting its offer, the offer comes back on this reload.
   - Cancelled offers and orders come back after a restart, because a cancel is not persisted.
     - If a user cancelled an order and placed a new one for the same model, only the older (cancelled) one comes back; the newer one is skipped as a duplicate and logged.
-- The book holds entity snapshots: a provider error recorded after an offer entered the book is not seen. Cancel the offer (`BrokerLogic.cancelOffer`) to take it out.
+- The book holds entity snapshots: a provider error recorded after an offer entered the book is not seen. Cancel the offer (`MarketLogic.cancelOffer`) to take it out.
 - Run on a single instance, because each instance would have its own book.
 - The expiry queue drops matched or cancelled entries only when their expiry comes up, so an offer whose `offeredUntil` is far in the future keeps a small record in memory until then.

@@ -1,4 +1,4 @@
-package com.vacantagent.market.config;
+package com.vacantagent.market.logic;
 
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -7,7 +7,6 @@ import com.vacantagent.market.engine.MatchingEngine;
 import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
-import com.vacantagent.market.logic.MarketRules;
 import com.vacantagent.market.matching.LimitStrategy;
 import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.market.matching.entities.OrderBook;
@@ -21,14 +20,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
-import java.util.concurrent.CompletableFuture;
 
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Reloading waiting offers and orders from the database into a fresh engine. */
 @SpringBootTest
-class MarketConfigTest {
+class MarketLogicRestoreTest {
 
     @Autowired
     private ProviderOfferRepository offers;
@@ -62,7 +60,7 @@ class MarketConfigTest {
                 OffsetDateTime.now().minusMinutes(1), null, null, null, null, 1000L, 1000L, null));
 
         MatchingEngine engine = newEngine();
-        MarketConfig.restoreOffers(engine, offers, rules);
+        MarketLogic.restoreOffers(engine, offers, rules);
 
         assertThat(cancel(engine, waiting)).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(cancel(engine, released)).isInstanceOf(MatchResult.Cancelled.class);
@@ -87,7 +85,7 @@ class MarketConfigTest {
                 Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null));
 
         MatchingEngine engine = newEngine();
-        MarketConfig.restoreOrders(engine, orders, rules);
+        MarketLogic.restoreOrders(engine, orders, rules);
 
         assertThat(cancel(engine, waiting)).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(cancel(engine, invalid)).isInstanceOf(MatchResult.NotFound.class);
@@ -105,14 +103,14 @@ class MarketConfigTest {
                 "restore-provider", "model", owner));
 
         MatchingEngine engine = newEngine();
-        MarketConfig.restoreOrders(engine, orders, rules);
+        MarketLogic.restoreOrders(engine, orders, rules);
 
         assertThat(cancel(engine, older)).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(cancel(engine, newer)).isInstanceOf(MatchResult.NotFound.class);
     }
 
     private MatchingEngine newEngine() {
-        return new MatchingEngine(new OrderBook(), new LimitStrategy(rules), CompletableFuture::completedFuture, 100);
+        return new MatchingEngine(new OrderBook(), new LimitStrategy(rules), 100);
     }
 
     private static MatchResult cancel(MatchingEngine engine, ProviderOffer offer) {
