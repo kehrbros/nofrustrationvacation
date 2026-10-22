@@ -69,19 +69,23 @@ startup and starting/stopping the engine. `AgreementReaper` and `BookExpirySweep
 
 ### Unused agreements
 
-- `lastSuccessAt`: time of the last call through the agreement. Not audited, as it changes on every call. The LLM proxy records it with `IMarketLogic.recordAgreementSuccess(agreementId)`. A `false` result means the agreement is closed, and the call must be refused.
-- `AgreementReaper` runs every `agreement-sweep-interval` (default 5s). An open agreement (still before `validUntil`) without a call for `agreement-idle-timeout` (default 30s) is closed. "Last call" is `lastSuccessAt`, or `agreedAt` if it was never used.
-  - Closing locks the row and checks again, sets `lastErrorAt` and commits. Only then is the offer resubmitted, where it passes the entry checks again (an expired offer is rejected).
-  - `recordAgreementSuccess` only updates open agreements, so an agreement can't be used and closed at the same moment.
-  - The consumer order does not come back: it stays tied to the closed agreement.
+- `ConsumerOrder.lastSuccessAt`: time of the last call through the agreement. The LLM proxy records it with `IMarketLogic.recordAgreementSuccess(agreementId)`.
+- **Idle** (`Agreement.isIdleSince`): no call for `agreement-idle-timeout` (default 30s). "Last call" is `lastSuccessAt`, or `agreedAt` if it was never used. Nothing is stored: being idle follows from time alone, there is no closed flag.
+  - An idle agreement refuses calls: `recordAgreementSuccess` returns `false`, and the call must be refused. So `lastSuccessAt` never changes once idle, and every agreement becomes idle at one fixed moment.
+  - Its offer is free again and goes back into the market.
+- **Releasing** (`AgreementReaper`, every `agreement-sweep-interval`, default 5s): each sweep resubmits the offers of still valid agreements that became idle since the previous sweep. The windows join without gaps or overlaps (the end of the last window is kept in memory), so each offer is released exactly once.
+  - The first window starts at `IMarketLogic.restoredAt()`. Offers of agreements idle before that came back with the restore, also those that became idle while the app was down.
+  - The resubmitted offer passes the entry checks again (an expired offer is rejected).
+  - Recording a call and releasing both lock the consumer order row and re-check, so an agreement can't be used and released at the same moment.
+  - The consumer order does not come back: it stays tied to its agreement.
 
 ## Limits
 
-- The book lives in memory only. On startup, `MarketLogic` reloads every offer with `availableTokens > 0` and no open agreement (a closed agreement, `lastErrorAt` set, releases its offer), oldest first.
+- The book lives in memory only. On startup, `MarketLogic` reloads every offer with `availableTokens > 0` and no active agreement (still valid and not idle at `restoredAt`), oldest first.
   - TODO: an agreement may not use all of an offer's tokens. Then the offer should re-enter the market with the rest, which the reload query and the 1:1 pairing don't support yet.
   - Offers that have expired or fail the entry checks (provider failed, invalid prices) are skipped.
   - Orders re-enter if they have no agreement yet. Orders whose wait time is over or with invalid prices are skipped.
-  - If the app stops between closing an agreement and resubmitting its offer, the offer comes back on this reload.
+  - Agreements that became idle while the app was down, or before the reaper got to them, release their offer here.
   - Cancelled offers and orders come back after a restart, because a cancel is not persisted.
     - If a user cancelled an order and placed a new one for the same model, only the older (cancelled) one comes back; the newer one is skipped as a duplicate and logged.
 - The book holds entity snapshots: a provider error recorded after an offer entered the book is not seen. Cancel the offer (`MarketLogic.cancelOffer`) to take it out.

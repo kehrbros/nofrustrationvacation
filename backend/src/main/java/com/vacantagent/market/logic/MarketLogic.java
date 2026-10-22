@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -7,6 +8,7 @@ import com.vacantagent.market.data.ProviderOfferRepository;
 import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
 import com.vacantagent.market.engine.MatchingEngine;
+import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
@@ -20,8 +22,10 @@ import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
@@ -50,14 +54,21 @@ public class MarketLogic implements IMarketLogic {
     private final AgreementRepository agreements;
     private final OrderMapper orderMapper;
     private final OfferMapper offerMapper;
+    private final MarketProperties props;
     private final Clock clock;
+
+    private volatile OffsetDateTime restoredAt;
 
     // ------------------------------------------------------------------ lifecycle
 
-    /** Waiting offers and orders are reloaded before the matching thread starts. */
+    /**
+     * Waiting offers and orders are reloaded before the matching thread starts. Offers of agreements idle at
+     * {@link #restoredAt} come back here; the {@code AgreementReaper} releases those that become idle later.
+     */
     @PostConstruct
     void start() {
-        restoreOffers(engine, offers, rules);
+        restoredAt = OffsetDateTime.now(clock);
+        restoreOffers(engine, offers, rules, restoredAt, props.agreementIdleTimeout());
         restoreOrders(engine, orders, rules);
         engine.start();
     }
@@ -117,8 +128,21 @@ public class MarketLogic implements IMarketLogic {
     }
 
     @Override
+    public OffsetDateTime restoredAt() {
+        return restoredAt;
+    }
+
+    /** Locks the order, so a concurrent release by the {@code AgreementReaper} waits or sees this call. */
+    @Override
+    @Transactional
     public boolean recordAgreementSuccess(long agreementId) {
-        return agreements.markSuccess(agreementId, OffsetDateTime.now(clock)) == 1;
+        ConsumerOrder order = orders.findForUpdateByAgreementId(agreementId).orElse(null);
+        if (order == null) return false;
+        Agreement agreement = agreements.findById(agreementId).orElseThrow();   // shares the locked, fresh order
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        if (agreement.isIdleSince(now.minus(props.agreementIdleTimeout()))) return false;
+        order.recordSuccess(now);
+        return true;
     }
 
     // ------------------------------------------------------------------ coordination
@@ -135,15 +159,16 @@ public class MarketLogic implements IMarketLogic {
     }
 
     /**
-     * Loads every available offer (tokens left, no open agreement), oldest first. Offers that
+     * Loads every available offer (tokens left, no agreement active at {@code restoredAt}), oldest first. Offers that
      * have expired, or that {@link MarketRules#isValid} refuses (provider failed, invalid prices), are skipped,
      * as the strategy would reject them.
      */
-    static void restoreOffers(MatchingEngine engine, ProviderOfferRepository offers, MarketRules rules) {
+    static void restoreOffers(MatchingEngine engine, ProviderOfferRepository offers, MarketRules rules,
+                              OffsetDateTime restoredAt, Duration agreementIdleTimeout) {
         long now = rules.nowMillis();
         int restored = 0;
         int expired = 0;
-        for (var offer : offers.findAllAvailable()) {
+        for (var offer : offers.findAllAvailable(restoredAt, restoredAt.minus(agreementIdleTimeout))) {
             BookOffer bookOffer = BookOffer.from(offer);
             if (rules.isExpired(bookOffer, now)) {
                 expired++;

@@ -26,7 +26,7 @@ public class OrderMapper {
      */
     public ConsumerOrder toEntity(OrderDto dto, long appUserId) {
         return new ConsumerOrder(toMoney(dto.maxCostPerMillionInputTokens()), toMoney(dto.maxCostPerMillionOutputTokens()),
-                dto.marketWaitTime(), OffsetDateTime.now(clock), dto.modelProvider(), dto.modelName(),
+                dto.marketWaitTime(), OffsetDateTime.now(clock), dto.modelProvider(), dto.modelName(), null,
                 appUserRepository.getReferenceById(appUserId));
     }
 

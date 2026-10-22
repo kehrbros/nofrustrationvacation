@@ -1,6 +1,7 @@
 package com.vacantagent.market.logic;
 
 import com.vacantagent.common.money.Money;
+import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
+import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -42,7 +44,8 @@ class MarketLogicCoordinationTest {
     private final OrderMapper orderMapper = mock(OrderMapper.class);
     private final MarketLogic market = new MarketLogic(engine, writer, rules, orders,
             mock(ProviderOfferRepository.class), mock(AgreementRepository.class), orderMapper,
-            mock(OfferMapper.class), Clock.systemUTC());
+            mock(OfferMapper.class), new MarketProperties(1_000_000_000L, 1_000, 1_000, Duration.ofSeconds(30),
+            Duration.ofSeconds(5), Duration.ofSeconds(10)), Clock.systemUTC());
 
     private CompletableFuture<Agreement> stored;
 
@@ -102,7 +105,7 @@ class MarketLogicCoordinationTest {
 
     private CompletableFuture<MatchResult> placeOrder(long id, String maxPrice) {
         ConsumerOrder order = withId(new ConsumerOrder(Money.of(maxPrice), Money.of(maxPrice), null, null,
-                null, null, null), id);
+                null, null, null, null), id);
         when(orderMapper.toEntity(any(), anyLong())).thenReturn(order);
         return market.acceptOrder(new OrderDto(null, null, null, null, null), 7).result();
     }

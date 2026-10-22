@@ -6,6 +6,7 @@ import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.matching.MatchResult;
 
+import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -30,16 +31,24 @@ public interface IMarketLogic {
     /** False if the offer does not exist or belongs to someone else. */
     boolean isOfferOwnedBy(long offerId, long appUserId);
 
-    /** Sends an already persisted offer back into the market, e.g. after its agreement was closed as unused. */
+    /** Sends an already persisted offer back into the market, e.g. after its agreement became idle. */
     CompletableFuture<MatchResult> resubmitOffer(ProviderOffer offer);
 
     /** Removes expired waiting entries from the book; completes with {@code Expired(0, 0)} if the market is stopped. */
     CompletableFuture<MatchResult> expireEntries();
 
     /**
-     * Records a successful call through the agreement, which keeps it from being closed as unused.
+     * Time the book was restored from the database, {@code null} before startup. Offers of agreements idle at this
+     * time came back with the restore; later ones are released by the {@code AgreementReaper}.
+     */
+    OffsetDateTime restoredAt();
+
+    /**
+     * Records a successful call through the agreement on its consumer order, which keeps the agreement from
+     * becoming idle.
      *
-     * @return false if the agreement does not exist or was closed, the call must then be refused
+     * @return false if the agreement does not exist or is already idle (no call for the idle timeout), the call
+     *         must then be refused
      */
     boolean recordAgreementSuccess(long agreementId);
 }

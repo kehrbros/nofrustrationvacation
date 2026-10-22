@@ -1,6 +1,8 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.common.money.Money;
 import com.vacantagent.currency.dto.MoneyDto;
+import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.ConsumerOrderRepository;
 import com.vacantagent.market.data.ProviderOfferRepository;
 import com.vacantagent.market.dto.OfferDto;
@@ -18,8 +20,10 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Map;
 
+import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -35,6 +39,8 @@ class MarketLogicTest {
     private ConsumerOrderRepository orders;
     @Autowired
     private ProviderOfferRepository offers;
+    @Autowired
+    private AgreementRepository agreements;
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @Autowired
@@ -123,6 +129,26 @@ class MarketLogicTest {
         assertThat(((MatchResult.Rejected) second).reason()).endsWith(": " + first.id());
         assertThat(market.cancelOrder(first.id()).join()).isInstanceOf(MatchResult.Cancelled.class);
         assertThat(market.acceptOrder(dto, user).result().join()).isInstanceOf(MatchResult.Resting.class);
+    }
+
+    @Test
+    void callsAreRecordedOnTheOrderUntilTheAgreementIsIdle() {
+        Agreement fresh = agreement(OffsetDateTime.now());
+        Agreement idle = agreement(OffsetDateTime.now().minusHours(1));
+
+        assertThat(market.recordAgreementSuccess(fresh.getId())).isTrue();
+        assertThat(orders.findById(fresh.getConsumerOrder().getId()).orElseThrow().getLastSuccessAt()).isNotNull();
+        assertThat(market.recordAgreementSuccess(idle.getId())).isFalse();
+        assertThat(orders.findById(idle.getConsumerOrder().getId()).orElseThrow().getLastSuccessAt()).isNull();
+        assertThat(market.recordAgreementSuccess(Long.MAX_VALUE)).isFalse();
+    }
+
+    /** Not submitted to the engine; priced high, so its offer stays waiting if the scheduled reaper releases it. */
+    private Agreement agreement(OffsetDateTime agreedAt) {
+        Money price = Money.of("900.00");
+        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, "provider", "record-model",
+                null, null, 1000L, 1000L, null));
+        return agreements.save(new Agreement(orders.save(emptyOrder()), offer, agreedAt, null, price, price));
     }
 
     private static MoneyDto usd(String amount) {

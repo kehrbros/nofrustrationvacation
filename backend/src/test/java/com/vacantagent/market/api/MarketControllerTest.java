@@ -240,7 +240,7 @@ class MarketControllerTest {
     }
 
     private static Agreement agreement() {
-        ConsumerOrder order = withId(new ConsumerOrder(null, null, null, null, "openai", "gpt-5", null), 5);
+        ConsumerOrder order = withId(new ConsumerOrder(null, null, null, null, "openai", "gpt-5", null, null), 5);
         ProviderOffer offer = withId(new ProviderOffer(Money.of("10.00"), Money.of("12.50"), null, "openai", "gpt-5",
                 null, null, 1000L, 1000L, null), 7);
         return withId(new Agreement(order, offer, OffsetDateTime.now(), null, Money.of("10.00"), Money.of("12.50")), 99);

@@ -7,7 +7,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.ManyToOne;
 import lombok.Getter;
 import org.hibernate.envers.Audited;
-import org.hibernate.envers.NotAudited;
 import org.hibernate.envers.RelationTargetAuditMode;
 
 import java.time.OffsetDateTime;
@@ -31,12 +30,6 @@ public class Agreement extends AbstractEntity {
     @Column(precision = 19, scale = Money.SCALE)
     private Money agreedPricePerMillionOutputTokens;
 
-    /** Set once the consumer left the agreement unused for too long; the offer went back into the market. */
-    private OffsetDateTime lastErrorAt;
-    /** Last call through the agreement. Not audited, it changes on every call. */
-    @NotAudited
-    private OffsetDateTime lastSuccessAt;
-
     public Agreement(ConsumerOrder consumerOrder, ProviderOffer providerOffer, OffsetDateTime agreedAt,
                      OffsetDateTime validUntil, Money agreedPricePerMillionInputTokens,
                      Money agreedPricePerMillionOutputTokens) {
@@ -51,13 +44,13 @@ public class Agreement extends AbstractEntity {
     protected Agreement() {
     }
 
-    /** Neither used nor agreed since {@code cutoff}. */
+    /**
+     * Neither used nor agreed since {@code cutoff}; then calls are refused and the offer is free again.
+     * Once idle, no call can be recorded anymore, so the moment an agreement becomes idle never moves.
+     */
     public boolean isIdleSince(OffsetDateTime cutoff) {
+        OffsetDateTime lastSuccessAt = consumerOrder.getLastSuccessAt();
         OffsetDateTime lastActivity = lastSuccessAt != null ? lastSuccessAt : agreedAt;
         return lastActivity != null && lastActivity.isBefore(cutoff);
-    }
-
-    public void markError(OffsetDateTime at) {
-        this.lastErrorAt = at;
     }
 }

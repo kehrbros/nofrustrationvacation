@@ -35,7 +35,7 @@ public final class MarketFixtures {
     public static BookOrder ownedBookOrder(long id, long maxInput, long maxOutput, long appUserId,
                                            String modelProvider, String modelName) {
         AppUser owner = withId(AppUser.firstLogin("user-" + appUserId, null, null), appUserId);
-        return new BookOrder(withId(new ConsumerOrder(null, null, null, null, modelProvider, modelName, owner), id),
+        return new BookOrder(withId(new ConsumerOrder(null, null, null, null, modelProvider, modelName, null, owner), id),
                 maxInput, maxOutput);
     }
 
@@ -44,7 +44,7 @@ public final class MarketFixtures {
     }
 
     public static ConsumerOrder emptyOrder() {
-        return new ConsumerOrder(null, null, null, null, null, null, null);
+        return new ConsumerOrder(null, null, null, null, null, null, null, null);
     }
 
     public static <T> T withId(T entity, long id) {

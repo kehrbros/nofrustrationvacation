@@ -28,10 +28,18 @@ public class ConsumerOrder extends AbstractEntity {
     private String modelProvider;
     private String modelName;
 
+    /** Last call through the agreement. */
+    private OffsetDateTime lastSuccessAt;
+
     /** Who placed it; set from the authenticated request. */
     @ManyToOne(fetch = FetchType.LAZY)
     private AppUser appUser;
 
     protected ConsumerOrder() {
+    }
+
+    /** Call only while the agreement is not idle, see {@code Agreement#isIdleSince}. */
+    public void recordSuccess(OffsetDateTime at) {
+        this.lastSuccessAt = at;
     }
 }

@@ -11,8 +11,9 @@ import java.time.Duration;
  * @param maxPrice        highest allowed price per million tokens, in micro units (see {@code Prices})
  * @param inboxCapacity   commands that may wait for the matching thread before submitters block
  * @param writerBatchSize agreements written to the database per batch
- * @param agreementIdleTimeout an agreement without a call for this long is closed and its offer re-enters the market
- * @param agreementSweepInterval how often idle agreements are looked for
+ * @param agreementIdleTimeout an agreement without a call for this long is idle: calls are refused and its offer
+ *                             re-enters the market
+ * @param agreementSweepInterval how often offers of agreements that became idle are released
  * @param expirySweepInterval    how often expired offers and orders are removed from the book
  */
 @ConfigurationProperties(prefix = "vacantagent.market")

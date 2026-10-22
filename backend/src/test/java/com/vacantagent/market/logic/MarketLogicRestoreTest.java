@@ -1,6 +1,7 @@
 package com.vacantagent.market.logic;
 
 import com.vacantagent.common.money.Money;
+import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.ConsumerOrderRepository;
 import com.vacantagent.market.data.ProviderOfferRepository;
 import com.vacantagent.market.engine.MatchingEngine;
@@ -35,6 +36,8 @@ class MarketLogicRestoreTest {
     @Autowired
     private MarketRules rules;
     @Autowired
+    private MarketProperties props;
+    @Autowired
     private EntityManager entityManager;
     @Autowired
     private TransactionTemplate transactionTemplate;
@@ -43,32 +46,35 @@ class MarketLogicRestoreTest {
 
     @Test
     void restoresOnlyAvailableOffers() {
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime longAgo = now.minusHours(1);
         ProviderOffer waiting = persist(offer("10.00", null, "1000"));
-        ProviderOffer failed = persist(offer("10.00", OffsetDateTime.now(), "1000"));
+        ProviderOffer failed = persist(offer("10.00", now, "1000"));
         ProviderOffer invalid = persist(offer(null, null, "1000"));
         ProviderOffer noTokens = persist(offer("10.00", null, "0"));
         ProviderOffer unknownTokens = persist(offer("10.00", null, null));
         ProviderOffer agreed = persist(offer("10.00", null, "1000"));
-        ConsumerOrder order = persist(emptyOrder());
-        persist(new Agreement(order, agreed, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
+        persist(new Agreement(persist(emptyOrder()), agreed, now, null, Money.of("10"), Money.of("10")));
+        ProviderOffer recentlyUsed = persist(offer("10.00", null, "1000"));
+        ConsumerOrder usedOrder = emptyOrder();
+        usedOrder.recordSuccess(now);
+        persist(new Agreement(persist(usedOrder), recentlyUsed, longAgo, null, Money.of("10"), Money.of("10")));
         ProviderOffer released = persist(offer("10.00", null, "1000"));
-        Agreement abandoned = new Agreement(persist(emptyOrder()), released, OffsetDateTime.now(), null,
-                Money.of("10"), Money.of("10"));
-        abandoned.markError(OffsetDateTime.now());
-        persist(abandoned);
+        persist(new Agreement(persist(emptyOrder()), released, longAgo, null, Money.of("10"), Money.of("10")));
         ProviderOffer expired = persist(new ProviderOffer(Money.of("10.00"), Money.of("10.00"),
-                OffsetDateTime.now().minusMinutes(1), null, null, null, null, 1000L, 1000L, null));
+                now.minusMinutes(1), null, null, null, null, 1000L, 1000L, null));
 
         MatchingEngine engine = newEngine();
-        MarketLogic.restoreOffers(engine, offers, rules);
+        MarketLogic.restoreOffers(engine, offers, rules, now, props.agreementIdleTimeout());
 
         assertThat(cancel(engine, waiting)).isInstanceOf(MatchResult.Cancelled.class);
-        assertThat(cancel(engine, released)).isInstanceOf(MatchResult.Cancelled.class);
+        assertThat(cancel(engine, released)).isInstanceOf(MatchResult.Cancelled.class);     // agreement idle
         assertThat(cancel(engine, failed)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, invalid)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, noTokens)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, unknownTokens)).isInstanceOf(MatchResult.NotFound.class);
         assertThat(cancel(engine, agreed)).isInstanceOf(MatchResult.NotFound.class);
+        assertThat(cancel(engine, recentlyUsed)).isInstanceOf(MatchResult.NotFound.class);   // old agreement, recent call
         assertThat(cancel(engine, expired)).isInstanceOf(MatchResult.NotFound.class);
     }
 
@@ -80,9 +86,9 @@ class MarketLogicRestoreTest {
         ProviderOffer offer = persist(offer("10.00", null, "1000"));
         persist(new Agreement(agreed, offer, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
         ConsumerOrder expired = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null, null));
+                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null, null, null));
         ConsumerOrder stillWaiting = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null));
+                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null, null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOrders(engine, orders, rules);
@@ -98,9 +104,9 @@ class MarketLogicRestoreTest {
     void restoresOnlyTheOldestOrderOfAUserPerModel() {
         AppUser owner = appUserProvisioning.findOrCreate("restore-user", null, null);
         ConsumerOrder older = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", owner));
+                "restore-provider", "model", null, owner));
         ConsumerOrder newer = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", owner));
+                "restore-provider", "model", null, owner));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOrders(engine, orders, rules);
@@ -123,7 +129,7 @@ class MarketLogicRestoreTest {
 
     private static ConsumerOrder order(String maxPrice) {
         Money value = maxPrice == null ? null : Money.of(maxPrice);
-        return new ConsumerOrder(value, value, null, null, null, null, null);
+        return new ConsumerOrder(value, value, null, null, null, null, null, null);
     }
 
     private static ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {
