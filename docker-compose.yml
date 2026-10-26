@@ -1,0 +1,135 @@
+# Docker Swarm stack of VacantAgent (PostgreSQL, backend and frontend), see Docs/deployment.md.
+#
+#   docker compose build                                  # optional, builds the images locally
+#   docker stack deploy -c docker-compose.yml vacantagent
+#
+# The secrets are external and must be created with "docker secret create" before the first deployment.
+# "docker stack deploy" does not read .env files, variables come from the shell (see .env.example).
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/kehrbros/vacantagent/backend:main}
+    build:
+      context: ./backend
+    environment:
+      # PostgreSQL instead of the local in-memory H2, see backend/src/main/resources/application-postgres.properties
+      SPRING_PROFILES_ACTIVE: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: vacantagent
+      POSTGRES_USER: vacantagent
+      PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
+      # Public URLs as seen by the browser: issuer of the IdP, redirect URIs, CORS and PayPal return URLs
+      VACANTAGENT_BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
+      VACANTAGENT_FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+    # Mounted as files /run/secrets/<target>, Spring reads them via spring.config.import=configtree:/run/secrets/
+    # and resolves the placeholders ${PAYPAL_CLIENT_ID} etc. in application.properties
+    secrets:
+      - source: paypal_client_id
+        target: PAYPAL_CLIENT_ID
+      - source: paypal_client_secret
+        target: PAYPAL_CLIENT_SECRET
+      - source: encryption_key
+        target: VACANTAGENT_ENCRYPTION_KEY
+      - source: postgres_password
+        target: POSTGRES_PASSWORD
+    ports:
+      - target: 8080
+        published: ${BACKEND_PORT:-8080}
+        protocol: tcp
+    networks:
+      - vacantagent
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+        failure_action: rollback
+      # Swarm ignores depends_on, the backend restarts until PostgreSQL accepts connections
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+      resources:
+        limits:
+          memory: 1G
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vacantagent
+      POSTGRES_USER: vacantagent
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets:
+      - postgres_password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - vacantagent
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vacantagent -d vacantagent"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      # The volume is local to a node, keep the database on the node that holds its data
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        order: stop-first
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 512M
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/kehrbros/vacantagent/frontend:dev}
+    build:
+      context: ./frontend
+      args:
+        # Build time only (Vite), images from CI use the default http://localhost:8080
+        VITE_OIDC_AUTHORITY: ${BACKEND_URL:-http://localhost:8080}
+    environment:
+      # nginx forwards /api/** to this upstream, see frontend/nginx.conf
+      BACKEND_UPSTREAM: http://backend:8080
+    ports:
+      - target: 80
+        published: ${FRONTEND_PORT:-80}
+        protocol: tcp
+    networks:
+      - vacantagent
+    deploy:
+      replicas: 2
+      update_config:
+        parallelism: 1
+        order: start-first
+        failure_action: rollback
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+      resources:
+        limits:
+          memory: 128M
+
+networks:
+  vacantagent:
+    driver: overlay
+
+volumes:
+  postgres-data:
+
+secrets:
+  paypal_client_id:
+    external: true
+    name: vacantagent_paypal_client_id
+  paypal_client_secret:
+    external: true
+    name: vacantagent_paypal_client_secret
+  encryption_key:
+    external: true
+    name: vacantagent_encryption_key
+  postgres_password:
+    external: true
+    name: vacantagent_postgres_password

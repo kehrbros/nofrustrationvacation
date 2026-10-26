@@ -16,7 +16,7 @@ CREATE INDEX ix_agent_app_user ON agent (app_user_id);
 CREATE TABLE agent_aud (
     id             BIGINT NOT NULL,
     rev            BIGINT NOT NULL,
-    revtype        TINYINT,
+    revtype        SMALLINT,
     app_user_id    BIGINT,
     name           VARCHAR(100),
     model_provider VARCHAR(50),

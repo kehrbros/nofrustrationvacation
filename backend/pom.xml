@@ -79,6 +79,17 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Database of the Docker stack, profile "postgres" (application-postgres.properties) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+
         <!-- MCP server for agents, tools in market/api/MarketTools -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
