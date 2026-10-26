@@ -16,12 +16,14 @@ import com.vacantagent.market.mapper.OrderMapper;
 import com.vacantagent.market.matching.LimitStrategy;
 import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.market.matching.entities.OrderBook;
+import jakarta.annotation.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -101,6 +104,75 @@ class MarketLogicCoordinationTest {
         market.stop();
 
         assertThat(market.expireEntries().get(1, TimeUnit.SECONDS)).isEqualTo(new MatchResult.Expired(0, 0));
+    }
+
+    @Test
+    void awaitedOrderCompletesOnceALaterOfferMatchedAndIsPersisted() throws Exception {
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "12.00", null);
+        market.resubmitOffer(offer(1, "10.00"));
+
+        verify(writer, timeout(1000)).enqueue(any());
+        assertThat(awaited).isNotDone();
+        stored.complete(null);
+        assertThat(awaited.get(1, TimeUnit.SECONDS)).isInstanceOf(MatchResult.Matched.class);
+    }
+
+    @Test
+    void awaitedOrderMatchedOnArrivalCompletesOncePersisted() throws Exception {
+        market.resubmitOffer(offer(1, "10.00")).get(1, TimeUnit.SECONDS);
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "12.00", null);
+
+        verify(writer, timeout(1000)).enqueue(any());
+        stored.complete(null);
+        assertThat(awaited.get(1, TimeUnit.SECONDS)).isInstanceOf(MatchResult.Matched.class);
+    }
+
+    @Test
+    void waitTimeOverEndsTheWaitAndRemovesTheOrder() throws Exception {
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "1.00", Duration.ofMillis(100));
+
+        assertThat(awaited.get(2, TimeUnit.SECONDS)).isEqualTo(new MatchResult.Rejected("Order wait time is over"));
+        assertThat(market.cancelOrder(100).get(1, TimeUnit.SECONDS)).isInstanceOf(MatchResult.NotFound.class);
+    }
+
+    @Test
+    void rejectedOnArrivalEndsTheWait() throws Exception {
+        assertThat(awaitOrder(100, "1.00", Duration.ZERO).get(1, TimeUnit.SECONDS))
+                .isEqualTo(new MatchResult.Rejected("Order wait time is over"));
+    }
+
+    @Test
+    void cancelEndsTheWait() throws Exception {
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "1.00", null);
+
+        assertThat(market.cancelOrder(100).get(1, TimeUnit.SECONDS)).isInstanceOf(MatchResult.Cancelled.class);
+        assertThat(awaited.get(1, TimeUnit.SECONDS)).isInstanceOf(MatchResult.Cancelled.class);
+    }
+
+    @Test
+    void failedPersistFailsTheWait() {
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "12.00", null);
+        market.resubmitOffer(offer(1, "10.00"));
+
+        verify(writer, timeout(1000)).enqueue(any());
+        stored.completeExceptionally(new IllegalStateException("database down"));
+        assertThat(awaited).failsWithin(1, TimeUnit.SECONDS);
+    }
+
+    @Test
+    void stoppingFailsOpenWaits() throws Exception {
+        CompletableFuture<MatchResult> awaited = awaitOrder(100, "1.00", null);
+        market.cancelOrder(999).get(1, TimeUnit.SECONDS);   // order 100 has been processed
+
+        market.stop();
+        assertThat(awaited).failsWithin(1, TimeUnit.SECONDS);
+    }
+
+    private CompletableFuture<MatchResult> awaitOrder(long id, String maxPrice, @Nullable Duration waitTime) {
+        ConsumerOrder order = withId(new ConsumerOrder(Money.of(maxPrice), Money.of(maxPrice), waitTime,
+                waitTime == null ? null : OffsetDateTime.now(), null, null, null, null), id);
+        when(orderMapper.toEntity(any(), anyLong())).thenReturn(order);
+        return market.acceptOrderAndAwaitMatch(new OrderDto(null, null, null, null, null), 7).result();
     }
 
     private CompletableFuture<MatchResult> placeOrder(long id, String maxPrice) {

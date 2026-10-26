@@ -18,6 +18,14 @@ public interface IMarketLogic {
     /** @param appUserId owner of the new order, the authenticated user */
     Submission acceptOrder(OrderDto order, long appUserId);
 
+    /**
+     * Like {@link #acceptOrder}, but the result completes only when the order's wait ends: {@code Matched} once the
+     * agreement is persisted (on arrival or later), {@code Rejected} if refused or its wait time is over,
+     * {@code Cancelled} if cancelled. Fails if the agreement could not be persisted or the market stopped.
+     * An order without wait time waits until matched or cancelled, so callers bound the wait and cancel.
+     */
+    Submission acceptOrderAndAwaitMatch(OrderDto order, long appUserId);
+
     CompletableFuture<MatchResult> cancelOrder(long orderId);
 
     /** False if the order does not exist or belongs to someone else. */
