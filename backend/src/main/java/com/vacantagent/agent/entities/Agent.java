@@ -20,6 +20,7 @@ import java.time.OffsetDateTime;
 public class Agent extends AbstractEntity {
     @Column(nullable = false)
     private long appUserId;
+    /** Model sold with this key, e.g. {@code gpt-5}; offers of the agent sell this model. */
     @Column(nullable = false, length = 100)
     private String name;
     /** Vendor of the models, e.g. {@code openai}, same values as {@code modelProvider} of offers. */

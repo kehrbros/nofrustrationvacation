@@ -3,7 +3,6 @@ package com.vacantagent.market.entities;
 import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.user.entities.AppUser;
-import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -23,12 +22,12 @@ public class ProviderOffer extends AbstractEntity {
     private Money pricePerMillionOutputTokens;
     private OffsetDateTime offeredUntil;
 
-    /**
-     * Created together with the offer. Fetched eagerly: the order book keeps offers outside a transaction and
-     * reads the model from it.
-     */
-    @ManyToOne(cascade = CascadeType.PERSIST)
-    private Agent agent;
+    /** Agent of the agent module that serves the offer; its owner is the offer's owner. */
+    private long agentId;
+
+    /** Copied from the agent when the offer is placed: matching needs them without I/O. */
+    private String modelProvider;
+    private String modelName;
 
     private OffsetDateTime lastErrorAt;
     private OffsetDateTime lastSuccessAt;

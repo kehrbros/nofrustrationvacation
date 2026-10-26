@@ -1,7 +1,7 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.market.config.MarketProperties;
-import com.vacantagent.market.data.AgentRepository;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -26,7 +26,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -60,13 +59,12 @@ public class MarketLogic implements IMarketLogic {
     private final MarketRules rules;
     private final ConsumerOrderRepository orders;
     private final ProviderOfferRepository offers;
-    private final AgentRepository agents;
+    private final AgentLogic agentLogic;
     private final AgreementRepository agreements;
     private final OrderMapper orderMapper;
     private final OfferMapper offerMapper;
     private final MarketProperties props;
     private final Clock clock;
-    private final TransactionTemplate transactionTemplate;
     /** Orders whose caller waits for the end of the wait, see {@link #acceptOrderAndAwaitMatch}. */
     private final Map<Long, CompletableFuture<MatchResult>> waiters = new ConcurrentHashMap<>();
 
@@ -132,9 +130,7 @@ public class MarketLogic implements IMarketLogic {
 
     @Override
     public Submission acceptOffer(OfferDto dto, long appUserId) {
-        // One transaction, so an existing agent the mapper loads is still managed when the offer is saved.
-        // Committed before submitting: the engine may match at once and the agreement references the offer.
-        ProviderOffer offer = transactionTemplate.execute(status -> offers.save(offerMapper.toEntity(dto, appUserId)));
+        ProviderOffer offer = offers.save(offerMapper.toEntity(dto, appUserId));
         return new Submission(offer.getId(), submit(new MatchingEngine.SubmitOffer(BookOffer.from(offer))));
     }
 
@@ -150,7 +146,7 @@ public class MarketLogic implements IMarketLogic {
 
     @Override
     public boolean isAgentOwnedBy(long agentId, long appUserId) {
-        return agents.existsByIdAndAppUserId(agentId, appUserId);
+        return agentLogic.isOwnedBy(appUserId, agentId);
     }
 
     @Override

@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -14,6 +15,7 @@ import com.vacantagent.market.matching.entities.OrderBook;
 import com.vacantagent.user.entities.AppUser;
 import com.vacantagent.user.logic.AppUserProvisioning;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -22,7 +24,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 
-import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,6 +45,17 @@ class MarketLogicRestoreTest {
     private TransactionTemplate transactionTemplate;
     @Autowired
     private AppUserProvisioning appUserProvisioning;
+    @Autowired
+    private AgentLogic agentLogic;
+
+    /** Offers reference an existing agent (foreign key). */
+    private long agentId;
+
+    @BeforeEach
+    void setUp() {
+        long appUserId = appUserProvisioning.findOrCreate("restore-user", null, null).getId();
+        agentId = agentLogic.create(appUserId, "model", "provider", null, "sk-test-12345678").getId();
+    }
 
     @Test
     void restoresOnlyAvailableOffers() {
@@ -63,7 +75,7 @@ class MarketLogicRestoreTest {
         ProviderOffer released = persist(offer("10.00", null, "1000"));
         persist(new Agreement(persist(emptyOrder()), released, longAgo, null, Money.of("10"), Money.of("10")));
         ProviderOffer expired = persist(new ProviderOffer(Money.of("10.00"), Money.of("10.00"),
-                now.minusMinutes(1), agent(null, null), null, null, 1000L, 1000L, null));
+                now.minusMinutes(1), agentId, null, null, null, null, 1000L, 1000L, null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOffers(engine, offers, rules, now, props.agreementIdleTimeout());
@@ -133,10 +145,10 @@ class MarketLogicRestoreTest {
         return new ConsumerOrder(value, value, null, null, null, null, null, null);
     }
 
-    private static ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {
+    private ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {
         Money value = price == null ? null : Money.of(price);
         Long tokens = availableTokens == null ? null : Long.valueOf(availableTokens);
-        return new ProviderOffer(value, value, null, agent(null, null), lastErrorAt, null, tokens, tokens, null);
+        return new ProviderOffer(value, value, null, agentId, null, null, lastErrorAt, null, tokens, tokens, null);
     }
 
     private <T> T persist(T entity) {

@@ -1,6 +1,5 @@
 package com.vacantagent.market;
 
-import com.vacantagent.market.entities.Agent;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.matching.entities.BookOffer;
@@ -41,12 +40,12 @@ public final class MarketFixtures {
     }
 
     public static ProviderOffer emptyOffer() {
-        return new ProviderOffer(null, null, null, agent(null, null), null, null, null, null, null);
+        return offer(0, null, null);
     }
 
-    /** A new agent without owner and with a fixed secret; {@code null} model values never match an order that names one. */
-    public static Agent agent(String modelProvider, String modelName) {
-        return new Agent(modelProvider, modelName, "secret", null);
+    /** An offer of agent {@code agentId} for one provider + model, everything else empty. */
+    public static ProviderOffer offer(long agentId, String modelProvider, String modelName) {
+        return new ProviderOffer(null, null, null, agentId, modelProvider, modelName, null, null, null, null, null);
     }
 
     public static ConsumerOrder emptyOrder() {

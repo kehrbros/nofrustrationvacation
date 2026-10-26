@@ -31,7 +31,6 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 
-import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.withId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -140,54 +139,25 @@ class MarketToolsTest {
     }
 
     @Test
-    void offerIsPlacedForTheAuthenticatedUserWithTrimmedModelAndSecret() {
+    void offerIsPlacedForTheAuthenticatedUserWithItsAgent() {
+        when(market.isAgentOwnedBy(42, appUserId)).thenReturn(true);
         when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
 
-        SubmissionDto result = tools.placeOffer("10.00", "12.50", "USD", null, " openai", "gpt-5  ", " sk-1 ",
-                "2026-11-30T23:59:59+01:00", 1000L);
+        SubmissionDto result = tools.placeOffer("10.00", "12.50", "USD", 42L, "2026-11-30T23:59:59+01:00", 1000L);
 
         assertThat(result.id()).isEqualTo(7);
         assertThat(result.status()).isEqualTo(SubmissionStatus.RESTING);
         ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
         verify(market).acceptOffer(offer.capture(), eq(appUserId));
-        assertThat(offer.getValue().modelProvider()).isEqualTo("openai");
-        assertThat(offer.getValue().modelName()).isEqualTo("gpt-5");
-        assertThat(offer.getValue().secret()).isEqualTo("sk-1");
+        assertThat(offer.getValue().agentId()).isEqualTo(42L);
         assertThat(offer.getValue().offeredUntil()).isEqualTo(OffsetDateTime.parse("2026-11-30T23:59:59+01:00"));
         assertThat(offer.getValue().totalTokens()).isEqualTo(1000L);
     }
 
     @Test
-    void offerWithoutProviderModelOrSecretIsRefused() {
-        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", null, "openai", " ", "sk-1", null, null))
-                .isInstanceOf(InvalidMarketRequestException.class);
-        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", null, "", "gpt-5", "sk-1", null, null))
-                .isInstanceOf(InvalidMarketRequestException.class);
-        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", null, "openai", "gpt-5", " ", null, null))
-                .isInstanceOf(InvalidMarketRequestException.class);
-
-        verify(market, never()).acceptOffer(any(), anyLong());
-    }
-
-    @Test
-    void offerWithOwnAgentIdNeedsNoModelOrSecret() {
-        when(market.isAgentOwnedBy(42, appUserId)).thenReturn(true);
-        when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
-
-        tools.placeOffer("10.00", "12.50", "USD", 42L, " ", null, null, null, 1000L);
-
-        ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
-        verify(market).acceptOffer(offer.capture(), eq(appUserId));
-        assertThat(offer.getValue().agentId()).isEqualTo(42L);
-        assertThat(offer.getValue().modelProvider()).isNull();
-    }
-
-    @Test
-    void offerWithAgentIdAndModelValuesIsRefused() {
-        when(market.isAgentOwnedBy(42, appUserId)).thenReturn(true);
-
-        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", 42L, null, null, "sk-1", null, null))
-                .hasMessage("Give either agentId or modelProvider, modelName and secret");
+    void offerWithoutAgentIsRefused() {
+        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", null, null, null))
+                .hasMessage("Offer requires agentId");
         verify(market, never()).acceptOffer(any(), anyLong());
     }
 
@@ -195,7 +165,7 @@ class MarketToolsTest {
     void agentsOfOtherUsersCannotBeUsed() {
         when(market.isAgentOwnedBy(42, appUserId)).thenReturn(false);
 
-        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", 42L, null, null, null, null, null))
+        assertThatThrownBy(() -> tools.placeOffer("10.00", "12.50", "USD", 42L, null, null))
                 .hasMessage("Agent 42 not found");
         verify(market, never()).acceptOffer(any(), anyLong());
     }
@@ -243,8 +213,8 @@ class MarketToolsTest {
 
     private static Agreement agreement() {
         ConsumerOrder order = withId(new ConsumerOrder(null, null, null, null, "openai", "gpt-5", null, null), 5);
-        ProviderOffer offer = withId(new ProviderOffer(Money.of("10.00"), Money.of("12.50"), null,
-                agent("openai", "gpt-5"), null, null, 1000L, 1000L, null), 7);
+        ProviderOffer offer = withId(new ProviderOffer(Money.of("10.00"), Money.of("12.50"), null, 3, "openai", "gpt-5",
+                null, null, 1000L, 1000L, null), 7);
         return withId(new Agreement(order, offer, OffsetDateTime.now(), null, Money.of("10.00"), Money.of("12.50")), 99);
     }
 }

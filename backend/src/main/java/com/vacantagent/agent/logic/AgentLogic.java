@@ -5,6 +5,7 @@ import com.vacantagent.agent.entities.Agent;
 import com.vacantagent.common.crypto.SecretCipher;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +39,18 @@ public class AgentLogic {
         return agentRepository.existsByAppUserId(appUserId);
     }
 
+    /** False if the agent does not exist or belongs to another user. */
+    @Transactional(readOnly = true)
+    public boolean isOwnedBy(long appUserId, long agentId) {
+        return agentRepository.findByIdAndAppUserId(agentId, appUserId).isPresent();
+    }
+
+    /** Empty if the agent does not exist or belongs to another user. */
+    @Transactional(readOnly = true)
+    public Optional<Agent> findOwned(long appUserId, long agentId) {
+        return agentRepository.findByIdAndAppUserId(agentId, appUserId);
+    }
+
     @Transactional
     public Agent create(long appUserId, String name, String modelProvider, @Nullable String baseUrl, String apiKey) {
         Agent agent = new Agent(appUserId, required(name, "name"), required(modelProvider, "modelProvider").toLowerCase(),
@@ -54,11 +67,19 @@ public class AgentLogic {
         });
     }
 
-    /** @return false if the agent does not exist or belongs to another user */
+    /**
+     * @return false if the agent does not exist or belongs to another user
+     * @throws AgentInUseException if offers reference the agent (foreign key of {@code provider_offer})
+     */
     @Transactional
     public boolean delete(long appUserId, long agentId) {
         return agentRepository.findByIdAndAppUserId(agentId, appUserId).map(agent -> {
-            agentRepository.delete(agent);
+            try {
+                agentRepository.delete(agent);
+                agentRepository.flush();
+            } catch (DataIntegrityViolationException e) {
+                throw new AgentInUseException(agentId);
+            }
             return true;
         }).orElse(false);
     }

@@ -1,6 +1,5 @@
 package com.vacantagent.market.logic;
 
-import com.vacantagent.market.entities.Agent;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.matching.entities.BookOffer;
 import com.vacantagent.market.matching.entities.BookOrder;
@@ -74,9 +73,8 @@ public class MarketRules {
      * The order may leave provider and/or model empty to accept any; given values must match exactly.
      */
     public boolean canMatch(BookOrder order, BookOffer offer) {
-        Agent agent = offer.offer().getAgent();
-        return acceptsValue(order.order().getModelProvider(), agent.getModelProvider())
-                && acceptsValue(order.order().getModelName(), agent.getModelName());
+        return acceptsValue(order.order().getModelProvider(), offer.offer().getModelProvider())
+                && acceptsValue(order.order().getModelName(), offer.offer().getModelName());
     }
 
     /** An order that leaves a field empty accepts any value for it. */

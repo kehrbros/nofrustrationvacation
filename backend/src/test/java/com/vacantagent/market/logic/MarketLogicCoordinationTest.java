@@ -2,7 +2,7 @@ package com.vacantagent.market.logic;
 
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.config.MarketProperties;
-import com.vacantagent.market.data.AgentRepository;
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -21,7 +21,6 @@ import jakarta.annotation.Nullable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Clock;
 import java.time.Duration;
@@ -29,7 +28,6 @@ import java.time.OffsetDateTime;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
-import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.withId;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,10 +47,9 @@ class MarketLogicCoordinationTest {
     private final ConsumerOrderRepository orders = mock(ConsumerOrderRepository.class);
     private final OrderMapper orderMapper = mock(OrderMapper.class);
     private final MarketLogic market = new MarketLogic(engine, writer, rules, orders,
-            mock(ProviderOfferRepository.class), mock(AgentRepository.class), mock(AgreementRepository.class),
+            mock(ProviderOfferRepository.class), mock(AgentLogic.class), mock(AgreementRepository.class),
             orderMapper, mock(OfferMapper.class), new MarketProperties(1_000_000_000L, 1_000, 1_000,
-            Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofSeconds(10)), Clock.systemUTC(),
-            mock(TransactionTemplate.class));
+            Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofSeconds(10)), Clock.systemUTC());
 
     private CompletableFuture<Agreement> stored;
 
@@ -187,7 +184,7 @@ class MarketLogicCoordinationTest {
     }
 
     private static ProviderOffer offer(long id, String price) {
-        return withId(new ProviderOffer(Money.of(price), Money.of(price), null, agent(null, null), null, null,
+        return withId(new ProviderOffer(Money.of(price), Money.of(price), null, 0, null, null, null, null,
                 1000L, 1000L, null), id);
     }
 }

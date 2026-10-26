@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
@@ -9,6 +10,8 @@ import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.matching.MatchResult;
+import com.vacantagent.user.logic.AppUserProvisioning;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -19,7 +22,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 
-import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -45,6 +47,19 @@ class AgreementReaperTest {
     private MarketProperties props;
     @Autowired
     private TransactionTemplate transactionTemplate;
+    @Autowired
+    private AgentLogic agentLogic;
+    @Autowired
+    private AppUserProvisioning appUserProvisioning;
+
+    /** Offers reference an existing agent (foreign key). */
+    private long agentId;
+
+    @BeforeEach
+    void setUp() {
+        long appUserId = appUserProvisioning.findOrCreate("reaper-user", null, null).getId();
+        agentId = agentLogic.create(appUserId, "model", "provider", null, "sk-test-12345678").getId();
+    }
 
     @Test
     void idleAgreementReleasesItsOfferExactlyOnce() {
@@ -103,7 +118,7 @@ class AgreementReaperTest {
     /** Priced above every order other tests leave in the shared engine, so the re-entered offer stays waiting. */
     private Agreement agreement(OffsetDateTime agreedAt, OffsetDateTime lastSuccessAt) {
         Money price = Money.of("900.00");
-        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agent("provider", "model"),
+        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agentId, "provider", "model",
                 null, null, 1000L, 1000L, null));
         ConsumerOrder order = emptyOrder();
         if (lastSuccessAt != null) order.recordSuccess(lastSuccessAt);

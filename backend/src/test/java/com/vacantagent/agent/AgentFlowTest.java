@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AgentFlowTest {
     private static final String AGENT = """
-            {"name":"Mein OpenAI-Zugang","modelProvider":"OpenAI","baseUrl":"%s","apiKey":"%s"}""";
+            {"name":" gpt-5 ","modelProvider":"OpenAI","baseUrl":"%s","apiKey":"%s"}""";
     private static final String KEY = "sk-proj-abcdefghijklmnop1234";
 
     @Autowired
@@ -67,6 +67,7 @@ class AgentFlowTest {
                         .content(AGENT.formatted("", KEY)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.modelProvider").value("openai"))
+                .andExpect(jsonPath("$.name").value("gpt-5"))
                 .andExpect(jsonPath("$.apiKeyHint").value("1234"))
                 .andExpect(jsonPath("$.baseUrl").doesNotExist())
                 .andExpect(content().string(not(org.hamcrest.Matchers.containsString("abcdefgh"))))
@@ -77,7 +78,7 @@ class AgentFlowTest {
         assertThat(stored).doesNotContain("abcdefgh");
         assertThat(agentLogic.apiKey(id)).isEqualTo(KEY);
         mockMvc.perform(get("/api/v1/agents").with(user))
-                .andExpect(jsonPath("$[0].name").value("Mein OpenAI-Zugang"))
+                .andExpect(jsonPath("$[0].name").value("gpt-5"))
                 .andExpect(content().string(not(org.hamcrest.Matchers.containsString("abcdefgh"))));
 
         mockMvc.perform(put("/api/v1/agents/" + id + "/api-key").with(user).contentType(MediaType.APPLICATION_JSON)
@@ -97,7 +98,7 @@ class AgentFlowTest {
 
     @Test
     void agentsOfOtherUsersAreHidden() throws Exception {
-        long id = agentLogic.create(newUser(), "fremd", "openai", null, KEY).getId();
+        long id = agentLogic.create(newUser(), "gpt-5", "openai", null, KEY).getId();
 
         mockMvc.perform(delete("/api/v1/agents/" + id).with(user)).andExpect(status().isNotFound());
         mockMvc.perform(put("/api/v1/agents/" + id + "/api-key").with(user).contentType(MediaType.APPLICATION_JSON)
@@ -113,7 +114,7 @@ class AgentFlowTest {
                 .andExpect(jsonPath("$.agentConfigured").value(false))
                 .andExpect(jsonPath("$.complete").value(false));
 
-        long agentId = agentLogic.create(appUserId, "Agent", "openai", null, KEY).getId();
+        long agentId = agentLogic.create(appUserId, "gpt-5", "openai", null, KEY).getId();
         mockMvc.perform(get("/api/v1/onboarding/provider").with(user))
                 .andExpect(jsonPath("$.agentConfigured").value(true))
                 .andExpect(jsonPath("$.complete").value(false));
@@ -124,6 +125,16 @@ class AgentFlowTest {
 
         mockMvc.perform(delete("/api/v1/agents/" + agentId).with(user)).andExpect(status().isNoContent());
         mockMvc.perform(get("/api/v1/onboarding/provider").with(user)).andExpect(jsonPath("$.complete").value(false));
+    }
+
+    @Test
+    void agentUsedByOffersCannotBeRemoved() throws Exception {
+        long agentId = agentLogic.create(appUserId, "gpt-5", "openai", null, KEY).getId();
+        jdbcTemplate.update("INSERT INTO provider_offer (agent_id, model_provider, model_name) VALUES (?, 'openai', 'gpt-5')",
+                agentId);
+
+        mockMvc.perform(delete("/api/v1/agents/" + agentId).with(user)).andExpect(status().isConflict());
+        mockMvc.perform(get("/api/v1/agents").with(user)).andExpect(jsonPath("$[0].id").value(agentId));
     }
 
     private long newUser() {

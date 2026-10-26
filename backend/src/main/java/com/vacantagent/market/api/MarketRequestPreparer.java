@@ -24,28 +24,14 @@ public class MarketRequestPreparer {
     }
 
     /**
-     * An offer names either an existing agent or one specific model with a secret to call it. Whether the agent
-     * exists and belongs to the user is checked by the caller.
+     * An offer always sells the one model of its agent. Whether the agent exists and belongs to the user is checked
+     * by the caller.
      */
     public OfferDto prepare(OfferDto offer) {
-        String modelProvider = trimToNull(offer.modelProvider());
-        String modelName = trimToNull(offer.modelName());
-        if (offer.agentId() != null) {
-            if (modelProvider != null || modelName != null || trimToNull(offer.secret()) != null) {
-                throw new InvalidMarketRequestException("Give either agentId or modelProvider, modelName and secret");
-            }
-            return new OfferDto(offer.pricePerMillionInputTokens(), offer.pricePerMillionOutputTokens(),
-                    offer.offeredUntil(), offer.agentId(), null, null, null, offer.totalTokens());
+        if (offer.agentId() == null) {
+            throw new InvalidMarketRequestException("Offer requires agentId");
         }
-        if (modelProvider == null || modelName == null) {
-            throw new InvalidMarketRequestException("Offer requires modelProvider and modelName");
-        }
-        String secret = trimToNull(offer.secret());
-        if (secret == null) {
-            throw new InvalidMarketRequestException("Offer requires secret");
-        }
-        return new OfferDto(offer.pricePerMillionInputTokens(), offer.pricePerMillionOutputTokens(),
-                offer.offeredUntil(), null, modelProvider, modelName, secret, offer.totalTokens());
+        return offer;
     }
 
     private static @Nullable String trimToNull(@Nullable String value) {
