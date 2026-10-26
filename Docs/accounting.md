@@ -17,7 +17,7 @@
 - `PayoutAccount` (auditiert): `payer_id` von PayPal, E-Mail, verifiziert ja/nein. Ein PayPal-Konto gehört höchstens zu einem Nutzer (`PAYPAL_ACCOUNT_IN_USE`).
 - Ablauf:
   1. `POST /api/v1/accounting/payout-account/paypal/authorization` → zufälliger `state` (32 Byte) wird für den Nutzer gespeichert, Antwort ist die PayPal-Login-URL.
-  2. PayPal leitet auf `/paypal/verbunden?code=…&state=…` (Frontend) zurück.
+  2. PayPal leitet auf `/paypal/connected?code=…&state=…` (Frontend) zurück.
   3. `POST /api/v1/accounting/payout-account/paypal {code, state}`: `state` muss vom selben Nutzer sein, ist 15 min gültig (`link-state-ttl`) und nur einmal verwendbar (CSRF-Schutz). Danach Code gegen Kontodaten tauschen.
 - `DELETE /api/v1/accounting/payout-account` trennt, solange keine Auszahlung offen ist (`PAYOUTS_OPEN`).
 - Teil des Provider-Onboardings, siehe [onboarding.md](onboarding.md).

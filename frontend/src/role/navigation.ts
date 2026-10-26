@@ -9,7 +9,7 @@ export interface NavigationItem {
 export const ONBOARDING_PATH = '/willkommen';
 
 /** Redirect URI of "Log in with PayPal", registered in the PayPal app (vacantagent.paypal.connect-redirect-uri). */
-export const PAYPAL_CONNECTED_PATH = '/paypal/verbunden';
+export const PAYPAL_CONNECTED_PATH = '/paypal/connected';
 
 /** Config pages behind the items of the provider onboarding checklist. */
 export const PAYOUT_ACCOUNT_PATH = '/provider/auszahlungskonto';

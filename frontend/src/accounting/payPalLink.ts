@@ -3,7 +3,7 @@ import { startPayPalLink } from '../generated/api';
 const RETURN_TO_KEY = 'vacantagent.paypal.returnTo';
 
 /**
- * Starts "Log in with PayPal": the browser leaves the app and comes back to /paypal/verbunden, which continues
+ * Starts "Log in with PayPal": the browser leaves the app and comes back to /paypal/connected, which continues
  * at {@code returnTo}.
  *
  * @returns the error of the API if PayPal could not be started

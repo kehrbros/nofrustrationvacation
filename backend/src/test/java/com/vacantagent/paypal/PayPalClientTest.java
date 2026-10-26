@@ -193,7 +193,7 @@ class PayPalClientTest {
                 .contains("response_type=code")
                 .contains("state=state-1")
                 .contains("scope=openid%20email%20https://uri.paypal.com/services/paypalattributes")
-                .contains("redirect_uri=http://localhost:5173/paypal/verbunden");
+                .contains("redirect_uri=http://localhost:5173/paypal/connected");
     }
 
     @Test
@@ -250,7 +250,7 @@ class PayPalClientTest {
 
     private static PayPalProperties properties(String clientId, String secret) {
         return new PayPalProperties(PayPalProperties.Environment.SANDBOX, clientId, secret,
-                URI.create("http://localhost:5173/paypal/verbunden"),
+                URI.create("http://localhost:5173/paypal/connected"),
                 URI.create("http://localhost:5173/consumer/guthaben/paypal"),
                 URI.create("http://localhost:5173/consumer/guthaben/paypal?abgebrochen=1"),
                 "VacantAgent", Duration.ofSeconds(5));
