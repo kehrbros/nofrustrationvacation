@@ -39,6 +39,9 @@ public interface IMarketLogic {
     /** False if the offer does not exist or belongs to someone else. */
     boolean isOfferOwnedBy(long offerId, long appUserId);
 
+    /** False if the agent does not exist or belongs to someone else. */
+    boolean isAgentOwnedBy(long agentId, long appUserId);
+
     /** Sends an already persisted offer back into the market, e.g. after its agreement became idle. */
     CompletableFuture<MatchResult> resubmitOffer(ProviderOffer offer);
 

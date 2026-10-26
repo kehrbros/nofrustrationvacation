@@ -79,7 +79,8 @@ public class MarketTools {
     }
 
     @McpTool(name = "place_offer", description = "Sell LLM access. Matched against the highest-paying fitting order "
-            + "for its model. If none fits, the offer waits in the market until offeredUntil. Returns MATCHED with "
+            + "for its model. Served by an existing agent (agentId) or a new one from modelProvider, modelName and secret. "
+            + "If none fits, the offer waits in the market until offeredUntil. Returns MATCHED with "
             + "the agreement, RESTING, or REJECTED with a reason.")
     public SubmissionDto placeOffer(
             @McpToolParam(description = "Price per million input tokens, decimal string, e.g. \"1.25\"")
@@ -88,10 +89,17 @@ public class MarketTools {
             String pricePerMillionOutputTokens,
             @McpToolParam(description = "ISO 4217 currency of both prices: USD, EUR, GBP or CHF")
             String currency,
-            @McpToolParam(description = "Provider of the offered model, e.g. \"openai\"")
-            String modelProvider,
-            @McpToolParam(description = "Offered model, e.g. \"gpt-5\"")
-            String modelName,
+            @McpToolParam(description = "Id of an existing agent of yours. Replaces modelProvider, modelName and "
+                    + "secret, which must then be missing.", required = false)
+            @Nullable Long agentId,
+            @McpToolParam(description = "Provider of the offered model, e.g. \"openai\". Required without agentId.",
+                    required = false)
+            @Nullable String modelProvider,
+            @McpToolParam(description = "Offered model, e.g. \"gpt-5\". Required without agentId.", required = false)
+            @Nullable String modelName,
+            @McpToolParam(description = "Credential for calling the offered agent. Required without agentId.",
+                    required = false)
+            @Nullable String secret,
             @McpToolParam(description = "End of the offer and of any agreement made from it, ISO 8601 date-time "
                     + "with offset. Missing means no end.", required = false)
             @Nullable String offeredUntil,
@@ -99,8 +107,11 @@ public class MarketTools {
             @Nullable Long totalTokens) {
         CurrentUser user = currentUser();
         OfferDto offer = preparer.prepare(new OfferDto(money(pricePerMillionInputTokens, currency),
-                money(pricePerMillionOutputTokens, currency), dateTime(offeredUntil), modelProvider, modelName,
-                totalTokens));
+                money(pricePerMillionOutputTokens, currency), dateTime(offeredUntil), agentId, modelProvider,
+                modelName, secret, totalTokens));
+        if (agentId != null && !market.isAgentOwnedBy(agentId, user.appUserId())) {
+            throw new InvalidMarketRequestException("Agent " + agentId + " not found");
+        }
         Currency responseCurrency = submissionMapper.responseCurrency(user);
         Submission submission = market.acceptOffer(offer, user.appUserId());
         return submissionMapper.toDto(submission.id(), await(submission, GRACE), responseCurrency);

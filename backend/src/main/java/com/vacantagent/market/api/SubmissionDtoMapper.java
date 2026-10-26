@@ -40,8 +40,8 @@ public class SubmissionDtoMapper {
 
     private AgreementDto toDto(Agreement agreement, Currency currency) {
         return new AgreementDto(agreement.getId(), agreement.getConsumerOrder().getId(),
-                agreement.getProviderOffer().getId(), agreement.getProviderOffer().getModelProvider(),
-                agreement.getProviderOffer().getModelName(), agreement.getAgreedAt(), agreement.getValidUntil(),
+                agreement.getProviderOffer().getId(), agreement.getProviderOffer().getAgent().getModelProvider(),
+                agreement.getProviderOffer().getAgent().getModelName(), agreement.getAgreedAt(), agreement.getValidUntil(),
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionInputTokens(), currency, MoneyRounding.PRICE),
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionOutputTokens(), currency, MoneyRounding.PRICE));
     }

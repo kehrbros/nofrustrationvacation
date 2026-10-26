@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Map;
 
+import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -56,7 +57,7 @@ class MarketLogicTest {
     @Test
     void offerAndOrderArePersistedAgreeAndTheAgreementIsPersisted() {
         Submission offer = market.acceptOffer(new OfferDto(usd("10.00"), usd("12.50"),
-                null, "provider", "agree-model", 1_000_000L), user);
+                null, null, "provider", "agree-model", "secret", 1_000_000L), user);
         assertThat(offer.result().join()).isInstanceOf(MatchResult.Resting.class);
 
         Submission order = market.acceptOrder(new OrderDto(usd("11.00"), usd("13.00"),
@@ -80,7 +81,7 @@ class MarketLogicTest {
     void entitiesArePersistedBeforeMatching() {
         Submission order = market.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null, "provider", "persist-model"), user);
         Submission offer = market.acceptOffer(new OfferDto(usd("50.00"), usd("50.00"),
-                null, "provider", "persist-model", 500L), user);
+                null, null, "provider", "persist-model", "secret", 500L), user);
 
         assertThat(orders.findById(order.id())).isPresent();
         ProviderOffer saved = offers.findById(offer.id()).orElseThrow();
@@ -102,7 +103,7 @@ class MarketLogicTest {
     void ordersAndOffersBelongToTheUserWhoPlacedThem() {
         long otherUser = appUserProvisioning.findOrCreate("other-broker-user", null, null).getId();
         Submission order = market.acceptOrder(new OrderDto(null, null, null, null, null), user);
-        Submission offer = market.acceptOffer(new OfferDto(null, null, null, "provider", "owner-model", 1L), user);
+        Submission offer = market.acceptOffer(new OfferDto(null, null, null, null, "provider", "owner-model", "secret", 1L), user);
         order.result().join();
         offer.result().join();
 
@@ -114,6 +115,23 @@ class MarketLogicTest {
         assertThat(market.isOfferOwnedBy(Long.MAX_VALUE, user)).isFalse();
         assertThat(jdbcTemplate.queryForObject("SELECT app_user_id FROM consumer_order WHERE id = ?",
                 Long.class, order.id())).isEqualTo(user);
+    }
+
+    @Test
+    void offerWithAgentIdReusesTheAgentOfAnEarlierOffer() {
+        long otherUser = appUserProvisioning.findOrCreate("other-agent-user", null, null).getId();
+        Submission first = market.acceptOffer(new OfferDto(null, null, null, null, "provider", "reuse-model",
+                "secret", 1L), user);
+        first.result().join();
+        long agentId = offers.findById(first.id()).orElseThrow().getAgent().getId();
+
+        Submission second = market.acceptOffer(new OfferDto(null, null, null, agentId, null, null, null, 1L), user);
+        second.result().join();
+
+        assertThat(offers.findById(second.id()).orElseThrow().getAgent().getId()).isEqualTo(agentId);
+        assertThat(market.isAgentOwnedBy(agentId, user)).isTrue();
+        assertThat(market.isAgentOwnedBy(agentId, otherUser)).isFalse();
+        assertThat(market.isAgentOwnedBy(Long.MAX_VALUE, user)).isFalse();
     }
 
     @Test
@@ -146,7 +164,7 @@ class MarketLogicTest {
     /** Not submitted to the engine; priced high, so its offer stays waiting if the scheduled reaper releases it. */
     private Agreement agreement(OffsetDateTime agreedAt) {
         Money price = Money.of("900.00");
-        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, "provider", "record-model",
+        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agent("provider", "record-model"),
                 null, null, 1000L, 1000L, null));
         return agreements.save(new Agreement(orders.save(emptyOrder()), offer, agreedAt, null, price, price));
     }

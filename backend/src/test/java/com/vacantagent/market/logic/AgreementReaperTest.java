@@ -19,6 +19,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 
+import static com.vacantagent.market.MarketFixtures.agent;
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -102,7 +103,7 @@ class AgreementReaperTest {
     /** Priced above every order other tests leave in the shared engine, so the re-entered offer stays waiting. */
     private Agreement agreement(OffsetDateTime agreedAt, OffsetDateTime lastSuccessAt) {
         Money price = Money.of("900.00");
-        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, "provider", "model",
+        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agent("provider", "model"),
                 null, null, 1000L, 1000L, null));
         ConsumerOrder order = emptyOrder();
         if (lastSuccessAt != null) order.recordSuccess(lastSuccessAt);
