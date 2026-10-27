@@ -66,7 +66,7 @@ public class LlmProxyTools {
         CurrentUser user = currentUser();
         OrderLimits orderLimits = orderLimits(maxCostPerMillionInputTokens, maxCostPerMillionOutputTokens, currency,
                 marketWaitTime);
-        Currency responseCurrency = currencyConversionService.responseCurrency(null,
+        Currency responseCurrency = currencyConversionService.getResponseCurrency(null,
                 appUserSettings.get(user.appUserId()).getPreferredCurrency());
         LlmCompletion completion = proxyService.prompt(user.appUserId(), prompt, modelProvider, modelName, orderLimits);
         return new PromptResultDto(completion.text(), completion.agreementId(), completion.promptTokens(),

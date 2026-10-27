@@ -47,7 +47,7 @@ public class CurrencyConversionService {
     /**
      * @throws UnsupportedCurrencyException if the code is unknown or not configured in {@code vacantagent.money.currencies}
      */
-    public Currency supportedCurrency(String currencyCode) {
+    public Currency getSupportedCurrency(String currencyCode) {
         if (currencyCode == null || !supportedCurrencies.contains(currencyCode)) {
             throw new UnsupportedCurrencyException(currencyCode);
         }
@@ -58,9 +58,9 @@ public class CurrencyConversionService {
      * Currency of a response: the requested one (e.g. query parameter {@code currency}), else the user's preferred
      * currency, else the base currency.
      */
-    public Currency responseCurrency(@Nullable String requested, @Nullable String preferred) {
+    public Currency getResponseCurrency(@Nullable String requested, @Nullable String preferred) {
         if (requested != null && !requested.isBlank()) {
-            return supportedCurrency(requested);
+            return getSupportedCurrency(requested);
         }
         if (preferred != null && supportedCurrencies.contains(preferred)) {
             return Currency.getInstance(preferred);
@@ -85,7 +85,7 @@ public class CurrencyConversionService {
     }
 
     public Money fromDto(MoneyDto dto) {
-        return toBase(new CurrencyAmount(dto.amount(), supportedCurrency(dto.currency()))).base();
+        return toBase(new CurrencyAmount(dto.amount(), getSupportedCurrency(dto.currency()))).base();
     }
 
     /**
@@ -99,11 +99,11 @@ public class CurrencyConversionService {
      * Converts an amount of the base currency with the rate valid at {@code at}, for historical values.
      */
     public MoneyDto toDto(Money money, Currency target, MoneyRounding rounding, @Nullable LocalDate at) {
-        supportedCurrency(target.getCurrencyCode());
+        getSupportedCurrency(target.getCurrencyCode());
         if (isBase(target)) {
             return new MoneyDto(rounding.apply(money.amount(), target), target.getCurrencyCode());
         }
-        ExchangeRate rate = (at == null) ? latestRate(target) : rateAt(target, at);
+        ExchangeRate rate = (at == null) ? getLatestRate(target) : getRateAt(target, at);
         BigDecimal amount = rounding.apply(money.amount().multiply(rate.getRate()), target);
         return new MoneyDto(amount, target.getCurrencyCode(), rate.getRate(), rate.getRateDate());
     }
@@ -113,11 +113,11 @@ public class CurrencyConversionService {
     }
 
     private CurrencyConversion toBase(CurrencyAmount amount, boolean booking) {
-        Currency currency = supportedCurrency(amount.currency().getCurrencyCode());
+        Currency currency = getSupportedCurrency(amount.currency().getCurrencyCode());
         if (isBase(currency)) {
             return new CurrencyConversion(amount, Money.of(amount.amount()), null, null);
         }
-        ExchangeRate rate = latestRate(currency);
+        ExchangeRate rate = getLatestRate(currency);
         if (booking && ChronoUnit.DAYS.between(rate.getRateDate(), today()) > maxRateAgeDays) {
             throw new ExchangeRateUnavailableException("Exchange rate for " + currency + " from " + rate.getRateDate()
                     + " is older than " + maxRateAgeDays + " days");
@@ -126,11 +126,11 @@ public class CurrencyConversionService {
         return new CurrencyConversion(amount, base, rate.getRate(), rate.getRateDate());
     }
 
-    private ExchangeRate latestRate(Currency currency) {
-        return latestRates.computeIfAbsent(currency.getCurrencyCode(), _ -> rateAt(currency, today()));
+    private ExchangeRate getLatestRate(Currency currency) {
+        return latestRates.computeIfAbsent(currency.getCurrencyCode(), _ -> getRateAt(currency, today()));
     }
 
-    private ExchangeRate rateAt(Currency currency, LocalDate date) {
+    private ExchangeRate getRateAt(Currency currency, LocalDate date) {
         return exchangeRateRepository
                 .findFirstByCurrencyAndRateDateLessThanEqualOrderByRateDateDesc(currency.getCurrencyCode(), date)
                 .orElseThrow(() -> new ExchangeRateUnavailableException("No exchange rate for " + currency + " at " + date));

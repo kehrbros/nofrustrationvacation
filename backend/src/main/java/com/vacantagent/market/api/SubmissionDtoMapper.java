@@ -25,7 +25,7 @@ public class SubmissionDtoMapper {
 
     /** Call on the request thread; the match result may complete on the engine or writer thread. */
     public Currency responseCurrency(CurrentUser user) {
-        return currencyConversionService.responseCurrency(null, appUserSettings.get(user.appUserId()).getPreferredCurrency());
+        return currencyConversionService.getResponseCurrency(null, appUserSettings.get(user.appUserId()).getPreferredCurrency());
     }
 
     /** The persisted id is returned in every case. */
@@ -63,4 +63,4 @@ public class SubmissionDtoMapper {
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionInputTokens(), currency, MoneyRounding.PRICE),
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionOutputTokens(), currency, MoneyRounding.PRICE));
     }
-}
+}

@@ -31,7 +31,7 @@ public class UserController {
                                              @RequestBody PreferredCurrencyDto preferredCurrency) {
         String code = preferredCurrency.currency();
         if (code != null) {
-            currencyConversionService.supportedCurrency(code);
+            currencyConversionService.getSupportedCurrency(code);
         }
         AppUser user = appUserSettings.changePreferredCurrency(currentUser.appUserId(), code);
         return toDto(user);

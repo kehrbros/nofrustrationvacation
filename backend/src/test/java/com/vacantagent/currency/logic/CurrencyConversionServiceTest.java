@@ -103,16 +103,16 @@ class CurrencyConversionServiceTest {
     @Test
     void unsupportedOrUnknownCurrencyIsRejected() {
         assertThrows(UnsupportedCurrencyException.class, () -> service.toBase(CurrencyAmount.of("1", "GBP")));
-        assertThrows(UnsupportedCurrencyException.class, () -> service.supportedCurrency("XYZ"));
+        assertThrows(UnsupportedCurrencyException.class, () -> service.getSupportedCurrency("XYZ"));
         assertThrows(ExchangeRateUnavailableException.class, () -> service.toBase(CurrencyAmount.of("1", "JPY")));
     }
 
     @Test
     void responseCurrencyFallsBackToPreferenceAndBase() {
-        assertEquals(EUR, service.responseCurrency("EUR", "JPY"));
-        assertEquals(JPY, service.responseCurrency(null, "JPY"));
-        assertEquals(Money.BASE_CURRENCY, service.responseCurrency(null, null));
-        assertEquals(Money.BASE_CURRENCY, service.responseCurrency(" ", "GBP"), "no longer supported preference");
+        assertEquals(EUR, service.getResponseCurrency("EUR", "JPY"));
+        assertEquals(JPY, service.getResponseCurrency(null, "JPY"));
+        assertEquals(Money.BASE_CURRENCY, service.getResponseCurrency(null, null));
+        assertEquals(Money.BASE_CURRENCY, service.getResponseCurrency(" ", "GBP"), "no longer supported preference");
     }
 
     private void givenLatestRate(String currency, String rate, LocalDate rateDate) {
