@@ -1,12 +1,11 @@
 {
   "openapi" : "3.1.0",
-  "info" : {
-    "title" : "OpenAPI definition",
-    "version" : "v0"
-  },
   "servers" : [ {
     "url" : "http://localhost:8080",
     "description" : "Generated server url"
+  } ],
+  "security" : [ {
+    "oauth2" : [ ]
   } ],
   "tags" : [ {
     "description" : "Link the PayPal account for payouts",
@@ -24,9 +23,6 @@
     "description" : "LLM accesses of providers",
     "name" : "Agents"
   }, {
-    "description" : "Place and cancel consumer orders and provider offers",
-    "name" : "Market"
-  }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
   } ],
@@ -41,7 +37,8 @@
           "name" : "currency",
           "required" : false,
           "schema" : {
-            "type" : [ "string", "null" ]
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "responses" : {
@@ -70,7 +67,8 @@
           "name" : "currency",
           "required" : false,
           "schema" : {
-            "type" : [ "string", "null" ]
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "responses" : {
@@ -101,6 +99,17 @@
             "description" : "Unlinked or nothing was linked"
           },
           "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Payouts are still in progress (PAYOUTS_OPEN)"
           }
         },
@@ -152,12 +161,45 @@
             "description" : "Linked"
           },
           "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "State unknown, expired or of another user (LINK_STATE_INVALID)"
           },
           "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "PayPal account linked to another user (PAYPAL_ACCOUNT_IN_USE)"
           },
           "502" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "PayPal refused the code or could not be reached"
           }
         },
@@ -181,6 +223,17 @@
             "description" : "Send the user to authorizationUrl"
           },
           "503" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "PayPal is not configured"
           }
         },
@@ -235,12 +288,45 @@
             "description" : "Payout created, see status"
           },
           "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Invalid amount or unsupported currency (INVALID_AMOUNT)"
           },
           "409" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "No PayPal account linked (PAYOUT_ACCOUNT_REQUIRED) or earnings too low (INSUFFICIENT_BALANCE)"
           },
           "422" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Amount below the minimum (AMOUNT_OUT_OF_RANGE)"
           }
         },
@@ -295,12 +381,45 @@
             "description" : "PayPal order created"
           },
           "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Invalid amount or unsupported currency (INVALID_AMOUNT)"
           },
           "422" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Amount below the minimum or above the maximum (AMOUNT_OUT_OF_RANGE)"
           },
           "503" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "PayPal not configured or no current exchange rate"
           }
         },
@@ -318,11 +437,23 @@
           "name" : "orderId",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "responses" : {
           "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "No top-up of the user for this order (TOP_UP_NOT_FOUND)"
           }
         },
@@ -340,7 +471,8 @@
           "name" : "orderId",
           "required" : true,
           "schema" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "responses" : {
@@ -355,9 +487,31 @@
             "description" : "Current state of the top-up"
           },
           "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "No top-up of the user for this order (TOP_UP_NOT_FOUND)"
           },
           "422" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Not approved or declined (PAYMENT_NOT_APPROVED, PAYMENT_DECLINED)"
           }
         },
@@ -411,6 +565,17 @@
             "description" : "Created"
           },
           "400" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Field missing, API key too short or baseUrl not https"
           }
         },
@@ -427,8 +592,8 @@
           "name" : "id",
           "required" : true,
           "schema" : {
-            "type" : "integer",
-            "format" : "int64"
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "responses" : {
@@ -436,6 +601,17 @@
             "description" : "Removed"
           },
           "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Unknown or of another user"
           }
         },
@@ -452,8 +628,8 @@
           "name" : "id",
           "required" : true,
           "schema" : {
-            "type" : "integer",
-            "format" : "int64"
+            "type" : "string",
+            "default" : ""
           }
         } ],
         "requestBody" : {
@@ -468,150 +644,22 @@
         },
         "responses" : {
           "404" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "string",
+                  "additionalProperties" : {
+                    "default" : ""
+                  },
+                  "default" : ""
+                }
+              }
+            },
             "description" : "Unknown or of another user"
           }
         },
         "summary" : "Replace the API key of an agent",
         "tags" : [ "Agents" ]
-      }
-    },
-    "/api/v1/market/offers" : {
-      "post" : {
-        "description" : "Matched against the highest-paying fitting order for its model. If none fits, the offer waits in the market until offeredUntil.",
-        "operationId" : "placeOffer",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/OfferDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Matched (agreement included) or waiting in the market"
-          },
-          "400" : {
-            "description" : "modelProvider or modelName missing, or unsupported currency"
-          },
-          "403" : {
-            "description" : "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider"
-          },
-          "422" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Rejected by the market rules, see reason"
-          }
-        },
-        "summary" : "Place an offer",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/offers/{id}" : {
-      "delete" : {
-        "operationId" : "cancelOffer",
-        "parameters" : [ {
-          "description" : "Offer id from placing it",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "Removed from the market"
-          },
-          "404" : {
-            "description" : "Not waiting: already matched, cancelled, expired, unknown or placed by another user"
-          }
-        },
-        "summary" : "Cancel a waiting offer",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/orders" : {
-      "post" : {
-        "description" : "Matched against the cheapest fitting offer for the requested model. If none fits, the order waits in the market for its marketWaitTime. A user may have only one waiting order per modelProvider and modelName. Both are trimmed, empty means any.",
-        "operationId" : "placeOrder",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/OrderDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Matched (agreement included) or waiting in the market"
-          },
-          "400" : {
-            "description" : "modelName without modelProvider, or unsupported currency"
-          },
-          "422" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Rejected by the market rules, or the user already has an order waiting for this modelProvider and modelName, see reason"
-          }
-        },
-        "summary" : "Place an order",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/orders/{id}" : {
-      "delete" : {
-        "operationId" : "cancelOrder",
-        "parameters" : [ {
-          "description" : "Order id from placing it",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "Removed from the market"
-          },
-          "404" : {
-            "description" : "Not waiting: already matched, cancelled, expired, unknown or placed by another user"
-          }
-        },
-        "summary" : "Cancel a waiting order",
-        "tags" : [ "Market" ]
       }
     },
     "/api/v1/onboarding/provider" : {
@@ -688,6 +736,7 @@
         "properties" : {
           "apiKeyHint" : {
             "type" : "string",
+            "default" : "",
             "example" : "x7Qa"
           },
           "baseUrl" : {
@@ -695,68 +744,33 @@
           },
           "createdAt" : {
             "type" : "string",
-            "format" : "date-time"
+            "format" : "date-time",
+            "default" : ""
           },
           "id" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "default" : ""
           },
           "modelProvider" : {
             "type" : "string",
+            "default" : "",
             "example" : "openai"
           },
           "name" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           }
         },
         "required" : [ "apiKeyHint", "createdAt", "id", "modelProvider", "name" ]
-      },
-      "AgreementDto" : {
-        "type" : "null",
-        "properties" : {
-          "agreedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "agreedPricePerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto"
-          },
-          "agreedPricePerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto"
-          },
-          "consumerOrderId" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "modelName" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
-          },
-          "providerOfferId" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "validUntil" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time",
-            "description" : "The offer's offeredUntil, missing means no end"
-          }
-        }
       },
       "ApiKeyDto" : {
         "type" : "object",
         "properties" : {
           "apiKey" : {
             "type" : "string",
-            "format" : "password"
+            "format" : "password",
+            "default" : ""
           }
         },
         "required" : [ "apiKey" ]
@@ -780,10 +794,12 @@
         "type" : "object",
         "properties" : {
           "credit" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           },
           "earnings" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           }
         },
         "required" : [ "credit", "earnings" ]
@@ -793,17 +809,20 @@
         "properties" : {
           "apiKey" : {
             "type" : "string",
-            "format" : "password"
+            "format" : "password",
+            "default" : ""
           },
           "baseUrl" : {
             "type" : [ "string", "null" ]
           },
           "modelProvider" : {
             "type" : "string",
+            "default" : "",
             "example" : "openai"
           },
           "name" : {
             "type" : "string",
+            "default" : "",
             "example" : "Mein OpenAI-Zugang"
           }
         },
@@ -814,18 +833,22 @@
         "properties" : {
           "account" : {
             "type" : "string",
+            "default" : "",
             "enum" : [ "CREDIT", "EARNINGS" ]
           },
           "amount" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           },
           "bookedAt" : {
             "type" : "string",
-            "format" : "date-time"
+            "format" : "date-time",
+            "default" : ""
           },
           "id" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "default" : ""
           },
           "referenceId" : {
             "type" : [ "integer", "null" ],
@@ -833,6 +856,7 @@
           },
           "type" : {
             "type" : "string",
+            "default" : "",
             "enum" : [ "TOP_UP", "PAYOUT", "PAYOUT_REVERSAL", "USAGE_CHARGE", "USAGE_EARNING", "OPENING_BALANCE" ]
           }
         },
@@ -844,16 +868,19 @@
           "amount" : {
             "type" : "string",
             "format" : "decimal",
+            "default" : "",
             "example" : "12.50"
           },
           "currency" : {
             "type" : "string",
+            "default" : "",
             "description" : "ISO 4217 currency code",
             "example" : "EUR"
           },
           "exchangeRate" : {
             "type" : [ "string", "null" ],
             "format" : "decimal",
+            "default" : "",
             "example" : "0.9187000000"
           },
           "exchangeRateDate" : {
@@ -863,74 +890,12 @@
         },
         "required" : [ "amount", "currency" ]
       },
-      "OfferDto" : {
-        "type" : "object",
-        "properties" : {
-          "modelName" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
-          },
-          "offeredUntil" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time",
-            "description" : "End of the offer and of any agreement made from it. Missing means no end."
-          },
-          "pricePerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Price per million input tokens"
-          },
-          "pricePerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Price per million output tokens"
-          },
-          "totalTokens" : {
-            "type" : "integer",
-            "format" : "int64",
-            "description" : "Tokens offered in total",
-            "example" : 1000000
-          }
-        },
-        "required" : [ "modelName", "modelProvider", "pricePerMillionInputTokens", "pricePerMillionOutputTokens" ]
-      },
-      "OrderDto" : {
-        "type" : "object",
-        "properties" : {
-          "marketWaitTime" : {
-            "type" : [ "string", "null" ],
-            "format" : "duration",
-            "description" : "How long the order waits in the market for a fitting offer (ISO 8601). Missing means it waits until cancelled, zero means it only matches on arrival.",
-            "example" : "PT5M"
-          },
-          "maxCostPerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Highest accepted price per million input tokens"
-          },
-          "maxCostPerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Highest accepted price per million output tokens"
-          },
-          "modelName" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only offers of this model. Missing means any model of modelProvider.",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only offers of this provider. Missing means any provider, then modelName must be missing too.",
-            "example" : "openai"
-          }
-        },
-        "required" : [ "maxCostPerMillionInputTokens", "maxCostPerMillionOutputTokens" ]
-      },
       "PayPalAuthorizationDto" : {
         "type" : "object",
         "properties" : {
           "authorizationUrl" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           }
         },
         "required" : [ "authorizationUrl" ]
@@ -939,10 +904,12 @@
         "type" : "object",
         "properties" : {
           "code" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           },
           "state" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           }
         },
         "required" : [ "code", "state" ]
@@ -954,14 +921,16 @@
             "type" : [ "string", "null" ]
           },
           "linked" : {
-            "type" : "boolean"
+            "type" : "boolean",
+            "default" : false
           },
           "linkedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time"
           },
           "payPalAvailable" : {
-            "type" : "boolean"
+            "type" : "boolean",
+            "default" : false
           },
           "provider" : {
             "type" : [ "string", "null" ]
@@ -984,17 +953,21 @@
           },
           "id" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "default" : ""
           },
           "paidOut" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           },
           "requestedAt" : {
             "type" : "string",
-            "format" : "date-time"
+            "format" : "date-time",
+            "default" : ""
           },
           "status" : {
             "type" : "string",
+            "default" : "",
             "enum" : [ "REQUESTED", "SUBMITTED", "COMPLETED", "FAILED", "UNKNOWN" ]
           }
         },
@@ -1006,10 +979,12 @@
           "amount" : {
             "type" : [ "string", "null" ],
             "format" : "decimal",
+            "default" : "",
             "example" : "50.00"
           },
           "currency" : {
             "type" : "string",
+            "default" : "",
             "example" : "EUR"
           }
         },
@@ -1020,6 +995,7 @@
         "properties" : {
           "currency" : {
             "type" : [ "string", "null" ],
+            "default" : "",
             "example" : "EUR"
           }
         }
@@ -1028,42 +1004,24 @@
         "type" : "object",
         "properties" : {
           "agentConfigured" : {
-            "type" : "boolean"
+            "type" : "boolean",
+            "default" : false
           },
           "complete" : {
             "type" : "boolean",
+            "default" : false,
             "description" : "All steps done, offers can be placed"
           },
           "payoutAccountLinked" : {
-            "type" : "boolean"
+            "type" : "boolean",
+            "default" : false
           },
           "registered" : {
-            "type" : "boolean"
+            "type" : "boolean",
+            "default" : false
           }
         },
         "required" : [ "agentConfigured", "complete", "payoutAccountLinked", "registered" ]
-      },
-      "SubmissionDto" : {
-        "type" : "object",
-        "properties" : {
-          "agreement" : {
-            "$ref" : "#/components/schemas/AgreementDto",
-            "description" : "Only for MATCHED"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64",
-            "description" : "Id of the persisted order or offer, use it to cancel"
-          },
-          "reason" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only for REJECTED"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "MATCHED", "RESTING", "REJECTED" ]
-          }
-        }
       },
       "TopUpDto" : {
         "type" : "object",
@@ -1074,26 +1032,31 @@
           },
           "createdAt" : {
             "type" : "string",
-            "format" : "date-time"
+            "format" : "date-time",
+            "default" : ""
           },
           "credited" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           },
           "failureReason" : {
             "type" : [ "string", "null" ]
           },
           "id" : {
             "type" : "integer",
-            "format" : "int64"
+            "format" : "int64",
+            "default" : ""
           },
           "paid" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           },
           "paypalOrderId" : {
             "type" : [ "string", "null" ]
           },
           "status" : {
             "type" : "string",
+            "default" : "",
             "enum" : [ "CREATED", "PENDING", "COMPLETED", "CANCELLED", "FAILED" ]
           }
         },
@@ -1103,7 +1066,8 @@
         "type" : "object",
         "properties" : {
           "amount" : {
-            "$ref" : "#/components/schemas/MoneyDto"
+            "$ref" : "#/components/schemas/MoneyDto",
+            "default" : ""
           }
         },
         "required" : [ "amount" ]
@@ -1112,13 +1076,29 @@
         "type" : "object",
         "properties" : {
           "approveUrl" : {
-            "type" : "string"
+            "type" : "string",
+            "default" : ""
           },
           "topUp" : {
-            "$ref" : "#/components/schemas/TopUpDto"
+            "$ref" : "#/components/schemas/TopUpDto",
+            "default" : ""
           }
         },
         "required" : [ "approveUrl", "topUp" ]
+      }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "http://localhost:8080/oauth2/authorize",
+            "scopes" : {
+              "openid" : ""
+            },
+            "tokenUrl" : "http://localhost:8080/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
       }
     }
   }
