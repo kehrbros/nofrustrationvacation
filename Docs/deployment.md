@@ -1,4 +1,14 @@
-# Deployment (Docker Swarm)
+# Deployment (Docker Swarm und lokal)
+
+## Lokal mit Docker Compose
+
+- **Datei:** `docker-compose.local.yml`, Services `postgres`, `backend`, `frontend`. Alle Images werden aus den Dockerfiles im Repo gebaut, kein Zugriff auf die Container Registry und kein lokales Java/Maven/Node nötig. Das Backend baut `backend/Dockerfile.local` aus den Quellen (Multi-Stage mit Maven, Kontext über `Dockerfile.local.dockerignore`), CI nutzt weiter `backend/Dockerfile` mit dem vorher gebauten Jar.
+- **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` und `VACANTAGENT_ENCRYPTION_KEY` optional. Docker Compose liest die `.env` automatisch.
+- **Start:** `docker compose -f docker-compose.local.yml up --build`. Frontend http://localhost:5173 (Port des Vite-Dev-Servers, damit Redirect-URIs und PayPal-Return-URL passen, also nicht parallel zu `npm run dev`), Backend http://localhost:8080, Login `test`/`test`.
+- **Datenbank:** PostgreSQL 17 mit Profil `postgres` wie im Stack, Daten im Volume `postgres-data`, Port `LOCAL_POSTGRES_PORT` (Standard 5432) für DB-Tools. Zurücksetzen: `docker compose -f docker-compose.local.yml down -v`. Das Passwort gilt nur beim ersten Anlegen des Volumes.
+- Ohne Docker weiter `mvn spring-boot:run` mit In-Memory-H2, siehe README.
+
+## Docker Swarm
 
 - **Stack:** `docker-compose.yml` im Repo-Root, Services `postgres` (PostgreSQL 17), `backend` (Spring Boot, Port 8080) und `frontend` (nginx mit dem Vite-Build, Port 80) im Overlay-Netz `vacantagent`.
 - **Images:** CI baut und pusht `ghcr.io/kehrbros/vacantagent/backend:main` (Branch `main`) und `ghcr.io/kehrbros/vacantagent/frontend:dev` (Branch `dev`). Andere Tags über `BACKEND_IMAGE`/`FRONTEND_IMAGE`. Lokal bauen: `cd backend && mvn -DskipTests verify`, danach im Root `docker compose build`. `docker stack deploy` ignoriert `build` und braucht die Images auf jedem Node (Registry oder lokal bei Single-Node-Swarm).
@@ -32,7 +42,7 @@
 
 ## Konfiguration
 
-- Variablen siehe `.env.example`. `docker stack deploy` liest keine `.env`, daher vorher in die Shell laden: `set -a; . ./.env; set +a`.
+- Variablen siehe Abschnitt „Swarm stack“ in `.env.example`. `docker stack deploy` liest keine `.env`, daher vorher in die Shell laden: `set -a; . ./.env; set +a`. Die lokalen Secrets aus der `.env` nutzt der Stack nicht.
 - `BACKEND_URL` / `FRONTEND_URL`: öffentliche URLs aus Sicht des Browsers. Daraus leitet das Backend Issuer, Redirect-URIs, CORS und PayPal-Return-URLs ab (`vacantagent.backend-url`, `vacantagent.frontend-url`). Das Backend ruft `BACKEND_URL` selbst auf (Issuer-Discovery), die URL muss also auch aus dem Container erreichbar sein.
 - `VITE_OIDC_AUTHORITY` ist Build-Zeit: Das CI-Image enthält `http://localhost:8080`. Für eine andere `BACKEND_URL` das Frontend-Image mit `docker compose build frontend` (übernimmt `BACKEND_URL`) neu bauen.
 - PayPal: `PAYPAL_ENVIRONMENT` (`sandbox`/`live`). In der PayPal-App muss die Return URL `${FRONTEND_URL}/paypal/connected` eingetragen sein.

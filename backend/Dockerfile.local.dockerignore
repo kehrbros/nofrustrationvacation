@@ -1,0 +1,4 @@
+# Build context of Dockerfile.local (sources instead of the prebuilt jar, see .dockerignore)
+*
+!pom.xml
+!src/

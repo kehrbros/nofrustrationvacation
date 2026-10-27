@@ -1,0 +1,69 @@
+# Local run of VacantAgent with PostgreSQL. All images are built from the Dockerfiles in this repo, no access to
+# the container registry and no local Java, Maven or Node needed, see Docs/deployment.md.
+#
+#   docker compose -f docker-compose.local.yml up --build
+#
+# Frontend http://localhost:5173 (port of the Vite dev server, so the registered redirect URIs and the PayPal
+# return URL fit), backend http://localhost:8080, login test/test. Reset the database with "down -v".
+# Secrets come from the git-ignored .env (copy .env.example): database password required, PayPal and encryption
+# key optional.
+
+name: vacantagent-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: vacantagent
+      POSTGRES_USER: vacantagent
+      # From .env, the stack uses the Docker secret vacantagent_postgres_password instead
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}
+    ports:
+      - "${LOCAL_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vacantagent -d vacantagent"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    image: vacantagent-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.local
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: vacantagent
+      POSTGRES_USER: vacantagent
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}
+      VACANTAGENT_BACKEND_URL: http://localhost:8080
+      VACANTAGENT_FRONTEND_URL: http://localhost:5173
+      PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
+      # Empty: the app starts, PayPal features answer 503 and a temporary encryption key is used
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
+      VACANTAGENT_ENCRYPTION_KEY: ${VACANTAGENT_ENCRYPTION_KEY:-}
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: vacantagent-frontend:local
+    build:
+      context: ./frontend
+      args:
+        VITE_OIDC_AUTHORITY: http://localhost:8080
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
