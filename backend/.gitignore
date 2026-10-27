@@ -3,6 +3,5 @@ target/
 *.iml
 *.ipr
 *.iws
-*.db
 
 *.env
