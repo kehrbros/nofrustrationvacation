@@ -10,11 +10,13 @@ import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.user.logic.AppUserSettings;
 import com.vacantagent.user.security.CurrentUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 
 import java.util.Currency;
 
-/** Maps matching results to tool results. Agreed prices are shown in the user's preferred currency. */
+/** Maps matching results to tool results and HTTP responses. Agreed prices are shown in the user's preferred currency. */
 @Component
 @RequiredArgsConstructor
 public class SubmissionDtoMapper {
@@ -35,6 +37,22 @@ public class SubmissionDtoMapper {
             case MatchResult.Rejected rejected -> new SubmissionDto(id, SubmissionStatus.REJECTED, rejected.reason(), null);
             case MatchResult.Cancelled cancelled -> new SubmissionDto(id, SubmissionStatus.CANCELLED, null, null);
             default -> throw new IllegalStateException("Unexpected result for a submission: " + result);
+        };
+    }
+
+    /** 201 for matched or resting, 422 for rejected. The persisted id is returned in every case. */
+    public ResponseEntity<SubmissionDto> toResponse(long id, MatchResult result, Currency currency) {
+        SubmissionDto dto = toDto(id, result, currency);
+        return ResponseEntity.status(dto.status() == SubmissionStatus.REJECTED ? 422 : HttpStatus.CREATED.value())
+                .body(dto);
+    }
+
+    /** 204 if removed from the book, 404 if it was not waiting. */
+    public static ResponseEntity<Void> toCancelResponse(MatchResult result) {
+        return switch (result) {
+            case MatchResult.Cancelled cancelled -> ResponseEntity.noContent().build();
+            case MatchResult.NotFound notFound -> ResponseEntity.notFound().build();
+            default -> throw new IllegalStateException("Unexpected result for a cancel: " + result);
         };
     }
 

@@ -7,6 +7,7 @@ import com.vacantagent.market.dto.SubmissionDto;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.logic.IMarketLogic;
 import com.vacantagent.market.matching.MatchResult;
+import com.vacantagent.onboarding.logic.ProviderOnboarding;
 import com.vacantagent.user.security.CurrentUser;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +42,7 @@ public class MarketTools {
     private final IMarketLogic market;
     private final MarketRequestPreparer preparer;
     private final SubmissionDtoMapper submissionMapper;
+    private final ProviderOnboarding providerOnboarding;
 
     @McpTool(name = "place_order", description = "Buy LLM access. Matched against the cheapest fitting offer for the "
             + "requested model. Waits until matched or marketWaitTime is over. A user may have only one waiting "
@@ -80,7 +82,8 @@ public class MarketTools {
 
     @McpTool(name = "place_offer", description = "Sell LLM access. Matched against the highest-paying fitting order "
             + "for its model. If none fits, the offer waits in the market until offeredUntil. Returns MATCHED with "
-            + "the agreement, RESTING, or REJECTED with a reason.")
+            + "the agreement, RESTING, or REJECTED with a reason. Requires a completed provider onboarding (linked "
+            + "PayPal account and an agent).")
     public SubmissionDto placeOffer(
             @McpToolParam(description = "Price per million input tokens, decimal string, e.g. \"1.25\"")
             String pricePerMillionInputTokens,
@@ -98,6 +101,10 @@ public class MarketTools {
             @McpToolParam(description = "Tokens offered in total", required = false)
             @Nullable Long totalTokens) {
         CurrentUser user = currentUser();
+        if (!providerOnboarding.mayPlaceOffers(user.appUserId())) {
+            throw new InvalidMarketRequestException("Provider onboarding incomplete: link a PayPal account and add an "
+                    + "agent before placing offers");
+        }
         OfferDto offer = preparer.prepare(new OfferDto(money(pricePerMillionInputTokens, currency),
                 money(pricePerMillionOutputTokens, currency), dateTime(offeredUntil), modelProvider, modelName,
                 totalTokens));

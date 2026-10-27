@@ -11,6 +11,7 @@ import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.logic.IMarketLogic;
 import com.vacantagent.market.matching.MatchResult;
+import com.vacantagent.onboarding.logic.ProviderOnboarding;
 import com.vacantagent.user.entities.AppUser;
 import com.vacantagent.user.logic.AppUserProvisioning;
 import com.vacantagent.user.security.AppUserAuthentication;
@@ -53,6 +54,8 @@ class MarketToolsTest {
     private AppUserProvisioning appUserProvisioning;
     @MockitoBean
     private IMarketLogic market;
+    @MockitoBean
+    private ProviderOnboarding providerOnboarding;
 
     private long appUserId;
 
@@ -65,6 +68,17 @@ class MarketToolsTest {
         SecurityContextHolder.getContext().setAuthentication(
                 new AppUserAuthentication(new CurrentUser(appUserId, "market-user"), jwt, List.of()));
         when(market.expireEntries()).thenReturn(CompletableFuture.completedFuture(new MatchResult.Expired(0, 0)));
+        when(providerOnboarding.mayPlaceOffers(appUserId)).thenReturn(true);
+    }
+
+    @Test
+    void offerRequiresACompletedProviderOnboarding() {
+        when(providerOnboarding.mayPlaceOffers(appUserId)).thenReturn(false);
+
+        assertThatThrownBy(() -> tools.placeOffer("1.25", "10.00", "USD", "openai", "gpt-5", null, null))
+                .isInstanceOf(InvalidMarketRequestException.class)
+                .hasMessageContaining("onboarding");
+        verify(market, never()).acceptOffer(any(), anyLong());
     }
 
     @AfterEach

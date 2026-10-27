@@ -19,7 +19,12 @@ caller ──► MarketLogic ──── command ────► MatchingEngine
 `MarketLogic`, the only caller of the engine: persisting entries, persisting agreements, restoring the book at
 startup and starting/stopping the engine. `AgreementReaper` and `BookExpirySweeper` also go through `MarketLogic`.
 
-- **`api/MarketTools`**: MCP tools at `/mcp` (Spring AI `@McpTool`, sync server, streamable HTTP, JWT required). `place_order` waits via `acceptOrderAndAwaitMatch` until `MATCHED`, `REJECTED` (with reason, also when `marketWaitTime` is over) or `CANCELLED`; `marketWaitTime` is required and at most `PT60S`, below common MCP client timeouts. `place_offer` returns `MATCHED` or `RESTING` right away, or `REJECTED`. `cancel_order`, `cancel_offer` fail if the entry is not waiting.
+- **`api/MarketController`**: REST API under `/api/v1/market` (JWT required). `POST /orders`, `POST /offers` return `201` (`MATCHED` with the agreement, or `RESTING`), `422` (`REJECTED` with reason) or `400`. `DELETE /orders/{id}`, `DELETE /offers/{id}` return `204` or `404`.
+  - Orders and offers belong to the authenticated user (`appUser`, from `CurrentUser`). Only the owner may cancel; anyone else gets `404`, so ids of other users stay hidden.
+  - `POST /offers` requires a completed provider onboarding (`ProviderOnboarding.mayPlaceOffers`), otherwise `403`.
+  - `MarketRequestPreparer` trims model values, turns empty ones into `null` and refuses (`400`) an order with `modelName` but no `modelProvider`, and an offer without both.
+  - Agreed prices in responses are in the user's preferred currency (`SubmissionDtoMapper`).
+- **`api/MarketTools`**: MCP tools at `/mcp` (Spring AI `@McpTool`, sync server, streamable HTTP, JWT required). `place_order` waits via `acceptOrderAndAwaitMatch` until `MATCHED`, `REJECTED` (with reason, also when `marketWaitTime` is over) or `CANCELLED`; `marketWaitTime` is required and at most `PT60S`, below common MCP client timeouts. `place_offer` returns `MATCHED` or `RESTING` right away, or `REJECTED`. `place_offer` fails without a completed provider onboarding like the REST API. `cancel_order`, `cancel_offer` fail if the entry is not waiting.
   - Prices are flat decimal strings plus one `currency` parameter, which is easier for agents than nested `MoneyDto`s.
   - Orders and offers belong to the authenticated user (`appUser`, from `CurrentUser` in the `SecurityContext`; the sync server runs tools on the request thread). Only the owner may cancel; anyone else gets "not waiting", so ids of other users stay hidden.
   - `MarketRequestPreparer` trims model values, turns empty ones into `null` and refuses an order with `modelName` but no `modelProvider`, and an offer without both. Refusals (`InvalidMarketRequestException`) become MCP tool errors.
