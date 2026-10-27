@@ -83,7 +83,7 @@ public class AgentController {
         return ResponseEntity.status(HttpStatus.CONFLICT).build();
     }
 
-    private static AgentDto toDto(Agent agent) {
+    static AgentDto toDto(Agent agent) {
         return new AgentDto(agent.getId(), agent.getName(), agent.getModelProvider(), agent.getBaseUrl(),
                 agent.getApiKeyHint(), agent.getCreatedAt());
     }
