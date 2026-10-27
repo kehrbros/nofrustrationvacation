@@ -26,4 +26,12 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
     @Query(value = "UPDATE accounting_account SET balance = balance + :delta WHERE id = :id AND balance + :delta >= 0",
             nativeQuery = true)
     int addToBalance(@Param("id") long id, @Param("delta") BigDecimal delta);
+
+    /**
+     * Like {@link #addToBalance}, but may go below zero. Only {@code CREDIT} accounts may, the table refuses it for
+     * the others.
+     */
+    @Modifying(flushAutomatically = true)
+    @Query(value = "UPDATE accounting_account SET balance = balance + :delta WHERE id = :id", nativeQuery = true)
+    int addToBalanceAllowingNegative(@Param("id") long id, @Param("delta") BigDecimal delta);
 }

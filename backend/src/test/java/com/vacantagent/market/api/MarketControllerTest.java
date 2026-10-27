@@ -63,7 +63,7 @@ class MarketControllerTest {
     private static final String OFFER = """
             {"pricePerMillionInputTokens":{"amount":"10.00","currency":"USD"},
              "pricePerMillionOutputTokens":{"amount":"12.50","currency":"USD"},
-             "modelProvider":"%s","modelName":"%s","totalTokens":1000}""";
+             "agentId":%s,"totalTokens":1000}""";
 
     @Autowired
     private MockMvc mockMvc;
@@ -123,23 +123,16 @@ class MarketControllerTest {
     }
 
     @Test
-    void modelValuesAreTrimmed() throws Exception {
+    void orderValuesAreTrimmed() throws Exception {
         when(market.acceptOrder(any(), eq(appUserId))).thenReturn(submission(5, new MatchResult.Resting()));
-        when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
 
         performAsync(post("/api/v1/market/orders").content(ORDER.formatted("  openai ", "\\tgpt-5 ")))
-                .andExpect(status().isCreated());
-        performAsync(post("/api/v1/market/offers").content(OFFER.formatted(" openai", "gpt-5  ")))
                 .andExpect(status().isCreated());
 
         ArgumentCaptor<OrderDto> order = ArgumentCaptor.forClass(OrderDto.class);
         verify(market).acceptOrder(order.capture(), eq(appUserId));
         assertThat(order.getValue().modelProvider()).isEqualTo("openai");
         assertThat(order.getValue().modelName()).isEqualTo("gpt-5");
-        ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
-        verify(market).acceptOffer(offer.capture(), eq(appUserId));
-        assertThat(offer.getValue().modelProvider()).isEqualTo("openai");
-        assertThat(offer.getValue().modelName()).isEqualTo("gpt-5");
     }
 
     @Test
@@ -163,35 +156,37 @@ class MarketControllerTest {
     }
 
     @Test
-    void offerIsPlacedForTheAuthenticatedUser() throws Exception {
+    void offerIsPlacedForTheAuthenticatedUserWithItsAgent() throws Exception {
+        when(market.isAgentOwnedBy(42, appUserId)).thenReturn(true);
         when(market.acceptOffer(any(), eq(appUserId))).thenReturn(submission(7, new MatchResult.Resting()));
 
-        performAsync(post("/api/v1/market/offers").content(OFFER.formatted("openai", "gpt-5")))
+        performAsync(post("/api/v1/market/offers").content(OFFER.formatted(42)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.status").value("RESTING"));
 
         ArgumentCaptor<OfferDto> offer = ArgumentCaptor.forClass(OfferDto.class);
         verify(market).acceptOffer(offer.capture(), eq(appUserId));
-        assertThat(offer.getValue().modelProvider()).isEqualTo("openai");
-        assertThat(offer.getValue().modelName()).isEqualTo("gpt-5");
+        assertThat(offer.getValue().agentId()).isEqualTo(42L);
     }
 
     @Test
     void offerRequiresACompletedProviderOnboarding() throws Exception {
         when(providerOnboarding.mayPlaceOffers(appUserId)).thenReturn(false);
 
-        performAsync(post("/api/v1/market/offers").content(OFFER.formatted("openai", "gpt-5")))
+        performAsync(post("/api/v1/market/offers").content(OFFER.formatted(42)))
                 .andExpect(status().isForbidden());
 
         verify(market, never()).acceptOffer(any(), anyLong());
     }
 
     @Test
-    void offerWithoutProviderOrModelIsRefused() throws Exception {
-        mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted("openai", " ")))
+    void offerWithoutOwnAgentIsRefused() throws Exception {
+        when(market.isAgentOwnedBy(42, appUserId)).thenReturn(false);
+
+        mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted(42)))
                 .andExpect(status().isBadRequest());
-        mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted("", "gpt-5")))
+        mockMvc.perform(json(post("/api/v1/market/offers")).content(OFFER.formatted("null")))
                 .andExpect(status().isBadRequest());
 
         verify(market, never()).acceptOffer(any(), anyLong());
@@ -255,7 +250,7 @@ class MarketControllerTest {
 
     private static Agreement agreement() {
         ConsumerOrder order = withId(new ConsumerOrder(null, null, null, null, "openai", "gpt-5", null, null), 5);
-        ProviderOffer offer = withId(new ProviderOffer(Money.of("10.00"), Money.of("12.50"), null, "openai", "gpt-5",
+        ProviderOffer offer = withId(new ProviderOffer(Money.of("10.00"), Money.of("12.50"), null, 3, "openai", "gpt-5",
                 null, null, 1000L, 1000L, null), 7);
         return withId(new Agreement(order, offer, OffsetDateTime.now(), null, Money.of("10.00"), Money.of("12.50")), 99);
     }

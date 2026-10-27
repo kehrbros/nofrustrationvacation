@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
@@ -23,13 +24,16 @@ import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -58,6 +62,7 @@ public class MarketLogic implements IMarketLogic {
     private final MarketRules rules;
     private final ConsumerOrderRepository orders;
     private final ProviderOfferRepository offers;
+    private final AgentLogic agentLogic;
     private final AgreementRepository agreements;
     private final OrderMapper orderMapper;
     private final OfferMapper offerMapper;
@@ -143,6 +148,11 @@ public class MarketLogic implements IMarketLogic {
     }
 
     @Override
+    public boolean isAgentOwnedBy(long agentId, long appUserId) {
+        return agentLogic.isOwnedBy(appUserId, agentId);
+    }
+
+    @Override
     public CompletableFuture<MatchResult> resubmitOffer(ProviderOffer offer) {
         return submit(new MatchingEngine.SubmitOffer(BookOffer.from(offer)));
     }
@@ -169,6 +179,28 @@ public class MarketLogic implements IMarketLogic {
         if (agreement.isIdleSince(now.minus(props.agreementIdleTimeout()))) return false;
         order.recordSuccess(now);
         return true;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Agreement> findActiveAgreement(long consumerAppUserId, @Nullable String modelProvider,
+                                                   @Nullable String modelName) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        return agreements.findActive(consumerAppUserId, modelProvider, modelName, now,
+                now.minus(props.agreementIdleTimeout()), Limit.of(1)).stream().findFirst();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProviderOffer recordOfferSuccess(long offerId, long tokens, OffsetDateTime at) {
+        offers.recordSuccess(offerId, tokens, at);
+        return offers.findById(offerId).orElseThrow();      // fresh: the update cleared the persistence context
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordOfferError(long offerId, OffsetDateTime at) {
+        offers.recordError(offerId, at);
     }
 
     // ------------------------------------------------------------------ coordination

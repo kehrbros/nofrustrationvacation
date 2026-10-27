@@ -38,7 +38,7 @@ class AccountingDtoMapper {
     private final PayPalConnect payPalConnect;
 
     Currency responseCurrency(CurrentUser user, @Nullable String requested) {
-        return currencyConversionService.responseCurrency(requested,
+        return currencyConversionService.getResponseCurrency(requested,
                 appUserSettings.get(user.appUserId()).getPreferredCurrency());
     }
 
@@ -50,7 +50,7 @@ class AccountingDtoMapper {
      * Converts an amount entered by the user for a booking (top-up, payout), with a rate not older than allowed.
      */
     Booking toBooking(@Nullable BigDecimal amount, @Nullable String currencyCode) {
-        Currency currency = currencyConversionService.supportedCurrency(currencyCode);
+        Currency currency = currencyConversionService.getSupportedCurrency(currencyCode);
         if (amount == null || amount.signum() <= 0) {
             throw new InvalidAmountException("Amount must be positive");
         }

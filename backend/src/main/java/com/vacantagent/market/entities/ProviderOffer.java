@@ -22,6 +22,10 @@ public class ProviderOffer extends AbstractEntity {
     private Money pricePerMillionOutputTokens;
     private OffsetDateTime offeredUntil;
 
+    /** Agent of the agent module that serves the offer; its owner is the offer's owner. */
+    private long agentId;
+
+    /** Copied from the agent when the offer is placed: matching needs them without I/O. */
     private String modelProvider;
     private String modelName;
 
@@ -36,5 +40,10 @@ public class ProviderOffer extends AbstractEntity {
     private AppUser appUser;
 
     protected ProviderOffer() {
+    }
+
+    /** {@code null} available tokens mean no limit. */
+    public boolean hasTokensLeft() {
+        return availableTokens == null || availableTokens > 0;
     }
 }

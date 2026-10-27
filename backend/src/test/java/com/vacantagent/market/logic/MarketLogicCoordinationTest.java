@@ -2,6 +2,7 @@ package com.vacantagent.market.logic;
 
 import com.vacantagent.common.money.Money;
 import com.vacantagent.market.config.MarketProperties;
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
 import com.vacantagent.market.data.ConsumerOrderRepository;
@@ -46,9 +47,9 @@ class MarketLogicCoordinationTest {
     private final ConsumerOrderRepository orders = mock(ConsumerOrderRepository.class);
     private final OrderMapper orderMapper = mock(OrderMapper.class);
     private final MarketLogic market = new MarketLogic(engine, writer, rules, orders,
-            mock(ProviderOfferRepository.class), mock(AgreementRepository.class), orderMapper,
-            mock(OfferMapper.class), new MarketProperties(1_000_000_000L, 1_000, 1_000, Duration.ofSeconds(30),
-            Duration.ofSeconds(5), Duration.ofSeconds(10)), Clock.systemUTC());
+            mock(ProviderOfferRepository.class), mock(AgentLogic.class), mock(AgreementRepository.class),
+            orderMapper, mock(OfferMapper.class), new MarketProperties(1_000_000_000L, 1_000, 1_000,
+            Duration.ofSeconds(30), Duration.ofSeconds(5), Duration.ofSeconds(10)), Clock.systemUTC());
 
     private CompletableFuture<Agreement> stored;
 
@@ -183,7 +184,7 @@ class MarketLogicCoordinationTest {
     }
 
     private static ProviderOffer offer(long id, String price) {
-        return withId(new ProviderOffer(Money.of(price), Money.of(price), null, null, null, null, null,
+        return withId(new ProviderOffer(Money.of(price), Money.of(price), null, 0, null, null, null, null,
                 1000L, 1000L, null), id);
     }
 }

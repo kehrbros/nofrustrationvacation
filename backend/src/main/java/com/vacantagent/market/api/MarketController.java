@@ -76,13 +76,13 @@ public class MarketController {
     }
 
     @Operation(summary = "Place an offer",
-            description = "Matched against the highest-paying fitting order for its model. If none fits, "
+            description = "Matched against the highest-paying fitting order for the model of its agent. If none fits, "
                     + "the offer waits in the market until offeredUntil.")
     @ApiResponse(responseCode = "201", description = "Matched (agreement included) or waiting in the market")
     @ApiResponse(responseCode = "422", description = "Rejected by the market rules, see reason",
             content = @Content(schema = @Schema(implementation = SubmissionDto.class)))
-    @ApiResponse(responseCode = "400", description = "modelProvider or modelName missing, or unsupported currency",
-            content = @Content)
+    @ApiResponse(responseCode = "400", description = "agentId missing or not an agent of the user, or unsupported "
+            + "currency", content = @Content)
     @ApiResponse(responseCode = "403", description = "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider",
             content = @Content)
     @PostMapping("/offers")
@@ -92,6 +92,9 @@ public class MarketController {
             return CompletableFuture.completedFuture(ResponseEntity.status(HttpStatus.FORBIDDEN).build());
         }
         OfferDto prepared = preparer.prepare(offer);
+        if (!market.isAgentOwnedBy(prepared.agentId(), user.appUserId())) {
+            throw new InvalidMarketRequestException("Agent " + prepared.agentId() + " not found");
+        }
         Currency currency = submissionMapper.responseCurrency(user);
         Submission submission = market.acceptOffer(prepared, user.appUserId());
         return submission.result().thenApply(result -> submissionMapper.toResponse(submission.id(), result, currency));

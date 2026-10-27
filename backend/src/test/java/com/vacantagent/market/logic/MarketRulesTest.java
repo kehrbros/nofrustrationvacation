@@ -17,6 +17,7 @@ import static com.vacantagent.market.MarketFixtures.bookOffer;
 import static com.vacantagent.market.MarketFixtures.bookOrder;
 import static com.vacantagent.market.MarketFixtures.emptyOffer;
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
+import static com.vacantagent.market.MarketFixtures.offer;
 import static com.vacantagent.market.MarketFixtures.withId;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -95,8 +96,7 @@ class MarketRulesTest {
     private boolean canMatch(String orderProvider, String orderModel, String offerProvider, String offerModel) {
         BookOrder order = new BookOrder(withId(new ConsumerOrder(null, null, null, null, orderProvider, orderModel, null, null), 1),
                 1_00, 1_00);
-        BookOffer offer = new BookOffer(withId(new ProviderOffer(null, null, null, offerProvider, offerModel,
-                null, null, null, null, null), 1), 1_00, 1_00);
+        BookOffer offer = new BookOffer(withId(offer(0, offerProvider, offerModel), 1), 1_00, 1_00);
         return rules.canMatch(order, offer);
     }
 

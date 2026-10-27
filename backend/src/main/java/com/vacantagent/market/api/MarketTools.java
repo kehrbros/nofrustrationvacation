@@ -81,7 +81,7 @@ public class MarketTools {
     }
 
     @McpTool(name = "place_offer", description = "Sell LLM access. Matched against the highest-paying fitting order "
-            + "for its model. If none fits, the offer waits in the market until offeredUntil. Returns MATCHED with "
+            + "for the model of its agent. If none fits, the offer waits in the market until offeredUntil. Returns MATCHED with "
             + "the agreement, RESTING, or REJECTED with a reason. Requires a completed provider onboarding (linked "
             + "PayPal account and an agent).")
     public SubmissionDto placeOffer(
@@ -91,10 +91,8 @@ public class MarketTools {
             String pricePerMillionOutputTokens,
             @McpToolParam(description = "ISO 4217 currency of both prices: USD, EUR, GBP or CHF")
             String currency,
-            @McpToolParam(description = "Provider of the offered model, e.g. \"openai\"")
-            String modelProvider,
-            @McpToolParam(description = "Offered model, e.g. \"gpt-5\"")
-            String modelName,
+            @McpToolParam(description = "Id of one of your agents, see /api/v1/agents. Its model is offered.")
+            Long agentId,
             @McpToolParam(description = "End of the offer and of any agreement made from it, ISO 8601 date-time "
                     + "with offset. Missing means no end.", required = false)
             @Nullable String offeredUntil,
@@ -106,8 +104,10 @@ public class MarketTools {
                     + "agent before placing offers");
         }
         OfferDto offer = preparer.prepare(new OfferDto(money(pricePerMillionInputTokens, currency),
-                money(pricePerMillionOutputTokens, currency), dateTime(offeredUntil), modelProvider, modelName,
-                totalTokens));
+                money(pricePerMillionOutputTokens, currency), dateTime(offeredUntil), agentId, totalTokens));
+        if (!market.isAgentOwnedBy(agentId, user.appUserId())) {
+            throw new InvalidMarketRequestException("Agent " + agentId + " not found");
+        }
         Currency responseCurrency = submissionMapper.responseCurrency(user);
         Submission submission = market.acceptOffer(offer, user.appUserId());
         return submissionMapper.toDto(submission.id(), await(submission, GRACE), responseCurrency);
