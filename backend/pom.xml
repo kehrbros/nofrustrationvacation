@@ -79,10 +79,16 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- MCP server for agents, tools in market/api/MarketTools -->
+        <!-- MCP server for agents, tools in market/api/MarketTools, agent/api/AgentTools, llm/api/LlmTools -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+
+        <!-- Chat client for the agents' LLM APIs, built per agent in llm/logic/ChatModelFactory; no starter, no global key -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
         </dependency>
 
         <dependency>

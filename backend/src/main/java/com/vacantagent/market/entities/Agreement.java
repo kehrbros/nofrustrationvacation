@@ -44,6 +44,12 @@ public class Agreement extends AbstractEntity {
     protected Agreement() {
     }
 
+    /** Cost of a call at the agreed prices, input and output tokens priced separately. */
+    public Money costFor(long promptTokens, long completionTokens) {
+        return agreedPricePerMillionInputTokens.costFor(promptTokens)
+                .plus(agreedPricePerMillionOutputTokens.costFor(completionTokens));
+    }
+
     /**
      * Neither used nor agreed since {@code cutoff}; then calls are refused and the offer is free again.
      * Once idle, no call can be recorded anymore, so the moment an agreement becomes idle never moves.

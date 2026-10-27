@@ -10,7 +10,7 @@
 - Verschlüsselt mit AES-256-GCM (`common.crypto.SecretCipher`), zufälliger IV je Wert, Format `v1:Base64(IV + Ciphertext + Tag)`.
 - Schlüssel aus `VACANTAGENT_ENCRYPTION_KEY` (`vacantagent.secrets.encryption-key`, 32 Byte Base64, z. B. `openssl rand -base64 32`). Nie committen, wie die PayPal-Zugangsdaten.
 - Ohne Schlüssel: temporärer Zufallsschlüssel beim Start (Warnung im Log). Passt zur In-Memory-H2; mit persistenter DB wären gespeicherte Keys nach einem Neustart unlesbar.
-- Klartext nur über `AgentLogic.apiKey(agentId)` für den LLM-Proxy, nie loggen.
+- Klartext nur über `AgentLogic.apiKey(agentId)` für den LLM-Proxy (`LlmLogic`, siehe [llm.md](llm.md)), nie loggen.
 
 ## Offen
 

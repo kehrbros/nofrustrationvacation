@@ -41,4 +41,9 @@ public class ProviderOffer extends AbstractEntity {
 
     protected ProviderOffer() {
     }
+
+    /** {@code null} available tokens mean no limit. */
+    public boolean hasTokensLeft() {
+        return availableTokens == null || availableTokens > 0;
+    }
 }

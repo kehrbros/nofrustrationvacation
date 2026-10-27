@@ -15,6 +15,7 @@ import com.vacantagent.market.matching.entities.OrderBook;
 import com.vacantagent.user.entities.AppUser;
 import com.vacantagent.user.logic.AppUserProvisioning;
 import jakarta.persistence.EntityManager;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.vacantagent.market.MarketFixtures.emptyOrder;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,11 +53,23 @@ class MarketLogicRestoreTest {
 
     /** Offers reference an existing agent (foreign key). */
     private long agentId;
+    /** In persist order, so removing them in reverse respects the foreign keys. */
+    private final List<Object> persisted = new ArrayList<>();
 
     @BeforeEach
     void setUp() {
         long appUserId = appUserProvisioning.findOrCreate("restore-user", null, null).getId();
         agentId = agentLogic.create(appUserId, "model", "provider", null, "sk-test-12345678").getId();
+    }
+
+    /**
+     * The database is shared by all test contexts and each context's market restores waiting entries from it at
+     * startup, so the orders and offers here, which fit any model, would take counterparts in other tests.
+     */
+    @AfterEach
+    void removePersisted() {
+        transactionTemplate.executeWithoutResult(status ->
+                persisted.reversed().forEach(entity -> entityManager.remove(entityManager.merge(entity))));
     }
 
     @Test
@@ -153,6 +168,7 @@ class MarketLogicRestoreTest {
 
     private <T> T persist(T entity) {
         transactionTemplate.executeWithoutResult(status -> entityManager.persist(entity));
+        persisted.add(entity);
         return entity;
     }
 }

@@ -4,7 +4,6 @@ import com.vacantagent.accounting.data.PayoutAccountRepository;
 import com.vacantagent.accounting.data.PayoutRepository;
 import com.vacantagent.accounting.entities.PayoutAccount;
 import com.vacantagent.accounting.entities.PayoutStatus;
-import com.vacantagent.accounting.logic.InsufficientBalanceException;
 import com.vacantagent.accounting.logic.PayoutLogic;
 import com.vacantagent.accounting.logic.TopUpLogic;
 import com.vacantagent.accounting.logic.UsageBilling;
@@ -358,19 +357,18 @@ class AccountingFlowTest {
     // --- usage
 
     @Test
-    void usageMovesCreditToEarningsOrNothing() throws Exception {
+    void usageMovesCreditToEarningsAndMayTakeTheCreditBelowZero() throws Exception {
         long consumer = newUser();
         credit(consumer, "1.00");
 
         usageBilling.settle(1L, consumer, appUserId, Money.of("0.75"));
-        assertThatThrownBy(() -> usageBilling.settle(2L, consumer, appUserId, Money.of("0.30")))
-                .isInstanceOf(InsufficientBalanceException.class);
+        usageBilling.settle(2L, consumer, appUserId, Money.of("0.30"));
 
         perform(get("/api/v1/accounting/balances").param("currency", "USD"))
-                .andExpect(jsonPath("$.earnings.amount").value("0.75"))
+                .andExpect(jsonPath("$.earnings.amount").value("1.05"))
                 .andExpect(jsonPath("$.credit.amount").value("0.00"));
         mockMvc.perform(get("/api/v1/accounting/balances").param("currency", "USD").with(as(consumer)))
-                .andExpect(jsonPath("$.credit.amount").value("0.25"));
+                .andExpect(jsonPath("$.credit.amount").value("-0.05"));
     }
 
     @Test
