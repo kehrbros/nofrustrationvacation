@@ -57,6 +57,21 @@ public class AccountLedger {
                 OffsetDateTime.now(clock)));
     }
 
+    /**
+     * Like {@link #debit}, but the balance may go below zero, for usage that was already delivered. Only
+     * {@link AccountType#CREDIT} accounts may go below zero. Must run inside the caller's transaction.
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void debitAllowingNegative(long appUserId, AccountType type, Money amount, EntryType entryType,
+                                      @Nullable Long referenceId) {
+        if (type != AccountType.CREDIT) throw new IllegalArgumentException("Only CREDIT may go below zero: " + type);
+        requirePositive(amount);
+        Account account = account(appUserId, type);
+        accountRepository.addToBalanceAllowingNegative(account.getId(), amount.amount().negate());
+        ledgerEntryRepository.save(new LedgerEntry(account, entryType, Money.ZERO.minus(amount), referenceId,
+                OffsetDateTime.now(clock)));
+    }
+
     @Transactional(readOnly = true)
     public Money balance(long appUserId, AccountType type) {
         return accountRepository.findByAppUserIdAndType(appUserId, type).map(Account::getBalance).orElse(Money.ZERO);

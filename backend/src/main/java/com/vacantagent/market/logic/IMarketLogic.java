@@ -2,11 +2,14 @@ package com.vacantagent.market.logic;
 
 import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
+import com.vacantagent.market.entities.Agreement;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.entities.Submission;
 import com.vacantagent.market.matching.MatchResult;
+import jakarta.annotation.Nullable;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -17,6 +20,14 @@ import java.util.concurrent.CompletableFuture;
 public interface IMarketLogic {
     /** @param appUserId owner of the new order, the authenticated user */
     Submission acceptOrder(OrderDto order, long appUserId);
+
+    /**
+     * Like {@link #acceptOrder}, but the result completes only when the order's wait ends: {@code Matched} once the
+     * agreement is persisted (on arrival or later), {@code Rejected} if refused or its wait time is over,
+     * {@code Cancelled} if cancelled. Fails if the agreement could not be persisted or the market stopped.
+     * An order without wait time waits until matched or cancelled, so callers bound the wait and cancel.
+     */
+    Submission acceptOrderAndAwaitMatch(OrderDto order, long appUserId);
 
     CompletableFuture<MatchResult> cancelOrder(long orderId);
 
@@ -30,6 +41,9 @@ public interface IMarketLogic {
 
     /** False if the offer does not exist or belongs to someone else. */
     boolean isOfferOwnedBy(long offerId, long appUserId);
+
+    /** False if the agent does not exist or belongs to someone else. */
+    boolean isAgentOwnedBy(long agentId, long appUserId);
 
     /** Sends an already persisted offer back into the market, e.g. after its agreement became idle. */
     CompletableFuture<MatchResult> resubmitOffer(ProviderOffer offer);
@@ -51,4 +65,25 @@ public interface IMarketLogic {
      *         must then be refused
      */
     boolean recordAgreementSuccess(long agreementId);
+
+    /**
+     * Newest agreement of the consumer that may serve a call now: still valid, not idle, its offer has tokens left.
+     * Its offer and the offer's provider are loaded.
+     *
+     * @param modelProvider only offers of this provider, {@code null} for any
+     * @param modelName     only offers of this model, {@code null} for any
+     */
+    Optional<Agreement> findActiveAgreement(long consumerAppUserId, @Nullable String modelProvider,
+                                            @Nullable String modelName);
+
+    /**
+     * Records a successful call on the offer: subtracts {@code tokens} from its available tokens (never below zero,
+     * unlimited stays unlimited) and sets {@code lastSuccessAt}. Must run inside the caller's transaction.
+     *
+     * @return the offer as updated
+     */
+    ProviderOffer recordOfferSuccess(long offerId, long tokens, OffsetDateTime at);
+
+    /** Records a failed call on the offer: sets {@code lastErrorAt}. Must run inside the caller's transaction. */
+    void recordOfferError(long offerId, OffsetDateTime at);
 }

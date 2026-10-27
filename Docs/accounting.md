@@ -10,14 +10,14 @@
   - Grund für die Trennung: eingezahltes Geld soll nicht direkt wieder ausgezahlt werden können (Gebühren, Geldwäsche-Risiko).
 - **Ersetzt `app_user.account_balance`:** `V11__accounting.sql` übernimmt vorhandene Guthaben als `CREDIT` mit Buchung `OPENING_BALANCE` und löscht die Spalte. `GET /api/v1/users/me` liefert kein `accountBalance` mehr, Kontostände kommen aus `GET /api/v1/accounting/balances`.
 - **Buchungen** (`LedgerEntry`): nur anhängen, nie ändern; Summe der Buchungen = Kontostand. Typen: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` zeigt auf Aufladung, Auszahlung oder Vereinbarung.
-- **`AccountLedger`:** `credit`/`debit` nur innerhalb einer Transaktion (`MANDATORY`). Der Kontostand ändert sich mit einem atomaren `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: keine verlorenen Updates, nie negativ, keine Locks (Test mit parallelen Abbuchungen). Zusätzlich DB-Constraint `balance >= 0`.
+- **`AccountLedger`:** `credit`/`debit` nur innerhalb einer Transaktion (`MANDATORY`). Der Kontostand ändert sich mit einem atomaren `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: keine verlorenen Updates, nie negativ, keine Locks (Test mit parallelen Abbuchungen). Ausnahme `debitAllowingNegative`: nur für `CREDIT`, ohne Untergrenze, für bereits gelieferte LLM-Nutzung. Zusätzlich DB-Constraint `type = 'CREDIT' OR balance >= 0` (`V14__credit_may_go_negative.sql`).
 
 ## Auszahlungskonto verknüpfen (Provider)
 
 - `PayoutAccount` (auditiert): `payer_id` von PayPal, E-Mail, verifiziert ja/nein. Ein PayPal-Konto gehört höchstens zu einem Nutzer (`PAYPAL_ACCOUNT_IN_USE`).
 - Ablauf:
   1. `POST /api/v1/accounting/payout-account/paypal/authorization` → zufälliger `state` (32 Byte) wird für den Nutzer gespeichert, Antwort ist die PayPal-Login-URL.
-  2. PayPal leitet auf `/paypal/verbunden?code=…&state=…` (Frontend) zurück.
+  2. PayPal leitet auf `/paypal/connected?code=…&state=…` (Frontend) zurück.
   3. `POST /api/v1/accounting/payout-account/paypal {code, state}`: `state` muss vom selben Nutzer sein, ist 15 min gültig (`link-state-ttl`) und nur einmal verwendbar (CSRF-Schutz). Danach Code gegen Kontodaten tauschen.
 - `DELETE /api/v1/accounting/payout-account` trennt, solange keine Auszahlung offen ist (`PAYOUTS_OPEN`).
 - Teil des Provider-Onboardings, siehe [onboarding.md](onboarding.md).
@@ -38,7 +38,7 @@
 
 ## Nutzungsabrechnung
 
-- `UsageBilling.settle(agreementId, consumer, provider, cost)`: belastet `CREDIT` des Consumers und schreibt `EARNINGS` des Providers gut, beides oder nichts. Reicht das Guthaben nicht → `InsufficientBalanceException`. Aufrufer wird der LLM-Proxy (noch nicht umgesetzt).
+- `UsageBilling.settle(agreementId, consumer, provider, cost)`: belastet `CREDIT` des Consumers und schreibt `EARNINGS` des Providers gut, beides oder nichts. Die Nutzung ist schon geliefert, deshalb darf `CREDIT` dabei negativ werden; weitere Prompts lehnt `LlmLogic` ab, bis das Guthaben wieder positiv ist. Aufrufer ist `LlmLogic`, siehe [llm.md](llm.md).
 
 ## API-Fehler
 

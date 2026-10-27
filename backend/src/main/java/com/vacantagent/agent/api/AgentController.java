@@ -4,6 +4,7 @@ import com.vacantagent.agent.dto.AgentDto;
 import com.vacantagent.agent.dto.ApiKeyDto;
 import com.vacantagent.agent.dto.CreateAgentDto;
 import com.vacantagent.agent.entities.Agent;
+import com.vacantagent.agent.logic.AgentInUseException;
 import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.agent.logic.InvalidAgentException;
 import com.vacantagent.user.security.CurrentUser;
@@ -65,6 +66,7 @@ public class AgentController {
     @Operation(summary = "Remove an agent")
     @ApiResponse(responseCode = "204", description = "Removed")
     @ApiResponse(responseCode = "404", description = "Unknown or of another user", content = @Content)
+    @ApiResponse(responseCode = "409", description = "Still used by offers", content = @Content)
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteAgent(@AuthenticationPrincipal CurrentUser user,
                                             @Parameter(description = "Agent id") @PathVariable long id) {
@@ -76,7 +78,12 @@ public class AgentController {
         return ResponseEntity.badRequest().build();
     }
 
-    private static AgentDto toDto(Agent agent) {
+    @ExceptionHandler(AgentInUseException.class)
+    public ResponseEntity<Void> handleAgentInUse() {
+        return ResponseEntity.status(HttpStatus.CONFLICT).build();
+    }
+
+    static AgentDto toDto(Agent agent) {
         return new AgentDto(agent.getId(), agent.getName(), agent.getModelProvider(), agent.getBaseUrl(),
                 agent.getApiKeyHint(), agent.getCreatedAt());
     }

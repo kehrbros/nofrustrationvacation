@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.Currency;
 
-/** Maps matching results to HTTP responses. Agreed prices are shown in the user's preferred currency. */
+/** Maps matching results to tool results and HTTP responses. Agreed prices are shown in the user's preferred currency. */
 @Component
 @RequiredArgsConstructor
 public class SubmissionDtoMapper {
@@ -28,17 +28,23 @@ public class SubmissionDtoMapper {
         return currencyConversionService.responseCurrency(null, appUserSettings.get(user.appUserId()).getPreferredCurrency());
     }
 
-    /** 201 for matched or resting, 422 for rejected. The persisted id is returned in every case. */
-    public ResponseEntity<SubmissionDto> toResponse(long id, MatchResult result, Currency currency) {
+    /** The persisted id is returned in every case. */
+    public SubmissionDto toDto(long id, MatchResult result, Currency currency) {
         return switch (result) {
-            case MatchResult.Matched matched -> ResponseEntity.status(HttpStatus.CREATED)
-                    .body(new SubmissionDto(id, SubmissionStatus.MATCHED, null, toDto(matched.agreement(), currency)));
-            case MatchResult.Resting resting -> ResponseEntity.status(HttpStatus.CREATED)
-                    .body(new SubmissionDto(id, SubmissionStatus.RESTING, null, null));
-            case MatchResult.Rejected rejected -> ResponseEntity.status(422)
-                    .body(new SubmissionDto(id, SubmissionStatus.REJECTED, rejected.reason(), null));
+            case MatchResult.Matched matched ->
+                    new SubmissionDto(id, SubmissionStatus.MATCHED, null, toDto(matched.agreement(), currency));
+            case MatchResult.Resting resting -> new SubmissionDto(id, SubmissionStatus.RESTING, null, null);
+            case MatchResult.Rejected rejected -> new SubmissionDto(id, SubmissionStatus.REJECTED, rejected.reason(), null);
+            case MatchResult.Cancelled cancelled -> new SubmissionDto(id, SubmissionStatus.CANCELLED, null, null);
             default -> throw new IllegalStateException("Unexpected result for a submission: " + result);
         };
+    }
+
+    /** 201 for matched or resting, 422 for rejected. The persisted id is returned in every case. */
+    public ResponseEntity<SubmissionDto> toResponse(long id, MatchResult result, Currency currency) {
+        SubmissionDto dto = toDto(id, result, currency);
+        return ResponseEntity.status(dto.status() == SubmissionStatus.REJECTED ? 422 : HttpStatus.CREATED.value())
+                .body(dto);
     }
 
     /** 204 if removed from the book, 404 if it was not waiting. */
@@ -57,4 +63,4 @@ public class SubmissionDtoMapper {
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionInputTokens(), currency, MoneyRounding.PRICE),
                 currencyConversionService.toDto(agreement.getAgreedPricePerMillionOutputTokens(), currency, MoneyRounding.PRICE));
     }
-}
+}

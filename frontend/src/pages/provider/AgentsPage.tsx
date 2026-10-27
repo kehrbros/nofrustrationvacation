@@ -53,7 +53,11 @@ export default function AgentsPage() {
   };
 
   const remove = async (agent: AgentDto) => {
-    const { error } = await deleteAgent({ path: { id: agent.id } });
+    const { error, response } = await deleteAgent({ path: { id: agent.id } });
+    if (response?.status === 409) {
+      void message.error(`${agent.name} bedient noch Angebote und kann nicht entfernt werden.`);
+      return;
+    }
     if (error) {
       void message.error('Der Agent konnte nicht entfernt werden.');
       return;
@@ -124,11 +128,16 @@ export default function AgentsPage() {
         </Flex>
         <Card title="Agent hinzufügen" style={{ flex: '1 1 340px' }}>
           <Form form={form} layout="vertical" requiredMark={false} onFinish={add} initialValues={{ modelProvider: 'openai' }}>
-            <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Gib dem Agent einen Namen.' }]}>
-              <Input placeholder="z. B. Team-Zugang OpenAI" maxLength={100} />
-            </Form.Item>
             <Form.Item name="modelProvider" label="Anbieter" rules={[{ required: true, message: 'Wähle den Anbieter.' }]}>
               <AutoComplete options={MODEL_PROVIDERS.map((value) => ({ value }))} />
+            </Form.Item>
+            <Form.Item
+              name="name"
+              label="Modell"
+              extra="Angebote dieses Agents verkaufen genau dieses Modell."
+              rules={[{ required: true, message: 'Gib das Modell an.' }]}
+            >
+              <Input placeholder="z. B. gpt-5" maxLength={100} />
             </Form.Item>
             <Form.Item name="baseUrl" label="Endpunkt (optional)" extra="Nur für eigene, OpenAI-kompatible Endpunkte.">
               <Input placeholder="https://…" />

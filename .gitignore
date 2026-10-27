@@ -89,3 +89,6 @@ http-client.private.env.json
 backend/config/
 .env
 *.env.local
+
+# H2 database files
+*.db

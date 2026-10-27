@@ -23,15 +23,15 @@ public class MarketRequestPreparer {
                 order.marketWaitTime(), modelProvider, modelName);
     }
 
-    /** An offer always sells one specific model. */
+    /**
+     * An offer always sells the one model of its agent. Whether the agent exists and belongs to the user is checked
+     * by the caller.
+     */
     public OfferDto prepare(OfferDto offer) {
-        String modelProvider = trimToNull(offer.modelProvider());
-        String modelName = trimToNull(offer.modelName());
-        if (modelProvider == null || modelName == null) {
-            throw new InvalidMarketRequestException("Offer requires modelProvider and modelName");
+        if (offer.agentId() == null) {
+            throw new InvalidMarketRequestException("Offer requires agentId");
         }
-        return new OfferDto(offer.pricePerMillionInputTokens(), offer.pricePerMillionOutputTokens(),
-                offer.offeredUntil(), modelProvider, modelName, offer.totalTokens());
+        return offer;
     }
 
     private static @Nullable String trimToNull(@Nullable String value) {

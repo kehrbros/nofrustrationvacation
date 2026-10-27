@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.market.config.MarketProperties;
 import com.vacantagent.market.data.AgreementRepository;
 import com.vacantagent.market.data.AgreementWriter;
@@ -17,17 +18,25 @@ import com.vacantagent.market.mapper.OrderMapper;
 import com.vacantagent.market.matching.MatchResult;
 import com.vacantagent.market.matching.entities.BookOffer;
 import com.vacantagent.market.matching.entities.BookOrder;
+import com.vacantagent.market.matching.entities.OrderBook;
+import jakarta.annotation.Nullable;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Limit;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Coordinates the market around the {@link MatchingEngine}, which only matches:
@@ -46,16 +55,21 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class MarketLogic implements IMarketLogic {
 
+    private static final MatchResult WAIT_OVER = new MatchResult.Rejected("Order wait time is over");
+
     private final MatchingEngine engine;
     private final AgreementWriter writer;
     private final MarketRules rules;
     private final ConsumerOrderRepository orders;
     private final ProviderOfferRepository offers;
+    private final AgentLogic agentLogic;
     private final AgreementRepository agreements;
     private final OrderMapper orderMapper;
     private final OfferMapper offerMapper;
     private final MarketProperties props;
     private final Clock clock;
+    /** Orders whose caller waits for the end of the wait, see {@link #acceptOrderAndAwaitMatch}. */
+    private final Map<Long, CompletableFuture<MatchResult>> waiters = new ConcurrentHashMap<>();
 
     private volatile OffsetDateTime restoredAt;
 
@@ -80,6 +94,7 @@ public class MarketLogic implements IMarketLogic {
     @PreDestroy
     void stop() throws InterruptedException {
         engine.stop();
+        waiters.keySet().forEach(id -> endWait(id, null, new IllegalStateException("Market stopped")));
     }
 
     // ------------------------------------------------------------------ API
@@ -90,9 +105,25 @@ public class MarketLogic implements IMarketLogic {
         return new Submission(order.getId(), submit(new MatchingEngine.SubmitOrder(BookOrder.from(order))));
     }
 
+    /** The waiter is registered before the order enters the engine, so no match can be missed. */
+    @Override
+    public Submission acceptOrderAndAwaitMatch(OrderDto dto, long appUserId) {
+        ConsumerOrder order = orders.save(orderMapper.toEntity(dto, appUserId));
+        BookOrder bookOrder = BookOrder.from(order);
+        CompletableFuture<MatchResult> outcome = new CompletableFuture<>();
+        waiters.put(order.getId(), outcome);
+        submit(new MatchingEngine.SubmitOrder(bookOrder)).whenComplete((result, error) -> {
+            if (result instanceof MatchResult.Resting) endWaitAt(bookOrder);
+            else endWait(order.getId(), result, error);     // no-op if the match already ended it
+        });
+        return new Submission(order.getId(), outcome);
+    }
+
     @Override
     public CompletableFuture<MatchResult> cancelOrder(long orderId) {
-        return submit(new MatchingEngine.CancelOrder(orderId));
+        return submit(new MatchingEngine.CancelOrder(orderId)).whenComplete((result, error) -> {
+            if (result instanceof MatchResult.Cancelled) endWait(orderId, result, null);
+        });
     }
 
     @Override
@@ -114,6 +145,11 @@ public class MarketLogic implements IMarketLogic {
     @Override
     public boolean isOfferOwnedBy(long offerId, long appUserId) {
         return offers.existsByIdAndAppUserId(offerId, appUserId);
+    }
+
+    @Override
+    public boolean isAgentOwnedBy(long agentId, long appUserId) {
+        return agentLogic.isOwnedBy(appUserId, agentId);
     }
 
     @Override
@@ -145,6 +181,28 @@ public class MarketLogic implements IMarketLogic {
         return true;
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public Optional<Agreement> findActiveAgreement(long consumerAppUserId, @Nullable String modelProvider,
+                                                   @Nullable String modelName) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        return agreements.findActive(consumerAppUserId, modelProvider, modelName, now,
+                now.minus(props.agreementIdleTimeout()), Limit.of(1)).stream().findFirst();
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public ProviderOffer recordOfferSuccess(long offerId, long tokens, OffsetDateTime at) {
+        offers.recordSuccess(offerId, tokens, at);
+        return offers.findById(offerId).orElseThrow();      // fresh: the update cleared the persistence context
+    }
+
+    @Override
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordOfferError(long offerId, OffsetDateTime at) {
+        offers.recordError(offerId, at);
+    }
+
     // ------------------------------------------------------------------ coordination
 
     /**
@@ -153,9 +211,48 @@ public class MarketLogic implements IMarketLogic {
      * already left the book. The hand-off runs on the engine thread and does not block it.
      */
     private CompletableFuture<MatchResult> submit(MatchingEngine.Command command) {
-        return engine.submit(command).thenCompose(result -> result instanceof MatchResult.Matched matched
-                ? writer.enqueue(matched.agreement()).thenApply(stored -> result)
-                : CompletableFuture.completedFuture(result));
+        CompletableFuture<MatchResult> reply = new CompletableFuture<>();
+        CompletableFuture<MatchResult> result = reply.thenCompose(r -> r instanceof MatchResult.Matched matched
+                ? persist(matched)
+                : CompletableFuture.completedFuture(r));
+        engine.submit(command, reply);      // stages attached first, so persist runs on the engine thread
+        return result;
+    }
+
+    /** Runs on the engine thread before the next command, so {@link #endWaitAt} never misses this match. */
+    private CompletableFuture<MatchResult> persist(MatchResult.Matched matched) {
+        CompletableFuture<MatchResult> waiter = waiters.remove(matched.agreement().getConsumerOrder().getId());
+        CompletableFuture<MatchResult> result = writer.enqueue(matched.agreement()).thenApply(stored -> matched);
+        if (waiter != null) result.whenComplete((r, e) -> {
+            if (e != null) waiter.completeExceptionally(e);
+            else waiter.complete(r);
+        });
+        return result;
+    }
+
+    /**
+     * Ends the wait once the order's wait time is over. The cancel runs through the engine after any earlier match
+     * of the order, so a waiter still registered then means no match: the order was waiting, swept or replaced.
+     */
+    private void endWaitAt(BookOrder order) {
+        if (order.expiresAt() == OrderBook.NO_EXPIRY) return;
+        long delay = Math.max(0, order.expiresAt() - rules.nowMillis());
+        CompletableFuture.delayedExecutor(delay, TimeUnit.MILLISECONDS).execute(() -> {
+            if (!waiters.containsKey(order.id())) return;
+            try {
+                submit(new MatchingEngine.CancelOrder(order.id()))
+                        .whenComplete((result, error) -> endWait(order.id(), WAIT_OVER, error));
+            } catch (IllegalStateException e) {    // engine stopped
+                endWait(order.id(), null, e);
+            }
+        });
+    }
+
+    private void endWait(long orderId, @Nullable MatchResult result, @Nullable Throwable error) {
+        CompletableFuture<MatchResult> waiter = waiters.remove(orderId);
+        if (waiter == null) return;
+        if (error != null) waiter.completeExceptionally(error);
+        else waiter.complete(result);
     }
 
     /**

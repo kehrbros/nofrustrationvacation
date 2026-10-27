@@ -16,4 +16,4 @@
   - Agent hinterlegen → `/provider/agents`
 - Status kommt aus `ProviderOnboardingContext`; Seiten, die einen Schritt ändern, rufen `reload()`.
 - „Neues Angebot“ (`/provider/angebote/neu`) zeigt bis zum Abschluss statt des Formulars die offenen Schritte (`RequireProviderOnboarding`).
-- PayPal-Rücksprung `/paypal/verbunden` liegt außerhalb des Dashboards. `AuthProvider` verarbeitet OIDC-Parameter nur auf `/auth/callback` (`skipSigninCallback`), weil auch PayPal mit `code` und `state` zurückkommt.
+- PayPal-Rücksprung `/paypal/connected` liegt außerhalb des Dashboards. `AuthProvider` verarbeitet OIDC-Parameter nur auf `/auth/callback` (`skipSigninCallback`), weil auch PayPal mit `code` und `state` zurückkommt.

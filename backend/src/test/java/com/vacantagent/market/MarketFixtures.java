@@ -40,7 +40,12 @@ public final class MarketFixtures {
     }
 
     public static ProviderOffer emptyOffer() {
-        return new ProviderOffer(null, null, null, null, null, null, null, null, null, null);
+        return offer(0, null, null);
+    }
+
+    /** An offer of agent {@code agentId} for one provider + model, everything else empty. */
+    public static ProviderOffer offer(long agentId, String modelProvider, String modelName) {
+        return new ProviderOffer(null, null, null, agentId, modelProvider, modelName, null, null, null, null, null);
     }
 
     public static ConsumerOrder emptyOrder() {

@@ -17,4 +17,4 @@ public class MarketExceptionHandler {
     public ResponseEntity<Void> handleInvalidMarketRequest() {
         return ResponseEntity.badRequest().build();
     }
-}
+}

@@ -2,6 +2,7 @@ package com.vacantagent.market.data;
 
 import com.vacantagent.market.entities.ProviderOffer;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.OffsetDateTime;
@@ -30,4 +31,22 @@ public interface ProviderOfferRepository extends JpaRepository<ProviderOffer, Lo
     List<ProviderOffer> findAllAvailable(OffsetDateTime now, OffsetDateTime cutoff);
 
     boolean existsByIdAndAppUserId(long id, long appUserId);
+
+    /**
+     * Subtracts {@code tokens} from the available tokens (never below zero, {@code null} stays unlimited) and sets
+     * {@code lastSuccessAt}, in one statement, so concurrent calls on the offer never lose an update.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("""
+            UPDATE ProviderOffer o SET o.lastSuccessAt = :at,
+                o.availableTokens = CASE WHEN o.availableTokens IS NULL THEN o.availableTokens
+                                         WHEN o.availableTokens > :tokens THEN o.availableTokens - :tokens
+                                         ELSE 0 END
+            WHERE o.id = :id
+            """)
+    int recordSuccess(long id, long tokens, OffsetDateTime at);
+
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE ProviderOffer o SET o.lastErrorAt = :at WHERE o.id = :id")
+    int recordError(long id, OffsetDateTime at);
 }

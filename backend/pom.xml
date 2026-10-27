@@ -17,9 +17,30 @@
         <lombok.version>1.18.42</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
         <archunit.version>1.5.0</archunit.version>
+        <spring-ai.version>2.0.2</spring-ai.version>
         <!-- JDK 23+ no longer runs annotation processors (Lombok) from the classpath by default -->
         <maven.compiler.proc>full</maven.compiler.proc>
     </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <!-- Spring AI's BOM pins swagger-annotations to an older version than springdoc's swagger-core expects, the
+                 mismatch breaks the generated OpenAPI spec (path ids as strings, empty defaults). Keep in sync with
+                 swagger-core-jakarta of springdoc (mvn dependency:tree). -->
+            <dependency>
+                <groupId>io.swagger.core.v3</groupId>
+                <artifactId>swagger-annotations-jakarta</artifactId>
+                <version>2.2.47</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
     <dependencies>
         <!-- Spring Boot Starters -->
@@ -64,6 +85,18 @@
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
             <scope>runtime</scope>
+        </dependency>
+
+        <!-- MCP server for agents, tools in market/api/MarketTools, agent/api/AgentTools, llm/api/LlmTools -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-server-webmvc</artifactId>
+        </dependency>
+
+        <!-- Chat client for the agents' LLM APIs, built per agent in llm/logic/ChatModelFactory; no starter, no global key -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-openai</artifactId>
         </dependency>
 
         <dependency>

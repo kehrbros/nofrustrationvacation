@@ -1,12 +1,11 @@
 {
   "openapi" : "3.1.0",
-  "info" : {
-    "title" : "OpenAPI definition",
-    "version" : "v0"
-  },
   "servers" : [ {
     "url" : "http://localhost:8080",
     "description" : "Generated server url"
+  } ],
+  "security" : [ {
+    "oauth2" : [ ]
   } ],
   "tags" : [ {
     "description" : "Link the PayPal account for payouts",
@@ -437,6 +436,9 @@
           },
           "404" : {
             "description" : "Unknown or of another user"
+          },
+          "409" : {
+            "description" : "Still used by offers"
           }
         },
         "summary" : "Remove an agent",
@@ -477,7 +479,7 @@
     },
     "/api/v1/market/offers" : {
       "post" : {
-        "description" : "Matched against the highest-paying fitting order for its model. If none fits, the offer waits in the market until offeredUntil.",
+        "description" : "Matched against the highest-paying fitting order for the model of its agent. If none fits, the offer waits in the market until offeredUntil.",
         "operationId" : "placeOffer",
         "requestBody" : {
           "content" : {
@@ -501,7 +503,7 @@
             "description" : "Matched (agreement included) or waiting in the market"
           },
           "400" : {
-            "description" : "modelProvider or modelName missing, or unsupported currency"
+            "description" : "agentId missing or not an agent of the user, or unsupported currency"
           },
           "403" : {
             "description" : "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider"
@@ -706,7 +708,8 @@
             "example" : "openai"
           },
           "name" : {
-            "type" : "string"
+            "type" : "string",
+            "example" : "gpt-5"
           }
         },
         "required" : [ "apiKeyHint", "createdAt", "id", "modelProvider", "name" ]
@@ -804,7 +807,7 @@
           },
           "name" : {
             "type" : "string",
-            "example" : "Mein OpenAI-Zugang"
+            "example" : "gpt-5"
           }
         },
         "required" : [ "apiKey", "modelProvider", "name" ]
@@ -866,13 +869,11 @@
       "OfferDto" : {
         "type" : "object",
         "properties" : {
-          "modelName" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
+          "agentId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Agent of the user that serves the offer",
+            "example" : 42
           },
           "offeredUntil" : {
             "type" : [ "string", "null" ],
@@ -894,7 +895,7 @@
             "example" : 1000000
           }
         },
-        "required" : [ "modelName", "modelProvider", "pricePerMillionInputTokens", "pricePerMillionOutputTokens" ]
+        "required" : [ "agentId", "pricePerMillionInputTokens", "pricePerMillionOutputTokens" ]
       },
       "OrderDto" : {
         "type" : "object",
@@ -1061,7 +1062,7 @@
           },
           "status" : {
             "type" : "string",
-            "enum" : [ "MATCHED", "RESTING", "REJECTED" ]
+            "enum" : [ "MATCHED", "RESTING", "REJECTED", "CANCELLED" ]
           }
         }
       },
@@ -1119,6 +1120,20 @@
           }
         },
         "required" : [ "approveUrl", "topUp" ]
+      }
+    },
+    "securitySchemes" : {
+      "oauth2" : {
+        "flows" : {
+          "authorizationCode" : {
+            "authorizationUrl" : "http://localhost:8080/oauth2/authorize",
+            "scopes" : {
+              "openid" : ""
+            },
+            "tokenUrl" : "http://localhost:8080/oauth2/token"
+          }
+        },
+        "type" : "oauth2"
       }
     }
   }

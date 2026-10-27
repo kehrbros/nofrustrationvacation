@@ -1,5 +1,6 @@
 package com.vacantagent.market.logic;
 
+import com.vacantagent.agent.logic.AgentLogic;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.currency.dto.MoneyDto;
 import com.vacantagent.market.data.AgreementRepository;
@@ -45,6 +46,8 @@ class MarketLogicTest {
     private JdbcTemplate jdbcTemplate;
     @Autowired
     private AppUserProvisioning appUserProvisioning;
+    @Autowired
+    private AgentLogic agentLogic;
 
     private long user;
 
@@ -56,7 +59,7 @@ class MarketLogicTest {
     @Test
     void offerAndOrderArePersistedAgreeAndTheAgreementIsPersisted() {
         Submission offer = market.acceptOffer(new OfferDto(usd("10.00"), usd("12.50"),
-                null, "provider", "agree-model", 1_000_000L), user);
+                null, agent("agree-model"), 1_000_000L), user);
         assertThat(offer.result().join()).isInstanceOf(MatchResult.Resting.class);
 
         Submission order = market.acceptOrder(new OrderDto(usd("11.00"), usd("13.00"),
@@ -80,7 +83,7 @@ class MarketLogicTest {
     void entitiesArePersistedBeforeMatching() {
         Submission order = market.acceptOrder(new OrderDto(usd("1.00"), usd("1.00"), null, "provider", "persist-model"), user);
         Submission offer = market.acceptOffer(new OfferDto(usd("50.00"), usd("50.00"),
-                null, "provider", "persist-model", 500L), user);
+                null, agent("persist-model"), 500L), user);
 
         assertThat(orders.findById(order.id())).isPresent();
         ProviderOffer saved = offers.findById(offer.id()).orElseThrow();
@@ -102,7 +105,7 @@ class MarketLogicTest {
     void ordersAndOffersBelongToTheUserWhoPlacedThem() {
         long otherUser = appUserProvisioning.findOrCreate("other-broker-user", null, null).getId();
         Submission order = market.acceptOrder(new OrderDto(null, null, null, null, null), user);
-        Submission offer = market.acceptOffer(new OfferDto(null, null, null, "provider", "owner-model", 1L), user);
+        Submission offer = market.acceptOffer(new OfferDto(null, null, null, agent("owner-model"), 1L), user);
         order.result().join();
         offer.result().join();
 
@@ -114,6 +117,23 @@ class MarketLogicTest {
         assertThat(market.isOfferOwnedBy(Long.MAX_VALUE, user)).isFalse();
         assertThat(jdbcTemplate.queryForObject("SELECT app_user_id FROM consumer_order WHERE id = ?",
                 Long.class, order.id())).isEqualTo(user);
+    }
+
+    @Test
+    void offerSellsTheModelOfItsAgent() {
+        long otherUser = appUserProvisioning.findOrCreate("other-agent-user", null, null).getId();
+        long agentId = agent("agent-model");
+
+        Submission offer = market.acceptOffer(new OfferDto(null, null, null, agentId, 1L), user);
+        offer.result().join();
+
+        ProviderOffer saved = offers.findById(offer.id()).orElseThrow();
+        assertThat(saved.getAgentId()).isEqualTo(agentId);
+        assertThat(saved.getModelProvider()).isEqualTo("provider");
+        assertThat(saved.getModelName()).isEqualTo("agent-model");
+        assertThat(market.isAgentOwnedBy(agentId, user)).isTrue();
+        assertThat(market.isAgentOwnedBy(agentId, otherUser)).isFalse();
+        assertThat(market.isAgentOwnedBy(Long.MAX_VALUE, user)).isFalse();
     }
 
     @Test
@@ -146,9 +166,14 @@ class MarketLogicTest {
     /** Not submitted to the engine; priced high, so its offer stays waiting if the scheduled reaper releases it. */
     private Agreement agreement(OffsetDateTime agreedAt) {
         Money price = Money.of("900.00");
-        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, "provider", "record-model",
-                null, null, 1000L, 1000L, null));
+        ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agent("record-model"), "provider",
+                "record-model", null, null, 1000L, 1000L, null));
         return agreements.save(new Agreement(orders.save(emptyOrder()), offer, agreedAt, null, price, price));
+    }
+
+    /** A new agent of the user for {@code modelName} of {@code provider}; returns its id. */
+    private long agent(String modelName) {
+        return agentLogic.create(user, modelName, "provider", null, "sk-test-12345678").getId();
     }
 
     private static MoneyDto usd(String amount) {

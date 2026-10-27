@@ -18,7 +18,7 @@
   vacantagent.paypal.environment=${PAYPAL_ENVIRONMENT:sandbox}   # sandbox | live
   vacantagent.paypal.client-id=${PAYPAL_CLIENT_ID:}
   vacantagent.paypal.client-secret=${PAYPAL_CLIENT_SECRET:}
-  vacantagent.paypal.connect-redirect-uri=http://localhost:5173/paypal/verbunden
+  vacantagent.paypal.connect-redirect-uri=http://localhost:5173/paypal/connected
   vacantagent.paypal.checkout-return-url=http://localhost:5173/consumer/guthaben/paypal
   vacantagent.paypal.checkout-cancel-url=http://localhost:5173/consumer/guthaben/paypal?abgebrochen=1
   ```
@@ -31,7 +31,7 @@
 ## Einrichtung der PayPal-App (Sandbox)
 
 1. developer.paypal.com → Apps & Credentials → Sandbox → App öffnen, Client ID und Secret als Env-Variablen setzen.
-2. Features: **Log in with PayPal** aktivieren, Return URL `http://localhost:5173/paypal/verbunden` eintragen (muss exakt `connect-redirect-uri` entsprechen), E-Mail und Kontoinformationen (Payer ID, Verifizierungsstatus) anfordern.
+2. Features: **Log in with PayPal** aktivieren, Return URL `http://localhost:5173/paypal/connected` eintragen (muss exakt `connect-redirect-uri` entsprechen), E-Mail und Kontoinformationen (Payer ID, Verifizierungsstatus) anfordern.
 3. Features: **Payouts** aktivieren.
 4. Testen mit Sandbox-Personal-Accounts (Zahler und Provider).
 

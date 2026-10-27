@@ -96,9 +96,16 @@ public final class MatchingEngine {
      * inbox is full, which applies backpressure to producers during bursts.
      */
     public CompletableFuture<MatchResult> submit(Command command) {
+        return submit(command, new CompletableFuture<>());
+    }
+
+    /**
+     * Like {@link #submit(Command)}, with a reply the caller created. Stages attached to it before the call run on
+     * the engine thread before the next command, e.g. to hand off an agreement in order.
+     */
+    public CompletableFuture<MatchResult> submit(Command command, CompletableFuture<MatchResult> reply) {
         Objects.requireNonNull(command);
         if (thread == null) throw new IllegalStateException("Matching engine is not running");
-        CompletableFuture<MatchResult> reply = new CompletableFuture<>();
         try {
             inbox.put(new Envelope(command, reply));
         } catch (InterruptedException e) {

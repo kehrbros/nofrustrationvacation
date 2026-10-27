@@ -21,6 +21,8 @@ public record SubmissionDto(
         /** Waiting in the market for a counterpart. */
         RESTING,
         /** Refused by the market rules, see {@code reason}. */
-        REJECTED
+        REJECTED,
+        /** Cancelled while its caller waited for a match. */
+        CANCELLED
     }
 }
