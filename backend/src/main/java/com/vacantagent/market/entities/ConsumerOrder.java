@@ -2,7 +2,6 @@ package com.vacantagent.market.entities;
 
 import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
-import com.vacantagent.user.entities.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -31,9 +30,8 @@ public class ConsumerOrder extends AbstractEntity {
     /** Last call through the agreement. */
     private OffsetDateTime lastSuccessAt;
 
-    /** Who placed it; set from the authenticated request. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    private AppUser appUser;
+    /** Who placed it; set from the authenticated request. {@code null} for orders placed before owners were stored. */
+    private Long appUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     private MarketScheduling marketScheduling;

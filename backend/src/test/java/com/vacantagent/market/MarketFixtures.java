@@ -4,7 +4,6 @@ import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
 import com.vacantagent.market.matching.entities.BookOffer;
 import com.vacantagent.market.matching.entities.BookOrder;
-import com.vacantagent.user.entities.AppUser;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /** Builds entities with a given id for tests that run without a database. */
@@ -34,8 +33,7 @@ public final class MarketFixtures {
     /** An order of user {@code appUserId} for one provider + model; {@code null} means any. */
     public static BookOrder ownedBookOrder(long id, long maxInput, long maxOutput, long appUserId,
                                            String modelProvider, String modelName) {
-        AppUser owner = withId(AppUser.firstLogin("user-" + appUserId, null, null), appUserId);
-        return new BookOrder(withId(new ConsumerOrder(null, null, null, null, modelProvider, modelName, null, owner, null), id),
+        return new BookOrder(withId(new ConsumerOrder(null, null, null, null, modelProvider, modelName, null, appUserId, null), id),
                 maxInput, maxOutput);
     }
 

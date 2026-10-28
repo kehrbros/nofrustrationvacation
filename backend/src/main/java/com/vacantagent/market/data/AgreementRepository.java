@@ -28,11 +28,11 @@ public interface AgreementRepository extends JpaRepository<Agreement, Long> {
     /**
      * Agreements of the consumer that may serve calls at {@code now}, newest first: still valid, not idle (see
      * {@link #findIdleIds}), their offer has tokens left or no limit. A {@code null} provider or model matches any.
-     * Offer and provider are fetched, as callers read them outside the transaction.
+     * Order and offer are fetched, as callers read them outside the transaction.
      */
     @Query("""
-            SELECT a FROM Agreement a JOIN FETCH a.consumerOrder c JOIN FETCH a.providerOffer o JOIN FETCH o.appUser
-            WHERE c.appUser.id = :consumerAppUserId
+            SELECT a FROM Agreement a JOIN FETCH a.consumerOrder c JOIN FETCH a.providerOffer o
+            WHERE c.appUserId = :consumerAppUserId
               AND (a.validUntil IS NULL OR a.validUntil > :now)
               AND COALESCE(c.lastSuccessAt, a.agreedAt) >= :cutoff
               AND (o.availableTokens IS NULL OR o.availableTokens > 0)

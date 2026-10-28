@@ -230,7 +230,7 @@ class LlmProxyServiceTest {
         assertThat(completion.cost().amount()).isEqualByComparingTo("0.002");
         Agreement agreement = agreements.findById(completion.agreementId()).orElseThrow();
         assertThat(agreement.getProviderOffer().getId()).isEqualTo(offerId);
-        assertThat(agreement.getConsumerOrder().getAppUser().getId()).isEqualTo(consumer.getId());
+        assertThat(agreement.getConsumerOrder().getAppUserId()).isEqualTo(consumer.getId());
         assertThat(market.cancelOffer(offerId).join()).isInstanceOf(MatchResult.Cancelled.class);
     }
 
@@ -257,9 +257,9 @@ class LlmProxyServiceTest {
 
     private Agreement agreement(long availableTokens) {
         ProviderOffer offer = offers.save(new ProviderOffer(PRICE_INPUT, PRICE_OUTPUT, null, agentId, "provider",
-                "model", null, null, availableTokens, availableTokens, provider, null));
+                "model", null, null, availableTokens, availableTokens, provider.getId(), null));
         ConsumerOrder order = orders.save(new ConsumerOrder(PRICE_INPUT, PRICE_OUTPUT, null, OffsetDateTime.now(),
-                "provider", "model", null, consumer, null));
+                "provider", "model", null, consumer.getId(), null));
         return agreements.save(new Agreement(order, offer, OffsetDateTime.now(), null, PRICE_INPUT, PRICE_OUTPUT));
     }
 

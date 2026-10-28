@@ -132,9 +132,9 @@ class MarketLogicRestoreTest {
     void restoresOnlyTheOldestOrderOfAUserPerModel() {
         AppUser owner = appUserProvisioning.findOrCreate("restore-user", null, null);
         ConsumerOrder older = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", null, owner, null));
+                "restore-provider", "model", null, owner.getId(), null));
         ConsumerOrder newer = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", null, owner, null));
+                "restore-provider", "model", null, owner.getId(), null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOrders(engine, orders, rules);

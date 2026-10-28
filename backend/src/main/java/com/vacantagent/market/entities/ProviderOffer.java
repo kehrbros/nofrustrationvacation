@@ -2,7 +2,6 @@ package com.vacantagent.market.entities;
 
 import com.vacantagent.common.data.AbstractEntity;
 import com.vacantagent.common.money.Money;
-import com.vacantagent.user.entities.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -35,9 +34,8 @@ public class ProviderOffer extends AbstractEntity {
     private Long availableTokens;
     private Long totalTokens;
 
-    /** Who offers it; set from the authenticated request. */
-    @ManyToOne(fetch = FetchType.LAZY)
-    private AppUser appUser;
+    /** Who offers it; set from the authenticated request. {@code null} for offers placed before owners were stored. */
+    private Long appUserId;
 
     @ManyToOne(fetch = FetchType.LAZY)
     private MarketScheduling marketScheduling;

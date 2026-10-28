@@ -83,7 +83,7 @@ public class LlmProxyService {
                 .or(() -> orderAgreement(appUserId, providerKey, model, orderLimits))
                 .orElseThrow(() -> new LlmRequestException("No active agreement for the requested model"));
         ProviderOffer offer = agreement.getProviderOffer();
-        long providerAppUserId = offer.getAppUser().getId();
+        long providerAppUserId = offer.getAppUserId();
         Agent agent = agentLogic.findOwned(providerAppUserId, offer.getAgentId()).orElseThrow(() ->
                 new IllegalStateException("Agent " + offer.getAgentId() + " of offer " + offer.getId() + " not found"));
 

@@ -10,9 +10,6 @@ import com.vacantagent.market.dto.OfferDto;
 import com.vacantagent.market.dto.OrderDto;
 import com.vacantagent.market.entities.ConsumerOrder;
 import com.vacantagent.market.entities.ProviderOffer;
-import com.vacantagent.user.data.AppUserRepository;
-import com.vacantagent.user.entities.AppUser;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -33,14 +30,7 @@ class MapperTest {
 
     private final CurrencyConversionService currencyConversionService = new CurrencyConversionService(
             mock(ExchangeRateRepository.class), Clock.systemUTC(), List.of(), 4);
-    private final AppUserRepository appUserRepository = mock(AppUserRepository.class);
     private final AgentLogic agentLogic = mock(AgentLogic.class);
-    private final AppUser owner = AppUser.firstLogin("owner", null, null);
-
-    @BeforeEach
-    void setUp() {
-        when(appUserRepository.getReferenceById(7L)).thenReturn(owner);
-    }
 
     @Test
     void mapsOrderDtoToEntity() {
@@ -54,7 +44,7 @@ class MapperTest {
         assertThat(order.getCreatedAt()).isNotNull();
         assertThat(order.getModelProvider()).isEqualTo("provider");
         assertThat(order.getModelName()).isEqualTo("model");
-        assertThat(order.getAppUser()).isSameAs(owner);
+        assertThat(order.getAppUserId()).isEqualTo(7L);
     }
 
     @Test
@@ -83,7 +73,7 @@ class MapperTest {
         assertThat(offer.getTotalTokens()).isEqualTo(1000L);
         assertThat(offer.getAvailableTokens()).isEqualTo(1000L);
         assertThat(offer.getLastErrorAt()).isNull();
-        assertThat(offer.getAppUser()).isSameAs(owner);
+        assertThat(offer.getAppUserId()).isEqualTo(7L);
     }
 
     @Test
@@ -95,11 +85,11 @@ class MapperTest {
     }
 
     private OfferMapper offerMapper() {
-        return new OfferMapper(currencyConversionService, appUserRepository, agentLogic);
+        return new OfferMapper(currencyConversionService, agentLogic);
     }
 
     private OrderMapper orderMapper() {
-        return new OrderMapper(currencyConversionService, appUserRepository, Clock.systemUTC());
+        return new OrderMapper(currencyConversionService, Clock.systemUTC());
     }
 
     private static MoneyDto usd(String amount) {
