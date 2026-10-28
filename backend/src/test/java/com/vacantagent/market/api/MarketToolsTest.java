@@ -231,4 +231,4 @@ class MarketToolsTest {
                 null, null, 1000L, 1000L, null, null), 7);
         return withId(new Agreement(order, offer, OffsetDateTime.now(), null, Money.of("10.00"), Money.of("12.50")), 99);
     }
-}
+}

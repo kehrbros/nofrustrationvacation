@@ -94,4 +94,4 @@ startup and starting/stopping the engine. `AgreementReaper` and `BookExpirySweep
     - If a user cancelled an order and placed a new one for the same model, only the older (cancelled) one comes back; the newer one is skipped as a duplicate and logged.
 - The book holds entity snapshots: a provider error recorded after an offer entered the book is not seen. Cancel the offer (`MarketLogic.cancelOffer`) to take it out.
 - Run on a single instance, because each instance would have its own book.
-- The expiry queue drops matched or cancelled entries only when their expiry comes up, so an offer whose `offeredUntil` is far in the future keeps a small record in memory until then.
+- The expiry queue drops matched or cancelled entries only when their expiry comes up, so an offer whose `offeredUntil` is far in the future keeps a small record in memory until then.

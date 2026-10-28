@@ -27,3 +27,5 @@ Monetary values (single base currency USD, `Money` type, exchange rates and curr
 Accounting (credit and earnings accounts, top-ups and payouts via PayPal) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).
 
 Providers complete an onboarding checklist (PayPal account, at least one agent with API key) before placing offers, see [Docs/onboarding.md](Docs/onboarding.md) and [Docs/agents.md](Docs/agents.md).
+
+Running PostgreSQL, backend and frontend as a Docker Swarm stack (`docker-compose.yml`, profile `postgres`, credentials as Docker secrets) is described in [Docs/deployment.md](Docs/deployment.md). For a local run with PostgreSQL that builds all images from source, copy `.env.example` to `.env` and run `docker compose -f docker-compose.local.yml up --build`.

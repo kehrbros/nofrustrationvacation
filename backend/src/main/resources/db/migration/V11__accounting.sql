@@ -47,7 +47,7 @@ CREATE INDEX ix_payout_account_external ON payout_account (provider, external_ac
 CREATE TABLE payout_account_aud (
     id                  BIGINT   NOT NULL,
     rev                 BIGINT   NOT NULL,
-    revtype             TINYINT,
+    revtype             SMALLINT,
     app_user_id         BIGINT,
     provider            VARCHAR(16),
     external_account_id VARCHAR(255),
@@ -88,7 +88,7 @@ CREATE TABLE top_up (
 CREATE TABLE top_up_aud (
     id                 BIGINT NOT NULL,
     rev                BIGINT NOT NULL,
-    revtype            TINYINT,
+    revtype            SMALLINT,
     app_user_id        BIGINT,
     amount             NUMERIC(19, 8),
     original_amount    NUMERIC(19, 8),
@@ -127,7 +127,7 @@ CREATE INDEX ix_payout_status ON payout (status);
 CREATE TABLE payout_aud (
     id                        BIGINT NOT NULL,
     rev                       BIGINT NOT NULL,
-    revtype                   TINYINT,
+    revtype                   SMALLINT,
     app_user_id               BIGINT,
     amount                    NUMERIC(19, 8),
     original_amount           NUMERIC(19, 8),

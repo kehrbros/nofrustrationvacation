@@ -7,7 +7,7 @@ CREATE TABLE audited_test_entity (
 CREATE TABLE audited_test_entity_aud (
     id      BIGINT NOT NULL,
     rev     BIGINT NOT NULL,
-    revtype TINYINT,
+    revtype SMALLINT,
     name    VARCHAR(255),
     PRIMARY KEY (id, rev),
     CONSTRAINT fk_audited_test_entity_aud_revinfo FOREIGN KEY (rev) REFERENCES revinfo (rev)

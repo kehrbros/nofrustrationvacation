@@ -44,7 +44,7 @@ CREATE TABLE agreement (
 CREATE TABLE agreement_aud (
     id                            BIGINT NOT NULL,
     rev                           BIGINT NOT NULL,
-    revtype                       TINYINT,
+    revtype                       SMALLINT,
     consumer_order_id             BIGINT,
     provider_offer_id             BIGINT,
     agreed_at                     TIMESTAMP(6) WITH TIME ZONE,

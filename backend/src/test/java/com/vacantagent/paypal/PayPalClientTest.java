@@ -198,11 +198,11 @@ class PayPalClientTest {
 
     @Test
     void connectedAccountIsReadWithTheUsersToken() {
-        server.expect(requestTo(API + "/v1/oauth2/token"))
+        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
                 .andExpect(header("Authorization", "Basic Y2xpZW50OnNlY3JldA=="))
                 .andExpect(content().formData(form("grant_type", "authorization_code", "code", "auth-code")))
                 .andRespond(withSuccess("{\"access_token\":\"user-token\",\"expires_in\":900}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(API + "/v1/identity/oauth2/userinfo?schema=paypalv1.1"))
+        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
                 .andExpect(header("Authorization", "Bearer user-token"))
                 .andRespond(withSuccess("""
                         {"user_id":"https://www.paypal.com/webapps/auth/identity/user/abc","payer_id":"PAYER1",
@@ -212,6 +212,30 @@ class PayPalClientTest {
         PayPalAccount account = connect.fetchAccount("auth-code");
 
         assertThat(account).isEqualTo(new PayPalAccount("PAYER1", "provider@example.com", true));
+    }
+
+    @Test
+    void openIdUserinfoWithFlatEmailIsRead() {
+        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
+                .andRespond(withSuccess("{\"access_token\":\"user-token\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
+                .andRespond(withSuccess("""
+                        {"user_id":"https://www.paypal.com/webapps/auth/identity/user/abc","payer_id":"PAYER2",
+                         "email":"provider@example.com","email_verified":true}""", MediaType.APPLICATION_JSON));
+
+        assertThat(connect.fetchAccount("auth-code")).isEqualTo(new PayPalAccount("PAYER2", "provider@example.com", true));
+    }
+
+    @Test
+    void refusedUserinfoIsARejection() {
+        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
+                .andRespond(withSuccess("{\"access_token\":\"user-token\",\"scope\":\"openid\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
+                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"error":"invalid_request","error_description":"Unable to fetch details to serve the request"}"""));
+
+        assertThatThrownBy(() -> connect.fetchAccount("auth-code"))
+                .isInstanceOfSatisfying(PayPalRejectedException.class, e -> assertThat(e.getIssue()).isEqualTo("invalid_request"));
     }
 
     @Test

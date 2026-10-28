@@ -176,4 +176,4 @@ public class MarketTools {
     private static InvalidMarketRequestException notWaiting(String kind, long id) {
         return new InvalidMarketRequestException(kind + " " + id + " is not waiting");
     }
-}
+}

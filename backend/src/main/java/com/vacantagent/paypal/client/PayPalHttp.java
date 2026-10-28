@@ -72,9 +72,14 @@ public class PayPalHttp {
 
     /** Token request with the app credentials (Basic auth), e.g. to exchange an authorization code. */
     public TokenResponse requestToken(MultiValueMap<String, String> form) {
+        return requestToken("/v1/oauth2/token", form);
+    }
+
+    /** Token request at another token endpoint, e.g. the identity token service of "Log in with PayPal". */
+    public TokenResponse requestToken(String path, MultiValueMap<String, String> form) {
         requireConfigured();
         try {
-            TokenResponse response = restClient.post().uri("/v1/oauth2/token")
+            TokenResponse response = restClient.post().uri(path)
                     .headers(headers -> headers.setBasicAuth(properties.clientId(), properties.clientSecret()))
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
@@ -156,8 +161,10 @@ public class PayPalHttp {
     private record CachedToken(String value, Instant expiresAt) {
     }
 
+    /** {@code scope}: granted scopes, separated by spaces (only in some responses). */
     public record TokenResponse(@JsonProperty("access_token") String accessToken,
-                                @JsonProperty("expires_in") Long expiresIn) {
+                                @JsonProperty("expires_in") Long expiresIn,
+                                @Nullable String scope) {
     }
 
     /** PayPal API errors ({@code name}, {@code details[].issue}) and OAuth errors ({@code error}). */
