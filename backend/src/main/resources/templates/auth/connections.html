@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VacantAgent – Connections</title>
+</head>
+<body>
+<h1>Connected applications</h1>
+<p>Applications such as Claude or ChatGPT that access the account <strong th:text="${username}">user</strong> via MCP.</p>
+<p th:if="${param.revoked}">Access revoked. The application has to ask for access again.</p>
+<p th:if="${connections.isEmpty()}">No connected applications.</p>
+<table th:unless="${connections.isEmpty()}">
+    <thead>
+    <tr>
+        <th>Application</th>
+        <th>Access</th>
+        <th>Last token</th>
+        <th></th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="view : ${connections}">
+        <td>
+            <strong th:text="${view.connection.clientName}">Claude</strong><br>
+            <small th:text="${view.connection.clientId}">https://claude.ai/...</small>
+        </td>
+        <td>
+            <ul>
+                <li th:each="scope : ${view.scopes}" th:text="${scope.description}">Read your agents</li>
+            </ul>
+        </td>
+        <td th:text="${view.lastIssuedAt}">2026-10-28 12:00 UTC</td>
+        <td>
+            <form th:action="@{/account/connections/revoke}" method="post">
+                <input type="hidden" name="id" th:value="${view.connection.registeredClientId}">
+                <button type="submit">Revoke</button>
+            </form>
+        </td>
+    </tr>
+    </tbody>
+</table>
+<form th:action="@{/logout}" method="post">
+    <button type="submit">Sign out</button>
+</form>
+</body>
+</html>
