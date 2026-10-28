@@ -62,7 +62,7 @@ class MarketRulesTest {
     @Test
     void orderExpiresAfterItsWaitTime() {
         OffsetDateTime createdAt = OffsetDateTime.parse("2026-01-01T00:00:00Z");
-        BookOrder order = new BookOrder(new ConsumerOrder(null, null, Duration.ofSeconds(30), createdAt, null, null, null, null), 1_00, 1_00);
+        BookOrder order = new BookOrder(new ConsumerOrder(null, null, Duration.ofSeconds(30), createdAt, null, null, null, null, null), 1_00, 1_00);
         long expiresAt = createdAt.plusSeconds(30).toInstant().toEpochMilli();
 
         assertThat(rules.isExpired(order, expiresAt - 1)).isFalse();
@@ -94,7 +94,7 @@ class MarketRulesTest {
     }
 
     private boolean canMatch(String orderProvider, String orderModel, String offerProvider, String offerModel) {
-        BookOrder order = new BookOrder(withId(new ConsumerOrder(null, null, null, null, orderProvider, orderModel, null, null), 1),
+        BookOrder order = new BookOrder(withId(new ConsumerOrder(null, null, null, null, orderProvider, orderModel, null, null, null), 1),
                 1_00, 1_00);
         BookOffer offer = new BookOffer(withId(offer(0, offerProvider, offerModel), 1), 1_00, 1_00);
         return rules.canMatch(order, offer);

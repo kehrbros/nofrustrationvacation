@@ -31,7 +31,7 @@ public class OfferMapper {
         Agent agent = agentLogic.findOwned(appUserId, dto.agentId()).orElseThrow();
         return new ProviderOffer(toMoney(dto.pricePerMillionInputTokens()), toMoney(dto.pricePerMillionOutputTokens()),
                 dto.offeredUntil(), agent.getId(), agent.getModelProvider(), agent.getName(), null, null,
-                dto.totalTokens(), dto.totalTokens(), appUserRepository.getReferenceById(appUserId));
+                dto.totalTokens(), dto.totalTokens(), appUserRepository.getReferenceById(appUserId), null);
     }
 
     /** Missing prices stay {@code null}, so the market rejects the offer instead of failing here. */
