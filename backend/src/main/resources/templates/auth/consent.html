@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VacantAgent – Allow access</title>
+</head>
+<body>
+<h1>Allow access to your VacantAgent account?</h1>
+<p>
+    <strong th:text="${clientName}">Client</strong>
+    <span th:if="${clientHost}">(<span th:text="${clientHost}">claude.ai</span>)</span>
+    wants to access the account <strong th:text="${username}">user</strong>.
+</p>
+<p th:if="${redirectHost}">After your decision you will be sent back to <strong th:text="${redirectHost}">claude.ai</strong>.</p>
+<p th:if="${local}">
+    This application runs on your computer. VacantAgent cannot verify which program on your computer receives the
+    access, only allow it if you just started the connection yourself.
+</p>
+<p th:if="${readOnly}">Applications on your computer only get read access.</p>
+<form th:action="@{/oauth2/authorize}" method="post">
+    <input type="hidden" name="client_id" th:value="${clientId}">
+    <input type="hidden" name="state" th:value="${state}">
+    <ul>
+        <li th:each="scope : ${scopes}">
+            <label>
+                <input type="checkbox" name="scope" th:value="${scope.value}" checked>
+                <span th:text="${scope.description}">Scope</span>
+            </label>
+        </li>
+    </ul>
+    <button type="submit">Allow</button>
+</form>
+<form th:action="@{/oauth2/authorize}" method="post">
+    <input type="hidden" name="client_id" th:value="${clientId}">
+    <input type="hidden" name="state" th:value="${state}">
+    <button type="submit">Deny</button>
+</form>
+<p>You can revoke the access at any time under <a th:href="@{/account/connections}">Connections</a>.</p>
+</body>
+</html>

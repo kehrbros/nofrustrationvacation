@@ -30,6 +30,44 @@
     "name" : "Accounting"
   } ],
   "paths" : {
+    "/.well-known/oauth-protected-resource" : {
+      "get" : {
+        "operationId" : "metadata_1",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "protected-resource-metadata-controller" ]
+      }
+    },
+    "/.well-known/oauth-protected-resource/mcp" : {
+      "get" : {
+        "operationId" : "metadata",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "object",
+                  "additionalProperties" : { }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "tags" : [ "protected-resource-metadata-controller" ]
+      }
+    },
     "/api/v1/accounting/balances" : {
       "get" : {
         "description" : "Credit rounded commercially, earnings rounded down (what can be paid out).",
