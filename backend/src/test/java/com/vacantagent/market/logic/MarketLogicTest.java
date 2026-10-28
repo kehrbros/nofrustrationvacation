@@ -167,7 +167,7 @@ class MarketLogicTest {
     private Agreement agreement(OffsetDateTime agreedAt) {
         Money price = Money.of("900.00");
         ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agent("record-model"), "provider",
-                "record-model", null, null, 1000L, 1000L, null));
+                "record-model", null, null, 1000L, 1000L, null, null));
         return agreements.save(new Agreement(orders.save(emptyOrder()), offer, agreedAt, null, price, price));
     }
 

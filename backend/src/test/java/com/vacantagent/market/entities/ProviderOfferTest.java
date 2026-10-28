@@ -16,6 +16,6 @@ class ProviderOfferTest {
 
     private static ProviderOffer offer(Long availableTokens) {
         return new ProviderOffer(Money.of("1.00"), Money.of("1.00"), null, 1, "provider", "model", null, null,
-                availableTokens, availableTokens, null);
+                availableTokens, availableTokens, null, null);
     }
 }

@@ -35,6 +35,9 @@ public class ConsumerOrder extends AbstractEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     private AppUser appUser;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    private MarketScheduling marketScheduling;
+
     protected ConsumerOrder() {
     }
 

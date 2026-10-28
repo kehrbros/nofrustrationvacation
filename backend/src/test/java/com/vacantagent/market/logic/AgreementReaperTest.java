@@ -119,7 +119,7 @@ class AgreementReaperTest {
     private Agreement agreement(OffsetDateTime agreedAt, OffsetDateTime lastSuccessAt) {
         Money price = Money.of("900.00");
         ProviderOffer offer = offers.save(new ProviderOffer(price, price, null, agentId, "provider", "model",
-                null, null, 1000L, 1000L, null));
+                null, null, 1000L, 1000L, null, null));
         ConsumerOrder order = emptyOrder();
         if (lastSuccessAt != null) order.recordSuccess(lastSuccessAt);
         return agreements.save(new Agreement(orders.save(order), offer, agreedAt, null, price, price));

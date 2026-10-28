@@ -171,20 +171,20 @@ class MarketLogicCoordinationTest {
 
     private CompletableFuture<MatchResult> awaitOrder(long id, String maxPrice, @Nullable Duration waitTime) {
         ConsumerOrder order = withId(new ConsumerOrder(Money.of(maxPrice), Money.of(maxPrice), waitTime,
-                waitTime == null ? null : OffsetDateTime.now(), null, null, null, null), id);
+                waitTime == null ? null : OffsetDateTime.now(), null, null, null, null, null), id);
         when(orderMapper.toEntity(any(), anyLong())).thenReturn(order);
         return market.acceptOrderAndAwaitMatch(new OrderDto(null, null, null, null, null), 7).result();
     }
 
     private CompletableFuture<MatchResult> placeOrder(long id, String maxPrice) {
         ConsumerOrder order = withId(new ConsumerOrder(Money.of(maxPrice), Money.of(maxPrice), null, null,
-                null, null, null, null), id);
+                null, null, null, null, null), id);
         when(orderMapper.toEntity(any(), anyLong())).thenReturn(order);
         return market.acceptOrder(new OrderDto(null, null, null, null, null), 7).result();
     }
 
     private static ProviderOffer offer(long id, String price) {
         return withId(new ProviderOffer(Money.of(price), Money.of(price), null, 0, null, null, null, null,
-                1000L, 1000L, null), id);
+                1000L, 1000L, null, null), id);
     }
 }

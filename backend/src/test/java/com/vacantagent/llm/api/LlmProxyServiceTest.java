@@ -257,9 +257,9 @@ class LlmProxyServiceTest {
 
     private Agreement agreement(long availableTokens) {
         ProviderOffer offer = offers.save(new ProviderOffer(PRICE_INPUT, PRICE_OUTPUT, null, agentId, "provider",
-                "model", null, null, availableTokens, availableTokens, provider));
+                "model", null, null, availableTokens, availableTokens, provider, null));
         ConsumerOrder order = orders.save(new ConsumerOrder(PRICE_INPUT, PRICE_OUTPUT, null, OffsetDateTime.now(),
-                "provider", "model", null, consumer));
+                "provider", "model", null, consumer, null));
         return agreements.save(new Agreement(order, offer, OffsetDateTime.now(), null, PRICE_INPUT, PRICE_OUTPUT));
     }
 

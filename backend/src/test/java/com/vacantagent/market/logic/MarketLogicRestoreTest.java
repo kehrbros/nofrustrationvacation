@@ -90,7 +90,7 @@ class MarketLogicRestoreTest {
         ProviderOffer released = persist(offer("10.00", null, "1000"));
         persist(new Agreement(persist(emptyOrder()), released, longAgo, null, Money.of("10"), Money.of("10")));
         ProviderOffer expired = persist(new ProviderOffer(Money.of("10.00"), Money.of("10.00"),
-                now.minusMinutes(1), agentId, null, null, null, null, 1000L, 1000L, null));
+                now.minusMinutes(1), agentId, null, null, null, null, 1000L, 1000L, null, null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOffers(engine, offers, rules, now, props.agreementIdleTimeout());
@@ -114,9 +114,9 @@ class MarketLogicRestoreTest {
         ProviderOffer offer = persist(offer("10.00", null, "1000"));
         persist(new Agreement(agreed, offer, OffsetDateTime.now(), null, Money.of("10"), Money.of("10")));
         ConsumerOrder expired = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null, null, null));
+                Duration.ofSeconds(30), OffsetDateTime.now().minusMinutes(1), null, null, null, null, null));
         ConsumerOrder stillWaiting = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"),
-                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null, null));
+                Duration.ofHours(1), OffsetDateTime.now().minusMinutes(1), null, null, null, null, null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOrders(engine, orders, rules);
@@ -132,9 +132,9 @@ class MarketLogicRestoreTest {
     void restoresOnlyTheOldestOrderOfAUserPerModel() {
         AppUser owner = appUserProvisioning.findOrCreate("restore-user", null, null);
         ConsumerOrder older = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", null, owner));
+                "restore-provider", "model", null, owner, null));
         ConsumerOrder newer = persist(new ConsumerOrder(Money.of("10.00"), Money.of("10.00"), null, null,
-                "restore-provider", "model", null, owner));
+                "restore-provider", "model", null, owner, null));
 
         MatchingEngine engine = newEngine();
         MarketLogic.restoreOrders(engine, orders, rules);
@@ -157,13 +157,13 @@ class MarketLogicRestoreTest {
 
     private static ConsumerOrder order(String maxPrice) {
         Money value = maxPrice == null ? null : Money.of(maxPrice);
-        return new ConsumerOrder(value, value, null, null, null, null, null, null);
+        return new ConsumerOrder(value, value, null, null, null, null, null, null, null);
     }
 
     private ProviderOffer offer(String price, OffsetDateTime lastErrorAt, String availableTokens) {
         Money value = price == null ? null : Money.of(price);
         Long tokens = availableTokens == null ? null : Long.valueOf(availableTokens);
-        return new ProviderOffer(value, value, null, agentId, null, null, lastErrorAt, null, tokens, tokens, null);
+        return new ProviderOffer(value, value, null, agentId, null, null, lastErrorAt, null, tokens, tokens, null, null);
     }
 
     private <T> T persist(T entity) {
