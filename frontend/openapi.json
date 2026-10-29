@@ -20,12 +20,6 @@
     "description" : "Top up platform credit via PayPal",
     "name" : "Top-ups"
   }, {
-    "description" : "LLM accesses of providers",
-    "name" : "Agents"
-  }, {
-    "description" : "Place and cancel consumer orders and provider offers",
-    "name" : "Market"
-  }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
   } ],
@@ -131,7 +125,7 @@
     },
     "/api/v1/accounting/payout-account" : {
       "delete" : {
-        "description" : "Offers can no longer be placed afterwards.",
+        "description" : "Reopens the step in the provider onboarding.",
         "operationId" : "unlinkPayoutAccount",
         "responses" : {
           "204" : {
@@ -402,261 +396,9 @@
         "tags" : [ "Top-ups" ]
       }
     },
-    "/api/v1/agents" : {
-      "get" : {
-        "operationId" : "getAgents",
-        "responses" : {
-          "200" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "type" : "array",
-                  "items" : {
-                    "$ref" : "#/components/schemas/AgentDto"
-                  }
-                }
-              }
-            },
-            "description" : "OK"
-          }
-        },
-        "summary" : "My agents",
-        "tags" : [ "Agents" ]
-      },
-      "post" : {
-        "description" : "The API key is stored encrypted and never returned.",
-        "operationId" : "createAgent",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/CreateAgentDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/AgentDto"
-                }
-              }
-            },
-            "description" : "Created"
-          },
-          "400" : {
-            "description" : "Field missing, API key too short or baseUrl not https"
-          }
-        },
-        "summary" : "Add an agent",
-        "tags" : [ "Agents" ]
-      }
-    },
-    "/api/v1/agents/{id}" : {
-      "delete" : {
-        "operationId" : "deleteAgent",
-        "parameters" : [ {
-          "description" : "Agent id",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "Removed"
-          },
-          "404" : {
-            "description" : "Unknown or of another user"
-          },
-          "409" : {
-            "description" : "Still used by offers"
-          }
-        },
-        "summary" : "Remove an agent",
-        "tags" : [ "Agents" ]
-      }
-    },
-    "/api/v1/agents/{id}/api-key" : {
-      "put" : {
-        "operationId" : "changeApiKey",
-        "parameters" : [ {
-          "description" : "Agent id",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/ApiKeyDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "404" : {
-            "description" : "Unknown or of another user"
-          }
-        },
-        "summary" : "Replace the API key of an agent",
-        "tags" : [ "Agents" ]
-      }
-    },
-    "/api/v1/market/offers" : {
-      "post" : {
-        "description" : "Matched against the highest-paying fitting order for the model of its agent. If none fits, the offer waits in the market until offeredUntil.",
-        "operationId" : "placeOffer",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/OfferDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Matched (agreement included) or waiting in the market"
-          },
-          "400" : {
-            "description" : "agentId missing or not an agent of the user, or unsupported currency"
-          },
-          "403" : {
-            "description" : "Provider onboarding incomplete (PayPal account, agent), see /api/v1/onboarding/provider"
-          },
-          "422" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Rejected by the market rules, see reason"
-          }
-        },
-        "summary" : "Place an offer",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/offers/{id}" : {
-      "delete" : {
-        "operationId" : "cancelOffer",
-        "parameters" : [ {
-          "description" : "Offer id from placing it",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "Removed from the market"
-          },
-          "404" : {
-            "description" : "Not waiting: already matched, cancelled, expired, unknown or placed by another user"
-          }
-        },
-        "summary" : "Cancel a waiting offer",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/orders" : {
-      "post" : {
-        "description" : "Matched against the cheapest fitting offer for the requested model. If none fits, the order waits in the market for its marketWaitTime. A user may have only one waiting order per modelProvider and modelName. Both are trimmed, empty means any.",
-        "operationId" : "placeOrder",
-        "requestBody" : {
-          "content" : {
-            "application/json" : {
-              "schema" : {
-                "$ref" : "#/components/schemas/OrderDto"
-              }
-            }
-          },
-          "required" : true
-        },
-        "responses" : {
-          "201" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Matched (agreement included) or waiting in the market"
-          },
-          "400" : {
-            "description" : "modelName without modelProvider, or unsupported currency"
-          },
-          "422" : {
-            "content" : {
-              "*/*" : {
-                "schema" : {
-                  "$ref" : "#/components/schemas/SubmissionDto"
-                }
-              }
-            },
-            "description" : "Rejected by the market rules, or the user already has an order waiting for this modelProvider and modelName, see reason"
-          }
-        },
-        "summary" : "Place an order",
-        "tags" : [ "Market" ]
-      }
-    },
-    "/api/v1/market/orders/{id}" : {
-      "delete" : {
-        "operationId" : "cancelOrder",
-        "parameters" : [ {
-          "description" : "Order id from placing it",
-          "in" : "path",
-          "name" : "id",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "Removed from the market"
-          },
-          "404" : {
-            "description" : "Not waiting: already matched, cancelled, expired, unknown or placed by another user"
-          }
-        },
-        "summary" : "Cancel a waiting order",
-        "tags" : [ "Market" ]
-      }
-    },
     "/api/v1/onboarding/provider" : {
       "get" : {
-        "description" : "Registration, PayPal account for payouts, at least one agent with API key. Offers require all.",
+        "description" : "Registration and PayPal account for payouts.",
         "operationId" : "getProviderOnboarding",
         "responses" : {
           "200" : {
@@ -723,85 +465,6 @@
   },
   "components" : {
     "schemas" : {
-      "AgentDto" : {
-        "type" : "object",
-        "properties" : {
-          "apiKeyHint" : {
-            "type" : "string",
-            "example" : "x7Qa"
-          },
-          "baseUrl" : {
-            "type" : [ "string", "null" ]
-          },
-          "createdAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
-          },
-          "name" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          }
-        },
-        "required" : [ "apiKeyHint", "createdAt", "id", "modelProvider", "name" ]
-      },
-      "AgreementDto" : {
-        "type" : "null",
-        "properties" : {
-          "agreedAt" : {
-            "type" : "string",
-            "format" : "date-time"
-          },
-          "agreedPricePerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto"
-          },
-          "agreedPricePerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto"
-          },
-          "consumerOrderId" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "modelName" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
-          },
-          "providerOfferId" : {
-            "type" : "integer",
-            "format" : "int64"
-          },
-          "validUntil" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time",
-            "description" : "The offer's offeredUntil, missing means no end"
-          }
-        }
-      },
-      "ApiKeyDto" : {
-        "type" : "object",
-        "properties" : {
-          "apiKey" : {
-            "type" : "string",
-            "format" : "password"
-          }
-        },
-        "required" : [ "apiKey" ]
-      },
       "AppUserDto" : {
         "type" : "object",
         "properties" : {
@@ -828,27 +491,6 @@
           }
         },
         "required" : [ "credit", "earnings" ]
-      },
-      "CreateAgentDto" : {
-        "type" : "object",
-        "properties" : {
-          "apiKey" : {
-            "type" : "string",
-            "format" : "password"
-          },
-          "baseUrl" : {
-            "type" : [ "string", "null" ]
-          },
-          "modelProvider" : {
-            "type" : "string",
-            "example" : "openai"
-          },
-          "name" : {
-            "type" : "string",
-            "example" : "gpt-5"
-          }
-        },
-        "required" : [ "apiKey", "modelProvider", "name" ]
       },
       "LedgerEntryDto" : {
         "type" : "object",
@@ -903,67 +545,6 @@
           }
         },
         "required" : [ "amount", "currency" ]
-      },
-      "OfferDto" : {
-        "type" : "object",
-        "properties" : {
-          "agentId" : {
-            "type" : "integer",
-            "format" : "int64",
-            "description" : "Agent of the user that serves the offer",
-            "example" : 42
-          },
-          "offeredUntil" : {
-            "type" : [ "string", "null" ],
-            "format" : "date-time",
-            "description" : "End of the offer and of any agreement made from it. Missing means no end."
-          },
-          "pricePerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Price per million input tokens"
-          },
-          "pricePerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Price per million output tokens"
-          },
-          "totalTokens" : {
-            "type" : "integer",
-            "format" : "int64",
-            "description" : "Tokens offered in total",
-            "example" : 1000000
-          }
-        },
-        "required" : [ "agentId", "pricePerMillionInputTokens", "pricePerMillionOutputTokens" ]
-      },
-      "OrderDto" : {
-        "type" : "object",
-        "properties" : {
-          "marketWaitTime" : {
-            "type" : [ "string", "null" ],
-            "format" : "duration",
-            "description" : "How long the order waits in the market for a fitting offer (ISO 8601). Missing means it waits until cancelled, zero means it only matches on arrival.",
-            "example" : "PT5M"
-          },
-          "maxCostPerMillionInputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Highest accepted price per million input tokens"
-          },
-          "maxCostPerMillionOutputTokens" : {
-            "$ref" : "#/components/schemas/MoneyDto",
-            "description" : "Highest accepted price per million output tokens"
-          },
-          "modelName" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only offers of this model. Missing means any model of modelProvider.",
-            "example" : "gpt-5"
-          },
-          "modelProvider" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only offers of this provider. Missing means any provider, then modelName must be missing too.",
-            "example" : "openai"
-          }
-        },
-        "required" : [ "maxCostPerMillionInputTokens", "maxCostPerMillionOutputTokens" ]
       },
       "PayPalAuthorizationDto" : {
         "type" : "object",
@@ -1066,12 +647,9 @@
       "ProviderOnboardingDto" : {
         "type" : "object",
         "properties" : {
-          "agentConfigured" : {
-            "type" : "boolean"
-          },
           "complete" : {
             "type" : "boolean",
-            "description" : "All steps done, offers can be placed"
+            "description" : "All steps done"
           },
           "payoutAccountLinked" : {
             "type" : "boolean"
@@ -1080,29 +658,7 @@
             "type" : "boolean"
           }
         },
-        "required" : [ "agentConfigured", "complete", "payoutAccountLinked", "registered" ]
-      },
-      "SubmissionDto" : {
-        "type" : "object",
-        "properties" : {
-          "agreement" : {
-            "$ref" : "#/components/schemas/AgreementDto",
-            "description" : "Only for MATCHED"
-          },
-          "id" : {
-            "type" : "integer",
-            "format" : "int64",
-            "description" : "Id of the persisted order or offer, use it to cancel"
-          },
-          "reason" : {
-            "type" : [ "string", "null" ],
-            "description" : "Only for REJECTED"
-          },
-          "status" : {
-            "type" : "string",
-            "enum" : [ "MATCHED", "RESTING", "REJECTED", "CANCELLED" ]
-          }
-        }
+        "required" : [ "complete", "payoutAccountLinked", "registered" ]
       },
       "TopUpDto" : {
         "type" : "object",

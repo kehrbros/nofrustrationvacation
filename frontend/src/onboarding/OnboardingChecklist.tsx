@@ -3,7 +3,7 @@ import { Progress } from 'antd';
 import { useNavigate } from 'react-router';
 
 import type { ProviderOnboardingDto } from '../generated/api';
-import { AGENTS_PATH, PAYOUT_ACCOUNT_PATH } from '../role/navigation';
+import { PAYOUT_ACCOUNT_PATH } from '../role/navigation';
 import { brand } from '../theme';
 
 interface ChecklistItem {
@@ -22,12 +22,6 @@ export function checklistItems(status: ProviderOnboardingDto): ChecklistItem[] {
       title: 'PayPal verknüpfen',
       description: 'Dorthin zahlen wir deine Einnahmen aus',
       path: PAYOUT_ACCOUNT_PATH,
-    },
-    {
-      done: status.agentConfigured,
-      title: 'Agent hinterlegen',
-      description: 'Mindestens ein LLM-Zugang mit API-Key',
-      path: AGENTS_PATH,
     },
   ];
 }

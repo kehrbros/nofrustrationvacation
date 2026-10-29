@@ -19,11 +19,10 @@ public class OnboardingController {
     private final ProviderOnboarding providerOnboarding;
 
     @Operation(summary = "Provider onboarding checklist",
-            description = "Registration, PayPal account for payouts, at least one agent with API key. Offers require all.")
+            description = "Registration and PayPal account for payouts.")
     @GetMapping("/provider")
     public ProviderOnboardingDto getProviderOnboarding(@AuthenticationPrincipal CurrentUser user) {
         ProviderOnboarding.Status status = providerOnboarding.status(user.appUserId());
-        return new ProviderOnboardingDto(status.registered(), status.payoutAccountLinked(), status.agentConfigured(),
-                status.complete());
+        return new ProviderOnboardingDto(status.registered(), status.payoutAccountLinked(), status.complete());
     }
 }

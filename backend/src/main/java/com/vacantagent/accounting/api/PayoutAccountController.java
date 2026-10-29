@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Linking the PayPal account providers get paid out to ("Log in with PayPal"). Required before placing offers.
+ * Linking the PayPal account providers get paid out to ("Log in with PayPal"). Required for the provider onboarding.
  */
 @Tag(name = "Payout account", description = "Link the PayPal account for payouts")
 @RestController
@@ -57,7 +57,7 @@ public class PayoutAccountController {
         return mapper.toStatus(payoutAccountLogic.completeLink(user.appUserId(), link.code(), link.state()));
     }
 
-    @Operation(summary = "Unlink the payout account", description = "Offers can no longer be placed afterwards.")
+    @Operation(summary = "Unlink the payout account", description = "Reopens the step in the provider onboarding.")
     @ApiResponse(responseCode = "204", description = "Unlinked or nothing was linked")
     @ApiResponse(responseCode = "409", description = "Payouts are still in progress (PAYOUTS_OPEN)", content = @Content)
     @DeleteMapping

@@ -63,7 +63,10 @@ class McpAuthorizationFlowTest {
     private static final String WEB_REDIRECT = "https://client.example/oauth/callback";
     private static final String NATIVE_CLIENT = "https://cli.example/oauth/metadata.json";
     private static final String UNLISTED_CLIENT = "https://evil.example/oauth/metadata.json";
-    private static final String CODE_VERIFIER = "a-code-verifier-that-is-long-enough-for-pkce-0123456789";
+    /** Tool names only matter to the scope check, the server has no tools yet. */
+    private static final String READ_TOOL = "read_tool";
+    private static final String WRITE_TOOL = "write_tool";
+    private static final String CODE_VERIFIER ="a-code-verifier-that-is-long-enough-for-pkce-0123456789";
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final Map<String, String> DOCUMENTS = new ConcurrentHashMap<>();
     private static final AtomicInteger FETCHES = new AtomicInteger();
@@ -83,6 +86,7 @@ class McpAuthorizationFlowTest {
         registry.add("spring.security.oauth2.authorizationserver.issuer", () -> issuer);
         registry.add("spring.security.oauth2.resourceserver.jwt.issuer-uri", () -> issuer);
         registry.add("vacantagent.mcp.resource-uri", () -> issuer + "/mcp");
+        registry.add("vacantagent.mcp.read-tools", () -> READ_TOOL);
         registry.add("vacantagent.auth.cimd.allowed-client-ids", () -> WEB_CLIENT + "," + NATIVE_CLIENT);
         DOCUMENTS.put(WEB_CLIENT, document(WEB_CLIENT, "Example Assistant", WEB_REDIRECT, "http://127.0.0.1/callback"));
         DOCUMENTS.put(NATIVE_CLIENT, document(NATIVE_CLIENT, "Example CLI", "http://127.0.0.1/callback",
@@ -140,7 +144,7 @@ class McpAuthorizationFlowTest {
         assertEquals("test", claims.get("sub").asString());
         assertNotNull(tokens.refreshToken(), "MCP clients need refresh tokens");
 
-        mockMvc.perform(mcp(tokens.accessToken(), toolCall("place_order"))).andExpect(notRejected());
+        mockMvc.perform(mcp(tokens.accessToken(), toolCall(WRITE_TOOL))).andExpect(notRejected());
         mockMvc.perform(mcp(tokens.accessToken(), initialize()))
                 .andExpect(status().isOk())
                 .andExpect(content().string(containsString("\"serverInfo\"")));
@@ -165,12 +169,12 @@ class McpAuthorizationFlowTest {
         MockHttpSession session = login();
         Tokens tokens = authorize(session, WEB_CLIENT, WEB_REDIRECT, "mcp:read");
 
-        mockMvc.perform(mcp(tokens.accessToken(), toolCall("list_agents"))).andExpect(notRejected());
-        mockMvc.perform(mcp(tokens.accessToken(), toolCall("place_order")))
+        mockMvc.perform(mcp(tokens.accessToken(), toolCall(READ_TOOL))).andExpect(notRejected());
+        mockMvc.perform(mcp(tokens.accessToken(), toolCall(WRITE_TOOL)))
                 .andExpect(status().isForbidden())
                 .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, containsString("error=\"insufficient_scope\"")))
                 .andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE, containsString("scope=\"mcp:read mcp:write\"")));
-        mockMvc.perform(mcp(tokens.accessToken(), "[" + toolCall("list_agents") + "," + toolCall("delete_agent") + "]"))
+        mockMvc.perform(mcp(tokens.accessToken(), "[" + toolCall(READ_TOOL) + "," + toolCall(WRITE_TOOL) + "]"))
                 .andExpect(status().isForbidden());
         mockMvc.perform(mcp(tokens.accessToken(), "not json")).andExpect(status().isForbidden());
     }

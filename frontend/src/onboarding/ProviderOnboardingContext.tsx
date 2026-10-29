@@ -5,7 +5,7 @@ import { getProviderOnboarding, type ProviderOnboardingDto } from '../generated/
 interface ProviderOnboardingContextValue {
   /** undefined while loading or outside the provider view */
   status?: ProviderOnboardingDto;
-  /** Call after a step changed (PayPal linked, agent added or removed). */
+  /** Call after a step changed (PayPal linked or unlinked). */
   reload: () => Promise<void>;
 }
 

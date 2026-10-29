@@ -6,7 +6,6 @@ import io.swagger.v3.oas.annotations.media.Schema;
 public record ProviderOnboardingDto(
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean registered,
         @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean payoutAccountLinked,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED) boolean agentConfigured,
-        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "All steps done, offers can be placed")
+        @Schema(requiredMode = Schema.RequiredMode.REQUIRED, description = "All steps done")
         boolean complete) {
 }

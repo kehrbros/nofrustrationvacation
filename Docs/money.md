@@ -20,6 +20,7 @@
   - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` inkl. `agreement_aud`
   - `ProviderOffer.pricePerMillionInputTokens`, `pricePerMillionOutputTokens`
   - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`; durch `V5__align_order_offer_columns.sql` ersetzt durch `maxCostPerMillionInputTokens`, `maxCostPerMillionOutputTokens` (ebenfalls `NUMERIC(19, 8)`)
+  - Die drei Markt-Tabellen oben sind seit `V17__drop_market_and_llm.sql` entfernt
   - `AppUser.accountBalance` (seit `V11__accounting.sql` ersetzt durch `accounting_account.balance`), zusätzlich neues Feld `AppUser.preferredCurrency`
 - **Buchungen mit Umrechnung** (Ein-/Auszahlung, siehe [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). In der API zu `common.money.OriginalAmount` (`@Embeddable`, Spalten `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) gemappt und mit der Buchung gespeichert, nie neu berechnet.
 
@@ -55,4 +56,4 @@
 ## Offen
 
 - Wechselkursaufschlag/Spread bei Ein- und Auszahlungen.
-- Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum (`UsageBilling` bucht derzeit je Aufruf, siehe [accounting.md](accounting.md)).
+- Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum.

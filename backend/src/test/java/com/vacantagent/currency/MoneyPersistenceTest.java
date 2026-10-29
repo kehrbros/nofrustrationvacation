@@ -38,7 +38,7 @@ class MoneyPersistenceTest {
                 WHERE table_schema = 'PUBLIC' AND (column_name LIKE '%PRICE%' OR column_name LIKE '%COST%'
                     OR column_name IN ('BALANCE', 'AMOUNT', 'ORIGINAL_AMOUNT'))""");
 
-        assertEquals(18, columns.size(), columns.toString());
+        assertEquals(10, columns.size(), columns.toString());
         for (Map<String, Object> column : columns) {
             assertEquals(19, ((Number) column.get("NUMERIC_PRECISION")).intValue(), column.toString());
             assertEquals(Money.SCALE, ((Number) column.get("NUMERIC_SCALE")).intValue(), column.toString());

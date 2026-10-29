@@ -2,11 +2,13 @@ package com.vacantagent.accounting;
 
 import com.vacantagent.accounting.data.PayoutAccountRepository;
 import com.vacantagent.accounting.data.PayoutRepository;
+import com.vacantagent.accounting.entities.AccountType;
+import com.vacantagent.accounting.entities.EntryType;
 import com.vacantagent.accounting.entities.PayoutAccount;
 import com.vacantagent.accounting.entities.PayoutStatus;
+import com.vacantagent.accounting.logic.AccountLedger;
 import com.vacantagent.accounting.logic.PayoutLogic;
 import com.vacantagent.accounting.logic.TopUpLogic;
-import com.vacantagent.accounting.logic.UsageBilling;
 import com.vacantagent.common.money.Money;
 import com.vacantagent.currency.logic.CurrencyConversionService;
 import com.vacantagent.paypal.PayPalAccount;
@@ -35,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.net.URI;
@@ -82,7 +85,9 @@ class AccountingFlowTest {
     @Autowired
     private PayoutLogic payoutLogic;
     @Autowired
-    private UsageBilling usageBilling;
+    private AccountLedger ledger;
+    @Autowired
+    private TransactionTemplate transactionTemplate;
     @Autowired
     private TopUpLogic topUpLogic;
 
@@ -354,23 +359,6 @@ class AccountingFlowTest {
         perform(get("/api/v1/accounting/balances")).andExpect(jsonPath("$.earnings.amount").value("15.00"));
     }
 
-    // --- usage
-
-    @Test
-    void usageMovesCreditToEarningsAndMayTakeTheCreditBelowZero() throws Exception {
-        long consumer = newUser();
-        credit(consumer, "1.00");
-
-        usageBilling.settle(1L, consumer, appUserId, Money.of("0.75"));
-        usageBilling.settle(2L, consumer, appUserId, Money.of("0.30"));
-
-        perform(get("/api/v1/accounting/balances").param("currency", "USD"))
-                .andExpect(jsonPath("$.earnings.amount").value("1.05"))
-                .andExpect(jsonPath("$.credit.amount").value("0.00"));
-        mockMvc.perform(get("/api/v1/accounting/balances").param("currency", "USD").with(as(consumer)))
-                .andExpect(jsonPath("$.credit.amount").value("-0.05"));
-    }
-
     @Test
     void balancesAreConvertedToTheRequestedCurrency() throws Exception {
         credit(appUserId, "12.3456789");
@@ -418,9 +406,8 @@ class AccountingFlowTest {
     }
 
     private void earn(long userId, String amount) {
-        long consumer = newUser();
-        credit(consumer, amount);
-        usageBilling.settle(99L, consumer, userId, Money.of(amount));
+        transactionTemplate.executeWithoutResult(status ->
+                ledger.credit(userId, AccountType.EARNINGS, Money.of(amount), EntryType.USAGE_EARNING, 99L));
     }
 
     private void credit(long userId, String amount) {

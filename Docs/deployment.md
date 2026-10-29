@@ -3,7 +3,7 @@
 ## Lokal mit Docker Compose
 
 - **Datei:** `docker-compose.local.yml`, Services `postgres`, `backend`, `frontend`. Alle Images werden aus den Dockerfiles im Repo gebaut, kein Zugriff auf die Container Registry und kein lokales Java/Maven/Node nötig. Das Backend baut `backend/Dockerfile.local` aus den Quellen (Multi-Stage mit Maven, Kontext über `Dockerfile.local.dockerignore`), CI nutzt weiter `backend/Dockerfile` mit dem vorher gebauten Jar.
-- **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `VACANTAGENT_ENCRYPTION_KEY` und `VACANTAGENT_IDP_SIGNING_KEY` optional. Docker Compose liest die `.env` automatisch.
+- **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` und `VACANTAGENT_IDP_SIGNING_KEY` optional. Docker Compose liest die `.env` automatisch.
 - **Start:** `docker compose -f docker-compose.local.yml up --build`. Frontend http://localhost:5173 (Port des Vite-Dev-Servers, damit Redirect-URIs und PayPal-Return-URL passen, also nicht parallel zu `npm run dev`), Backend http://localhost:8080, Login `test`/`test`.
 - **Datenbank:** PostgreSQL 17 mit Profil `postgres` wie im Stack, Daten im Volume `postgres-data`, Port `LOCAL_POSTGRES_PORT` (Standard 5432) für DB-Tools. Zurücksetzen: `docker compose -f docker-compose.local.yml down -v`. Das Passwort gilt nur beim ersten Anlegen des Volumes.
 - Ohne Docker weiter `mvn spring-boot:run` mit In-Memory-H2, siehe README.
@@ -25,17 +25,15 @@
   |---|---|---|
   | `vacantagent_paypal_client_id` | `/run/secrets/PAYPAL_CLIENT_ID` | `vacantagent.paypal.client-id` |
   | `vacantagent_paypal_client_secret` | `/run/secrets/PAYPAL_CLIENT_SECRET` | `vacantagent.paypal.client-secret` |
-  | `vacantagent_encryption_key` | `/run/secrets/VACANTAGENT_ENCRYPTION_KEY` | `vacantagent.secrets.encryption-key` |
   | `vacantagent_idp_signing_key` | `/run/secrets/VACANTAGENT_IDP_SIGNING_KEY` | `vacantagent.auth.signing-key` |
   | `vacantagent_postgres_password` | `/run/secrets/POSTGRES_PASSWORD` (Backend), `/run/secrets/postgres_password` (Postgres, `POSTGRES_PASSWORD_FILE`) | `spring.datasource.password` |
 
 - **Wie das Backend sie liest:** `spring.config.import=optional:configtree:/run/secrets/` in `application.properties`. Jede Datei wird zur Property mit dem Dateinamen als Schlüssel (abschließender Zeilenumbruch wird entfernt), die vorhandenen Platzhalter `${PAYPAL_CLIENT_ID:}` usw. lösen darauf auf. Ohne `/run/secrets` (lokal) greifen wie bisher Umgebungsvariablen bzw. `application-local.properties`, siehe [paypal.md](paypal.md).
-- **Anlegen** (vor dem ersten Deploy, alle fünf sind Pflicht):
+- **Anlegen** (vor dem ersten Deploy, alle vier sind Pflicht):
 
   ```sh
   printf '%s' '<client-id>'     | docker secret create vacantagent_paypal_client_id -
   printf '%s' '<client-secret>' | docker secret create vacantagent_paypal_client_secret -
-  openssl rand -base64 32 | tr -d '\n' | docker secret create vacantagent_encryption_key -
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 | docker secret create vacantagent_idp_signing_key -
   openssl rand -base64 24 | tr -d '\n' | docker secret create vacantagent_postgres_password -
   ```

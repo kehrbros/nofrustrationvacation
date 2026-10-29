@@ -39,7 +39,6 @@ describe('App', () => {
     const html = renderApp(authenticated, '/provider', 'provider');
 
     expect(html).toContain('Meine Angebote');
-    expect(html).toContain('Agents');
     expect(html).toContain('Einnahmen');
   });
 
@@ -48,13 +47,6 @@ describe('App', () => {
 
     expect(html).toContain('Guthaben aufladen');
     expect(html).toContain('Weiter zu PayPal');
-  });
-
-  it('renders the agent form for providers', () => {
-    const html = renderApp(authenticated, '/provider/agents', 'provider');
-
-    expect(html).toContain('Agent hinzufügen');
-    expect(html).toContain('verschlüsselt');
   });
 
   it('renders the onboarding with the role choice', () => {

@@ -13,7 +13,6 @@ export const PAYPAL_CONNECTED_PATH = '/paypal/connected';
 
 /** Config pages behind the items of the provider onboarding checklist. */
 export const PAYOUT_ACCOUNT_PATH = '/provider/auszahlungskonto';
-export const AGENTS_PATH = '/provider/agents';
 
 /** Return URL of PayPal payments (vacantagent.paypal.checkout-return-url and -cancel-url). */
 export const TOP_UP_RETURN_PATH = '/consumer/guthaben/paypal';
@@ -43,7 +42,6 @@ export const navigation: Record<Role, NavigationItem[]> = {
   provider: [
     { path: '/provider', label: 'Übersicht' },
     { path: '/provider/angebote', label: 'Meine Angebote' },
-    { path: '/provider/agents', label: 'Agents' },
     { path: '/provider/einnahmen', label: 'Einnahmen' },
     { path: '/marktplatz', label: 'Marktplatz' },
   ],

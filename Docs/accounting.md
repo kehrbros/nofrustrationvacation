@@ -9,8 +9,8 @@
   - `EARNINGS` (Einnahmen, Provider): aus verkauften Tokens, per PayPal auszahlbar.
   - Grund für die Trennung: eingezahltes Geld soll nicht direkt wieder ausgezahlt werden können (Gebühren, Geldwäsche-Risiko).
 - **Ersetzt `app_user.account_balance`:** `V11__accounting.sql` übernimmt vorhandene Guthaben als `CREDIT` mit Buchung `OPENING_BALANCE` und löscht die Spalte. `GET /api/v1/users/me` liefert kein `accountBalance` mehr, Kontostände kommen aus `GET /api/v1/accounting/balances`.
-- **Buchungen** (`LedgerEntry`): nur anhängen, nie ändern; Summe der Buchungen = Kontostand. Typen: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` zeigt auf Aufladung, Auszahlung oder Vereinbarung.
-- **`AccountLedger`:** `credit`/`debit` nur innerhalb einer Transaktion (`MANDATORY`). Der Kontostand ändert sich mit einem atomaren `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: keine verlorenen Updates, nie negativ, keine Locks (Test mit parallelen Abbuchungen). Ausnahme `debitAllowingNegative`: nur für `CREDIT`, ohne Untergrenze, für bereits gelieferte LLM-Nutzung. Zusätzlich DB-Constraint `type = 'CREDIT' OR balance >= 0` (`V14__credit_may_go_negative.sql`).
+- **Buchungen** (`LedgerEntry`): nur anhängen, nie ändern; Summe der Buchungen = Kontostand. Typen: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` zeigt auf Aufladung oder Auszahlung. `USAGE_CHARGE`/`USAGE_EARNING` stammen aus dem entfernten Markt (Referenz: Vereinbarung) und bleiben nur für vorhandene Buchungen.
+- **`AccountLedger`:** `credit`/`debit` nur innerhalb einer Transaktion (`MANDATORY`). Der Kontostand ändert sich mit einem atomaren `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: keine verlorenen Updates, nie negativ, keine Locks (Test mit parallelen Abbuchungen). Zusätzlich DB-Constraint `type = 'CREDIT' OR balance >= 0` (`V14__credit_may_go_negative.sql`, für die entfernte Nutzungsabrechnung, die `CREDIT` ins Minus buchen durfte).
 
 ## Auszahlungskonto verknüpfen (Provider)
 
@@ -35,10 +35,6 @@
 2. In einer Transaktion: `Payout` (`REQUESTED`) anlegen und `EARNINGS` belasten. Erst danach PayPal aufrufen, damit nie doppelt ausgezahlt wird.
 3. PayPal-Antwort: angenommen → `SUBMITTED`; abgelehnt → `FAILED` + Rückbuchung `PAYOUT_REVERSAL`; Ausgang unbekannt (Timeout/5xx) → `UNKNOWN`, bleibt belastet, Fehler im Log mit `sender_batch_id` zur manuellen Prüfung im PayPal-Dashboard.
 4. `PaymentStatusPoller` (alle 5 min, `status-check-interval`): `SUCCESS` → `COMPLETED`; `FAILED`, `RETURNED`, `REFUNDED`, `REVERSED`, `BLOCKED`, `DENIED` → `FAILED` + Rückbuchung (genau einmal).
-
-## Nutzungsabrechnung
-
-- `UsageBilling.settle(agreementId, consumer, provider, cost)`: belastet `CREDIT` des Consumers und schreibt `EARNINGS` des Providers gut, beides oder nichts. Die Nutzung ist schon geliefert, deshalb darf `CREDIT` dabei negativ werden; weitere Prompts lehnt `LlmLogic` ab, bis das Guthaben wieder positiv ist. Aufrufer ist `LlmLogic`, siehe [llm.md](llm.md).
 
 ## API-Fehler
 

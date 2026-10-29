@@ -43,7 +43,7 @@ public class PayoutAccountLogic {
         return payoutAccountRepository.findByAppUserId(appUserId);
     }
 
-    /** A provider may place offers only with a linked payout account. */
+    /** Step of the provider onboarding. */
     public boolean hasPayoutAccount(long appUserId) {
         return payoutAccountRepository.existsByAppUserId(appUserId);
     }

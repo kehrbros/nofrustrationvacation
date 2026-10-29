@@ -12,12 +12,10 @@ import TopUpReturnPage from './pages/consumer/TopUpReturnPage';
 import OnboardingPage from './pages/OnboardingPage';
 import PayPalConnectedPage from './pages/paypal/PayPalConnectedPage';
 import RequireProviderOnboarding from './onboarding/RequireProviderOnboarding';
-import AgentsPage from './pages/provider/AgentsPage';
 import EarningsPage from './pages/provider/EarningsPage';
 import PayoutAccountPage from './pages/provider/PayoutAccountPage';
 import ProviderHome from './pages/provider/ProviderHome';
 import {
-  AGENTS_PATH,
   ONBOARDING_PATH,
   PAYOUT_ACCOUNT_PATH,
   PAYPAL_CONNECTED_PATH,
@@ -115,7 +113,6 @@ export default function App() {
           }
         />
         <Route path="provider/einnahmen" element={<EarningsPage />} />
-        <Route path={AGENTS_PATH.slice(1)} element={<AgentsPage />} />
         <Route path={PAYOUT_ACCOUNT_PATH.slice(1)} element={<PayoutAccountPage />} />
 
         <Route

@@ -8,9 +8,9 @@ public enum EntryType {
     PAYOUT,
     /** Payout failed or returned, the amount is back on the earnings account, reference: {@link Payout}. */
     PAYOUT_REVERSAL,
-    /** Consumer pays for LLM usage, reference: agreement. */
+    /** Consumer paid for LLM usage, reference: agreement of the removed market. Kept for existing entries. */
     USAGE_CHARGE,
-    /** Provider earns from LLM usage, reference: agreement. */
+    /** Provider earned from LLM usage, reference: agreement of the removed market. Kept for existing entries. */
     USAGE_EARNING,
     /** Balance taken over from {@code app_user.account_balance} by the migration, no reference. */
     OPENING_BALANCE

@@ -6,7 +6,7 @@ import jakarta.annotation.Nullable;
 import java.time.OffsetDateTime;
 
 /**
- * @param linked          a payout account is linked, required for placing offers
+ * @param linked          a payout account is linked, required for the provider onboarding
  * @param payPalAvailable PayPal is configured on the server, linking and payments are possible
  * @param email           e-mail address of the linked PayPal account
  * @param verified        PayPal verified the linked account

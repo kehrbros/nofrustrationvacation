@@ -11,7 +11,7 @@ import java.time.OffsetDateTime;
 
 /**
  * Account a user receives payouts on, confirmed by the user at the payment provider (PayPal). A provider needs one
- * before placing offers. Audited, so linking, relinking and unlinking stay traceable.
+ * to complete the onboarding. Audited, so linking, relinking and unlinking stay traceable.
  */
 @Getter
 @Entity

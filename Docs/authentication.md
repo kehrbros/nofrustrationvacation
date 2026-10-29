@@ -50,7 +50,7 @@ vacantagent.auth.signing-key=…                # nur eigener IdP, PEM
 vacantagent.auth.allowed-resources=…          # nur eigener IdP, Default ${vacantagent.mcp.resource-uri}
 vacantagent.auth.cimd.*                       # nur eigener IdP, MCP-Clients, siehe unten
 vacantagent.mcp.resource-uri=${vacantagent.backend-url}/mcp
-vacantagent.mcp.read-tools=list_agents        # alle anderen Tools brauchen mcp:write
+vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools brauchen mcp:write
 ```
 
 ## Frontend
