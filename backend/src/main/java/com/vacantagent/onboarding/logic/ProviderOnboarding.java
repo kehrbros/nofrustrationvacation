@@ -5,7 +5,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * Steps a provider completes before selling capacity, in any order, see Docs/onboarding.md. Registration is done by
+ * Steps a provider completes before selling capacity, in any order, legacy of VacantAgent, see Docs/architecture.md. Registration is done by
  * the identity provider, so every API user has it.
  */
 @Service

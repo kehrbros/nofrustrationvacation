@@ -14,7 +14,7 @@
 - **Images:** CI baut und pusht `ghcr.io/kehrbros/vacantagent/backend:main` (Branch `main`) und `ghcr.io/kehrbros/vacantagent/frontend:dev` (Branch `dev`). Andere Tags über `BACKEND_IMAGE`/`FRONTEND_IMAGE`. Lokal bauen: `cd backend && mvn -DskipTests verify`, danach im Root `docker compose build`. `docker stack deploy` ignoriert `build` und braucht die Images auf jedem Node (Registry oder lokal bei Single-Node-Swarm).
 - **Datenbank:** Im Stack PostgreSQL über das Profil `postgres` (`SPRING_PROFILES_ACTIVE=postgres`, `application-postgres.properties`, Host/DB/User über `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`). Ohne Profil (lokal) weiter In-Memory-H2. Flyway-Migrationen laufen auf beiden, daher nur Standard-SQL verwenden (z. B. `SMALLINT` statt `TINYINT`).
 - **Postgres-Service:** Daten im Volume `postgres-data`. Das Volume ist lokal auf einem Node, deshalb Placement `node.role == manager`. Bei mehreren Managern auf ein Node-Label umstellen (`docker node update --label-add vacantagent.db=true <node>`, Constraint `node.labels.vacantagent.db == true`).
-- **Backend:** 1 Replica, die Matching-Engine liegt im Prozess. Signaturschlüssel (Secret) und Autorisierungen des IdP (Datenbank) überleben einen Neustart, Logins und MCP-Verbindungen bleiben gültig. Swarm kennt kein `depends_on`, das Backend startet neu, bis Postgres erreichbar ist.
+- **Backend:** 1 Replica, Scheduler (Wechselkurse, PayPal-Status) und die Zuordnung von Incidents laufen im Prozess. Signaturschlüssel (Secret) und Autorisierungen des IdP (Datenbank) überleben einen Neustart, Logins und MCP-Verbindungen bleiben gültig. Swarm kennt kein `depends_on`, das Backend startet neu, bis Postgres erreichbar ist.
 - **Frontend:** 2 Replicas, Rolling Update `start-first`. nginx leitet `/api/**` an `http://backend:8080` weiter (`BACKEND_UPSTREAM`, Template `frontend/nginx.conf`), der Browser spricht die API also same-origin an. Login (OIDC) geht direkt an `BACKEND_URL`.
 
 ## Secrets
@@ -38,7 +38,7 @@
   openssl rand -base64 24 | tr -d '\n' | docker secret create vacantagent_postgres_password -
   ```
 
-- **Rotieren:** Secrets sind unveränderlich. Neues Secret mit neuem Namen anlegen, `name:` in `docker-compose.yml` anpassen, neu deployen. Der Verschlüsselungsschlüssel darf nicht rotiert werden, sonst sind gespeicherte API-Keys der Agents unlesbar. Ein neuer Signaturschlüssel macht alle ausgegebenen Tokens ungültig: Nutzer melden sich neu an, MCP-Clients verbinden sich neu. Das Postgres-Passwort wirkt nur bei der Initialisierung des leeren Volumes, danach zusätzlich per `ALTER USER vacantagent PASSWORD '...'` ändern.
+- **Rotieren:** Secrets sind unveränderlich. Neues Secret mit neuem Namen anlegen, `name:` in `docker-compose.yml` anpassen, neu deployen. Ein neuer Signaturschlüssel macht alle ausgegebenen Tokens ungültig: Nutzer melden sich neu an, MCP-Clients verbinden sich neu. Das Postgres-Passwort wirkt nur bei der Initialisierung des leeren Volumes, danach zusätzlich per `ALTER USER vacantagent PASSWORD '...'` ändern.
 
 ## Konfiguration
 

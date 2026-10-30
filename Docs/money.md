@@ -1,15 +1,14 @@
 # Geldbeträge und Währungen
 
-- **Grundsatz:** Logik, Persistenz, Matching und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.vacantagent.currency`.
-- **Basiswährung: USD**, fest in `Money.BASE_CURRENCY`. LLM-Anbieter bepreisen in USD, damit entfällt die Umrechnung auf der Anbieterseite. Nicht konfigurierbar: ein Wechsel erfordert eine Datenmigration.
-- **Warum nur eine Währung:** Vergleiche (`minCost ≤ price ≤ maxCost`) und Summen sind ohne Kurs eindeutig, die Envers-Historie bleibt kursunabhängig.
+- **Grundsatz:** Logik, Persistenz und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.vacantagent.currency`.
+- **Basiswährung: USD**, fest in `Money.BASE_CURRENCY`. Nicht konfigurierbar: ein Wechsel erfordert eine Datenmigration.
+- **Warum nur eine Währung:** Vergleiche und Summen sind ohne Kurs eindeutig, die Envers-Historie bleibt kursunabhängig.
 
 ## Typ `Money` (`com.vacantagent.common.money`)
 
 - `record Money(BigDecimal amount)`, immer Basiswährung, daher ohne Währungsfeld. Für alle Geldbeträge in Entities, Logik und Repositories, nie rohe `BigDecimal`.
-- **Skala:** fest 8 Nachkommastellen (`Money.SCALE`), im Konstruktor per `HALF_EVEN` normiert, daher ist `equals` sicher. Grund: Kosten einzelner Requests liegen bei Bruchteilen eines Cents (1.000 Tokens × 0,10 USD/Mio. = 0,0001 USD).
+- **Skala:** fest 8 Nachkommastellen (`Money.SCALE`), im Konstruktor per `HALF_EVEN` normiert, daher ist `equals` sicher.
 - **Operationen:** `plus`, `minus`, `times`, `dividedBy` (intern `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Nie `double`.
-- **Preise pro Mio. Tokens** sind `Money`, der Feldname trägt die Einheit. Kosten: `price.costFor(tokens)`.
 - **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, nur an der API und im Modul `currency`.
 
 ## Persistenz
@@ -17,10 +16,7 @@
 - **Mapping:** `common.data.MoneyConverter` (`@Converter(autoApply = true)`, analog `DurationConverter`). Eine Spalte pro Betrag, keine Währungsspalte. Entity-Feld: `@Column(precision = 19, scale = Money.SCALE) private Money ...;`
 - **Spaltentyp:** `NUMERIC(19, 8)`. Neue Geldspalten in Migrationen ebenso anlegen, in `_aud`-Tabellen auch.
 - **Umgestellt durch `V4__money.sql`** (vorher Entities `scale = 6`, Schema `NUMERIC(38, 2)`):
-  - `Agreement.agreedPricePerMillionInputTokens`, `agreedPricePerMillionOutputTokens` inkl. `agreement_aud`
-  - `ProviderOffer.pricePerMillionInputTokens`, `pricePerMillionOutputTokens`
-  - `ConsumerOrder.minCostPerMillionTokens`, `maxCostPerMillionTokens`; durch `V5__align_order_offer_columns.sql` ersetzt durch `maxCostPerMillionInputTokens`, `maxCostPerMillionOutputTokens` (ebenfalls `NUMERIC(19, 8)`)
-  - Die drei Markt-Tabellen oben sind seit `V17__drop_market_and_llm.sql` entfernt
+  - Preise von Markt, Angeboten und Aufträgen (entfernt mit `V18__drop_market_and_llm.sql`)
   - `AppUser.accountBalance` (seit `V11__accounting.sql` ersetzt durch `accounting_account.balance`), zusätzlich neues Feld `AppUser.preferredCurrency`
 - **Buchungen mit Umrechnung** (Ein-/Auszahlung, siehe [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). In der API zu `common.money.OriginalAmount` (`@Embeddable`, Spalten `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) gemappt und mit der Buchung gespeichert, nie neu berechnet.
 
@@ -40,12 +36,12 @@
 - **Eingehend:** `Money fromDto(MoneyDto)` bzw. `toBase(CurrencyAmount)`: `base = amount / rate`, Skala 8, `HALF_EVEN`.
 - **Ausgehend:** `toDto(money, currency, rounding)`: `amount = base × rate`. Ziel-Währung über `responseCurrency(requested, preferred)`: Query-Parameter `currency`, sonst `AppUser.preferredCurrency`, sonst USD.
 - **Rundung ausgehend (`MoneyRounding`):**
-  - `PRICE`: Preise pro Mio. Tokens, Kosten einzelner Requests: 6 Nachkommastellen, `HALF_EVEN`.
+  - `PRICE`: Preise mit kleinen Beträgen: 6 Nachkommastellen, `HALF_EVEN`.
   - `AMOUNT`: Kontostände, Rechnungs- und Zahlbeträge: Nachkommastellen der Währung (2 für EUR, 0 für JPY), `HALF_EVEN`.
   - `PAYOUT`: Auszahlungen: wie `AMOUNT`, aber `DOWN`, damit nie mehr ausgezahlt wird als das Guthaben deckt.
   - Formatierung (Tausendertrenner, Symbol) macht das Frontend.
 - **Zeitbezug des Kurses:** aktuelle Werte mit dem neuesten Kurs, historische Werte mit `toDto(..., at)` zum Kurs am Ereignisdatum, Buchungen mit dem gespeicherten Kurs.
-- **Roundtrip:** Hin- und Rückrechnung kann minimal abweichen. Wo das stört (z. B. Max-Preis einer Order), die Originaleingabe zusätzlich zur Anzeige speichern.
+- **Roundtrip:** Hin- und Rückrechnung kann minimal abweichen. Wo das stört, die Originaleingabe zusätzlich zur Anzeige speichern.
 - **Beispiel:** `GET /api/v1/accounting/balances?currency=EUR` liefert Guthaben und Einnahmen in EUR. `PUT /api/v1/users/me/preferred-currency` mit `{"currency": "EUR"}` (oder `null` für USD) setzt die Standardwährung.
 
 ## Tests
@@ -56,4 +52,3 @@
 ## Offen
 
 - Wechselkursaufschlag/Spread bei Ein- und Auszahlungen.
-- Abrechnung pro Request in voller Präzision oder gesammelt pro Zeitraum.

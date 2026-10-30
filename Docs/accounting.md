@@ -1,12 +1,12 @@
 # Abrechnung
 
-- **Modul `com.vacantagent.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung, Nutzungsabrechnung). Nutzt `com.vacantagent.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
+- **Modul `com.vacantagent.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus VacantAgent, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Nutzt `com.vacantagent.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
 
 ## Konten und Buchungen
 
 - **Zwei Konten je Nutzer** (`Account`, Tabelle `accounting_account`, eindeutig je `app_user_id` und `type`):
-  - `CREDIT` (Guthaben, Consumer): per PayPal aufgeladen, für LLM-Nutzung verbraucht, **nicht auszahlbar**.
-  - `EARNINGS` (Einnahmen, Provider): aus verkauften Tokens, per PayPal auszahlbar.
+  - `CREDIT` (Guthaben, Consumer): per PayPal aufgeladen, **nicht auszahlbar**.
+  - `EARNINGS` (Einnahmen, Provider): per PayPal auszahlbar.
   - Grund für die Trennung: eingezahltes Geld soll nicht direkt wieder ausgezahlt werden können (Gebühren, Geldwäsche-Risiko).
 - **Ersetzt `app_user.account_balance`:** `V11__accounting.sql` übernimmt vorhandene Guthaben als `CREDIT` mit Buchung `OPENING_BALANCE` und löscht die Spalte. `GET /api/v1/users/me` liefert kein `accountBalance` mehr, Kontostände kommen aus `GET /api/v1/accounting/balances`.
 - **Buchungen** (`LedgerEntry`): nur anhängen, nie ändern; Summe der Buchungen = Kontostand. Typen: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` zeigt auf Aufladung oder Auszahlung. `USAGE_CHARGE`/`USAGE_EARNING` stammen aus dem entfernten Markt (Referenz: Vereinbarung) und bleiben nur für vorhandene Buchungen.
@@ -20,7 +20,6 @@
   2. PayPal leitet auf `/paypal/connected?code=…&state=…` (Frontend) zurück.
   3. `POST /api/v1/accounting/payout-account/paypal {code, state}`: `state` muss vom selben Nutzer sein, ist 15 min gültig (`link-state-ttl`) und nur einmal verwendbar (CSRF-Schutz). Danach Code gegen Kontodaten tauschen.
 - `DELETE /api/v1/accounting/payout-account` trennt, solange keine Auszahlung offen ist (`PAYOUTS_OPEN`).
-- Teil des Provider-Onboardings, siehe [onboarding.md](onboarding.md).
 
 ## Einzahlung (Consumer)
 

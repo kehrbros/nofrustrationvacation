@@ -2,6 +2,8 @@
 
 # VacantAgent
 
+Travel incident app: users store their trip routes and are informed about events that affect them, e.g. road closures. The architecture is described in [Docs/architecture.md](Docs/architecture.md), the domain model in [Docs/domain.md](Docs/domain.md).
+
 ## Getting Started
 
 Running the frontend locally on port 5173:
@@ -11,7 +13,7 @@ Running the frontend locally on port 5173:
 3. Visit [http://localhost:5173/](http://localhost:5173/) in browser
 4. Log in via the identity provider of the backend (must be running). On startup the backend creates the account `test` / `test` if no account exists yet.
 
-Running the backend from `backend/` requires Java 17+ and Maven:
+Running the backend from `backend/` requires Java 25 and Maven:
 
 1. Run `mvn spring-boot:run`.
 2. Open the live OpenAPI document at [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs).
@@ -24,8 +26,6 @@ Authentication (OAuth2/OIDC with an own identity provider that can be replaced b
 
 Monetary values (single base currency USD, `Money` type, exchange rates and currency conversion at the API boundary) are described in [Docs/money.md](Docs/money.md).
 
-Accounting (credit and earnings accounts, top-ups and payouts via PayPal) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).
-
-Providers complete an onboarding checklist (PayPal account), see [Docs/onboarding.md](Docs/onboarding.md).
+Accounting (credit and earnings accounts, top-ups and payouts via PayPal, carried over from the former VacantAgent app) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).
 
 Running PostgreSQL, backend and frontend as a Docker Swarm stack (`docker-compose.yml`, profile `postgres`, credentials as Docker secrets) is described in [Docs/deployment.md](Docs/deployment.md). For a local run with PostgreSQL that builds all images from source, copy `.env.example` to `.env` and run `docker compose -f docker-compose.local.yml up --build`.
