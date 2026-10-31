@@ -6,15 +6,16 @@
 - **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` und `VACANTAGENT_IDP_SIGNING_KEY` optional. Docker Compose liest die `.env` automatisch.
 - **Start:** `docker compose -f docker-compose.local.yml up --build`. Frontend http://localhost:5173 (Port des Vite-Dev-Servers, damit Redirect-URIs und PayPal-Return-URL passen, also nicht parallel zu `npm run dev`), Backend http://localhost:8080, Login `test`/`test`.
 - **Datenbank:** PostgreSQL 17 mit Profil `postgres` wie im Stack, Daten im Volume `postgres-data`, Port `LOCAL_POSTGRES_PORT` (Standard 5432) für DB-Tools. Zurücksetzen: `docker compose -f docker-compose.local.yml down -v`. Das Passwort gilt nur beim ersten Anlegen des Volumes.
-- Ohne Docker weiter `mvn spring-boot:run` mit In-Memory-H2, siehe README.
+- Ohne Docker weiter `mvn spring-boot:run` mit In-Memory-H2, siehe README. Nach der PostGIS-Umstellung entfällt H2, lokal dann nur mit Docker.
 
 ## Docker Swarm
 
 - **Stack:** `docker-compose.yml` im Repo-Root, Services `postgres` (PostgreSQL 17), `backend` (Spring Boot, Port 8080) und `frontend` (nginx mit dem Vite-Build, Port 80) im Overlay-Netz `vacantagent`.
 - **Images:** CI baut und pusht `ghcr.io/kehrbros/vacantagent/backend:main` (Branch `main`) und `ghcr.io/kehrbros/vacantagent/frontend:dev` (Branch `dev`). Andere Tags über `BACKEND_IMAGE`/`FRONTEND_IMAGE`. Lokal bauen: `cd backend && mvn -DskipTests verify`, danach im Root `docker compose build`. `docker stack deploy` ignoriert `build` und braucht die Images auf jedem Node (Registry oder lokal bei Single-Node-Swarm).
-- **Datenbank:** Im Stack PostgreSQL über das Profil `postgres` (`SPRING_PROFILES_ACTIVE=postgres`, `application-postgres.properties`, Host/DB/User über `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`). Ohne Profil (lokal) weiter In-Memory-H2. Flyway-Migrationen laufen auf beiden, daher nur Standard-SQL verwenden (z. B. `SMALLINT` statt `TINYINT`).
+- **Datenbank:** Im Stack PostgreSQL über das Profil `postgres` (`SPRING_PROFILES_ACTIVE=postgres`, `application-postgres.properties`, Host/DB/User über `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`). Ohne Profil (lokal) weiter In-Memory-H2. Flyway-Migrationen laufen auf beiden, daher nur Standard-SQL verwenden (z. B. `SMALLINT` statt `TINYINT`). Gilt bis zur PostGIS-Umstellung, siehe [network.md](network.md).
 - **Postgres-Service:** Daten im Volume `postgres-data`. Das Volume ist lokal auf einem Node, deshalb Placement `node.role == manager`. Bei mehreren Managern auf ein Node-Label umstellen (`docker node update --label-add vacantagent.db=true <node>`, Constraint `node.labels.vacantagent.db == true`).
 - **Backend:** 1 Replica, Scheduler (Wechselkurse, PayPal-Status) und die Zuordnung von Incidents laufen im Prozess. Signaturschlüssel (Secret) und Autorisierungen des IdP (Datenbank) überleben einen Neustart, Logins und MCP-Verbindungen bleiben gültig. Swarm kennt kein `depends_on`, das Backend startet neu, bis Postgres erreichbar ist.
+- **Streckennetz** (geplant): Image `postgis/postgis` statt `postgres`, Volume für `/data/osm` und `/data/graphs`, mehr Speicher fürs Backend (NZ-Import einige GB, Graph Memory-Mapped außerhalb des Heaps, `-XX:MaxRAMPercentage`). Konfiguration je Region siehe [network.md](network.md#konfiguration).
 - **Frontend:** 2 Replicas, Rolling Update `start-first`. nginx leitet `/api/**` an `http://backend:8080` weiter (`BACKEND_UPSTREAM`, Template `frontend/nginx.conf`), der Browser spricht die API also same-origin an. Login (OIDC) geht direkt an `BACKEND_URL`.
 
 ## Secrets

@@ -2,33 +2,35 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Streckennetz ab `V21` (geplant).
 
 ## Bounded Contexts
 
 | Modul | Entitäten |
 |---|---|
-| `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection` |
-| `com.vacantagent.network` (Streckennetz) | `Road`, `Segment` |
+| `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection`, `Waypoint` (geplant) |
+| `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` (geplant, ersetzt `Road`, `Segment`) |
 | `com.vacantagent.bookings` | `Booking` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.vacantagent.incidents` | `Incident`, `Consequence` |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
 - `Trip` (gehört einem Nutzer) 1–* `Stop` (geordnet über `position`, optional Koordinaten, Ankunft, Abfahrt).
 - `Route`: eine Instanz pro Trip, verbindet genau 2 Stops (`fromStop`, `toStop`, eindeutig je Paar). Fährt ein anderer Trip denselben Weg, hat er eine eigene Route.
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
-- `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`. Woher die Sections kommen (Routing-Dienst), ist noch offen.
+- `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`.
+- **`Waypoint`** (geplant): Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet, ohne Aufenthalt. Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert.
+- **Planen** (geplant): `RoutePlanning.plan` holt Stops, Waypoints und Vorlieben, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus Abfahrt und Dauer und übergibt `PlannedSection`s an `RouteLogic.replaceSections`.
+- **Anteile** (geplant): `RouteSection` und `PlannedSection` bekommen `fromFraction`/`toFraction`, welcher Teil des Segments befahren wird (nur am ersten und letzten Abschnitt nicht 0–1). Verhindert Fehlalarme an langen Segmenten.
 
 ## Streckennetz
 
-- `Road` (z. B. `A6`, eindeutige Nummer) 1–* `Segment`.
-- `Segment` existiert genau einmal, von Anschlussstelle zu Anschlussstelle (`from`, `to`, Spalten `from_junction`, `to_junction`), eindeutig je Road. Die Gegenrichtung ist ein eigenes Segment.
-- `geometry`: GeoJSON-LineString (WGS84) als Text. Kein PostGIS, damit H2 (lokal, Tests) und PostgreSQL gleich bleiben; räumliche Abfragen bei Bedarf später.
+- Ein `RoadSegment` ist eine befahrbare Richtung einer Straße von Kreuzung zu Kreuzung mit stabiler Id, erzeugt aus OpenStreetMap. Details zu Schlüssel, Import und Aktualisierung in [network.md](network.md).
+- Bis zur Umstellung gelten noch `Road` (z. B. `A6`, eindeutige Nummer) 1–* `Segment` (von Anschlussstelle zu Anschlussstelle, je Richtung, Geometrie als GeoJSON-Text).
 
 ## Bookings
 
@@ -60,7 +62,7 @@
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
 - **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
-- **Routen planen:** Sections aus den Stops über einen Routing-Dienst, erwartete Durchfahrt aus Abfahrt und Fahrzeit. Neuplanung, wenn sich Abfahrt oder Stops ändern, und ggf. Umfahrung bei `BLOCKED`.
+- **Neuplanung:** wenn sich Abfahrt, Stops oder Waypoints ändern und nach `NetworkRefreshed` (geplant), Umfahrung bei `BLOCKED` über `recommendations`.
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.

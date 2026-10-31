@@ -8,6 +8,7 @@ Vor jeder Änderung an Code, Schema oder Doku lesen und einhalten:
 
 - [Docs/architecture.md](Docs/architecture.md): Module, Aufbau eines Moduls, Abhängigkeiten, Persistenz, Security, Tests, Altbestand.
 - [Docs/domain.md](Docs/domain.md): Bounded Contexts, Entitäten, Beziehungen, Historisierung, offene fachliche Punkte.
+- [Docs/network.md](Docs/network.md): Streckennetz, GraphHopper, Import, Schnittstellen.
 
 Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie damit nicht vereinbar, nicht stillschweigend abweichen, sondern nachfragen. Wird eine Abweichung beschlossen, das betroffene Dokument in derselben Änderung anpassen.
 
@@ -17,6 +18,6 @@ Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie dami
 - **Referenzen über Modulgrenzen nur per Id** mit Fremdschlüssel in der Datenbank. `@ManyToOne` nur innerhalb eines Moduls.
 - **Abhängigkeitsrichtung einhalten**, keine Zyklen. Rückwärts nur über Spring-Events (z. B. `RouteChanged`).
 - **`auth` bleibt isoliert** (`AuthModuleIsolationTest`).
-- **Schema nur per Flyway**, Standard-SQL für H2 und PostgreSQL (`SMALLINT` statt `TINYINT`, kein PostGIS). Bestehende Migrationen nie ändern, neue Version anlegen.
+- **Schema nur per Flyway**, Standard-SQL (`SMALLINT` statt `TINYINT`). PostGIS ist beschlossen und nur für Geometrie zu nutzen, bis zur Umstellung laufen Migrationen auch auf H2, siehe [Docs/network.md](Docs/network.md). Bestehende Migrationen nie ändern, neue Version anlegen.
 - **Altbestand** (`accounting`, `paypal`, `onboarding`, alte Frontend-Seiten) nicht ändern, solange nicht entschieden ist, was davon bleibt.
 - **Doku** in `Docs/` auf Deutsch in Stichpunkten, mit dem Code aktuell halten.

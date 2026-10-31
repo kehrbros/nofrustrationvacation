@@ -92,3 +92,6 @@ backend/config/
 
 # H2 database files
 *.db
+
+# Throwaway spikes, code only on spike branches (e.g. spike/graphhopper), see Docs/network.md
+spikes/
