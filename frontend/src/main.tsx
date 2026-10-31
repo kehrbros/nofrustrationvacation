@@ -10,9 +10,11 @@ import App from './App';
 import { userManager } from './auth/oidcConfig';
 import { CALLBACK_PATH } from './auth/paths';
 import './index.css';
+import { listenForInstallPrompt } from './pwa/install';
 import { theme } from './theme';
 
 configureApiClient(userManager);
+listenForInstallPrompt();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

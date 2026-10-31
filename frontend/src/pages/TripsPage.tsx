@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
 import ProfileButton from '../profile/ProfileButton';
+import { InstallBanner } from '../pwa/InstallApp';
 import CoverImage from '../trips/CoverImage';
 import { groupTrips } from '../trips/grouping';
 import type { TripSummary } from '../trips/model';
@@ -86,6 +87,8 @@ export default function TripsPage() {
         <h1 className="va-page-title">Meine Reisen</h1>
         <ProfileButton />
       </header>
+
+      <InstallBanner />
 
       {error !== undefined && <Alert type="error" showIcon message="Die Reisen konnten nicht geladen werden." />}
       {loading && !data && <Skeleton active paragraph={{ rows: 6 }} />}
