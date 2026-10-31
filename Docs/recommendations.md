@@ -14,11 +14,10 @@ flowchart LR
     w[Später: Was-wäre-wenn,<br>gespeicherte Regeln] -.-> sf
     sf[ScenarioFactory] --> s([Scenario])
     s --> e[SuggestionEngine]
-    e --> g1[FastestGenerator]
-    e --> g2[PenaltyGenerator]
+    e --> g2[AlternativesGenerator<br>GraphHopper alternative_route]
     e --> g3[KeepRouteGenerator]
     e --> g4[DepartureShiftGenerator]
-    g1 & g2 & g3 & g4 --> ev[Bewerten<br>Incidents + Zeiten]
+    g2 & g3 & g4 --> ev[Bewerten<br>Incidents + Zeiten]
     ev --> r[Aussortieren, Ranking,<br>Beschriften]
     r --> set[(SuggestionSet<br>+ RouteOptions)]
     set --> api[API / Frontend / Benachrichtigung]
@@ -45,22 +44,27 @@ flowchart LR
 - **Planung** (`ScenarioFactory.forPlanning(routeId, departure?)`):
   - Punkte und Abfahrt wie in `RoutePlanning` (Stops, Waypoints, Abfahrt am Start-Stop). Fehlende Koordinaten oder Abfahrt → gleiche Ergebnisse wie `PlanResult` (`MISSING_COORDINATES`, `MISSING_DEPARTURE`), kein Set.
   - Keine Einschränkungen im Netz. Bekannte Incidents werden nur bewertet, nicht umfahren: der Nutzer sieht „führt durch Baustelle SH 1“ am Vorschlag.
-  - Generatoren: `FASTEST`, `PENALTY`.
+  - Generatoren: `ALTERNATIVES` (liefert auch die schnellste).
 - **Incident** (`ScenarioFactory.forConsequence(consequenceId)`):
   - Wie Planung, dazu: `CLOSURE` → Segmente des Incidents in `blockedSegmentIds`, sonst mit `expectedDelay` in `delayedSegments`. Weitere aktive Incidents auf der Referenzroute ebenso.
-  - Referenz = aktuell geplante Route. Generatoren: `KEEP_ROUTE`, `FASTEST`, `PENALTY`, `DEPARTURE_SHIFT`.
+  - Referenz = aktuell geplante Route. Generatoren: `KEEP_ROUTE`, `ALTERNATIVES`, `DEPARTURE_SHIFT`.
   - **Bereits unterwegs** (Abfahrt vorbei, Ankunft nicht): Start ist die geschätzte Position jetzt = Section, deren erwartete Durchfahrt `now` enthält, Punkt bei passendem Anteil. Vorschläge nur ab dort, `DEPARTURE_SHIFT` entfällt. Echte Position (GPS aus der App) später als eigener `start`.
   - Section mit dem Incident schon passiert → kein Set.
 - **Später** (`WHAT_IF`): andere Abfahrt ausprobieren, vom Nutzer gesperrte Straße, gespeicherte Regeln aus [network.md](network.md#offen) („Szenarien als gespeicherte Regeln“). Nur neue Factory-Methode, Rest bleibt.
 
 ## Generatoren
 
-- Interface `CandidateGenerator { List<Candidate> generate(Scenario, GeneratorContext) }`, je Generator eine Spring-Bean mit `kind()`. `GeneratorContext` gibt Zugriff auf `Routing` und die bisherigen Kandidaten (für Vielfalt).
+- Interface `CandidateGenerator { List<Candidate> generate(Scenario, GeneratorContext) }`, je Generator eine Spring-Bean mit `kind()`. `GeneratorContext` gibt Zugriff auf `Routing`.
 - `Candidate`: Herkunft (`kind`), `RouteResult`, ggf. geänderte Abfahrt, Via-Punkte, die zum Übernehmen gespeichert werden.
-- **`FASTEST`:** eine Route mit den Einschränkungen des Szenarios. Bei Planung identisch mit dem, was `RoutePlanning` plant.
-- **`PENALTY` (Vielfalt):** Penalty-Methode, bis zu `2·n` Durchläufe: alle Segmente bisheriger Kandidaten bekommen Faktor 1,5 (kumulativ, höchstens 4), neu routen. Liefert unterschiedliche Strecken auch mit Via-Punkten und Bordsteinseite.
-  - Kein GraphHopper `alternative_route`: unterstützt in 11.1 nur zwei Punkte, kein `pass_through` und keine `curbsides` (`Router`), passt also nicht zu Waypoints und Stops. Einsetzbar höchstens als zusätzliche Quelle für Routen ohne Waypoints, nicht im ersten Schritt.
-  - Die Zeiten im Ergebnis bleiben echt: Strafen ändern nur die Gewichtung, nicht `TIME`.
+- **`ALTERNATIVES`:** GraphHopper erzeugt die Vorschläge mit `algorithm=alternative_route` (`Routing.alternatives`, siehe [Schnittstellen](#schnittstellen)). Sperren und Verzögerungen des Szenarios wirken über dieselbe Gewichtung wie beim normalen Routing, GraphHopper umfährt den Incident also selbst.
+  - Parameter: `alternative_route.max_paths` = `n + 1` (Reserve, falls ein Vorschlag nach der Bewertung wegfällt), `max_weight_factor` 1,4, `max_share_factor` 0,6. GraphHopper sortiert damit schon zu ähnliche und zu lange Strecken aus. Werte in `RecommendationProperties`.
+  - Funktioniert mit LM (`LMRoutingAlgorithmFactory` kennt `alternative_route`), kein CH nötig.
+  - Der erste Pfad ist die schnellste Strecke, Label `FASTEST`.
+  - **Grenzen in GraphHopper 11.1** (`Router.routeAlt`) und wie wir sie umgehen:
+    - Nur zwei Punkte: Route ohne Waypoints → eine Anfrage Stop → Stop. Mit Waypoints → je Abschnitt (Stop → Via, Via → Via, Via → Stop) eine Anfrage mit Alternativen, dann kombinieren: Kombinationen nach Gesamtdauer, die besten `n + 1` weiter in die Bewertung.
+    - Kein `pass_through`: Kombinationen, die an einem Via-Punkt wenden (letzte Kante eines Abschnitts = umgekehrte erste Kante des nächsten), fallen weg.
+    - Keine `curbsides`: Vorschläge ignorieren die Bordsteinseite an den Stops. Weil sie auch beim Planen nur weich gilt (`force_curbside=false`), ändert sich höchstens das letzte Stück. Nach dem Übernehmen plant `RoutePlanning` mit Bordsteinseite neu.
+  - Liefert GraphHopper weniger als `n` Strecken (kurze Routen, wenig Netz), bekommt der Nutzer weniger Vorschläge. Keine eigenen Alternativen daneben.
 - **`KEEP_ROUTE`:** Referenzroute unverändert, bewertet mit Verzögerungen bzw. als unfahrbar bei Sperrung. Nur wenn es eine Referenz gibt. Ergebnis „Verzögerung hinnehmen“ oder (gesperrt) nicht im Ranking, aber als Vergleich in der Antwort (`reference`).
 - **`DEPARTURE_SHIFT`:** nur bei Incident mit Ende (`validTo`) oder Beginn in der Zukunft:
   - Später fahren: Abfahrt so, dass die betroffene Section frühestens `validTo + Puffer` erreicht wird (Puffer konfigurierbar, Standard 15 min), Strecke = Referenz.
@@ -76,8 +80,7 @@ flowchart LR
   - Ergebnis: Ankunft, Distanz, Fahrzeit, Wartezeit, Verzögerung, Anteil gemeinsamer Strecke mit der Referenz, `BLOCKED` ja/nein.
 - **Aussortieren:**
   - Kandidat führt über eine Sperrung zur Zeit der Durchfahrt → raus.
-  - Ähnlich: Anteil gemeinsamer Strecke (nach Distanz) mit einem besser platzierten Vorschlag > 0,6 → raus. Gleiche Werte wie GraphHopper `max_share`.
-  - Zu langsam: Fahrzeit > 1,4 × schnellster Kandidat → raus. Gilt nicht für `DEPARTURE_SHIFT` und `KEEP_ROUTE` (anderer Vorteil: gleiche Strecke).
+  - Ähnlichkeit und Länge prüft GraphHopper (`max_share_factor`, `max_weight_factor`). Selbst geprüft nur, was GraphHopper nicht sehen kann: kombinierte Abschnitte (Anteil gemeinsamer Strecke > 0,6 mit einem besser platzierten Vorschlag → raus) und `KEEP_ROUTE` gegen gleichwertige Alternativen.
   - Alle Schwellen in `RecommendationProperties`.
 - **Ranking:** nach Ankunft am Ziel (inkl. Warten und Verzögerung), dann Distanz. Höchstens `n` Vorschläge, höchstens ein `DEPARTURE_SHIFT` je Richtung.
 - **Beschriften** (`labels`, mehrere möglich): `FASTEST`, `SHORTEST`, `CURRENT` (gleich der Referenz), `AVOIDS_INCIDENT`, `HAS_INCIDENT`, `LATER_DEPARTURE`, `EARLIER_DEPARTURE`, `FERRY`. Dazu `via`: häufigste `ref` bzw. Straßenname im abweichenden Teil (über `SegmentQueries`), z. B. „über SH 2“. Texte baut das Frontend.
@@ -99,7 +102,7 @@ flowchart LR
 ## Übernehmen eines Vorschlags
 
 - Gespeichert wird die **Absicht**, nicht die Segmentliste (wie bei Waypoints): Via-Punkte, die den Vorschlag reproduzieren.
-- Via-Punkte beim Erzeugen bestimmen (`ViaPointExtractor`): Waypoints des Nutzers bleiben; für jeden zusammenhängenden Abschnitt, der von `FASTEST` abweicht, ein Punkt in der Mitte des längsten Segments dort, mit dessen `ref` als `roadHint`. Prüfen: Routing über diese Punkte ergibt ≥ 90 % gemeinsame Strecke mit dem Kandidaten, sonst weiteren Punkt im längsten noch abweichenden Abschnitt (höchstens 3 je Abschnitt).
+- Via-Punkte beim Erzeugen bestimmen (`ViaPointExtractor`): Waypoints des Nutzers bleiben; für jeden zusammenhängenden Abschnitt, der von der schnellsten Strecke abweicht, ein Punkt in der Mitte des längsten Segments dort, mit dessen `ref` als `roadHint`. Prüfen: Routing über diese Punkte ergibt ≥ 90 % gemeinsame Strecke mit dem Kandidaten, sonst weiteren Punkt im längsten noch abweichenden Abschnitt (höchstens 3 je Abschnitt).
 - So bleibt die Wahl nach `NetworkRefreshed` und Änderungen der Abfahrt erhalten, und die Sperre selbst muss nicht dauerhaft gespeichert werden.
 - `SuggestionApplication.apply(optionId, userId)`:
   1. Set muss `CURRENT` sein und dem Nutzer gehören, sonst `409` mit `SUGGESTION_STALE`.
@@ -110,7 +113,7 @@ flowchart LR
 
 ## Auslöser und Lebenszyklus
 
-- **Planung:** auf Anfrage (API), synchron. Routing außerhalb der Transaktion wie in `RoutePlanning`. Zeitbudget: `FASTEST` + `PENALTY` mit `n = 3` ≈ 4–7 Routen, mit LM je wenige ms bis ~100 ms für lange Strecken.
+- **Planung:** auf Anfrage (API), synchron. Routing außerhalb der Transaktion wie in `RoutePlanning`. Zeitbudget: eine `alternative_route`-Anfrage je Abschnitt, mit LM wenige ms bis ~100 ms für lange Strecken (am NZ-Graphen messen).
 - **Incident:** `incidents` veröffentlicht `ConsequenceChanged` (`consequenceId`, `routeId`, `incidentId`, `CREATED`/`UPDATED`/`REMOVED`).
   - `recommendations` hört mit `@TransactionalEventListener(AFTER_COMMIT)` und rechnet auf einem virtuellen Thread: Routing darf die Transaktion von `ConsequenceMatcher` nicht verlängern.
   - Nur bei `BLOCKED` oder `delay` ≥ `min-delay` (Standard 15 min), passt zu den Schwellen der Benachrichtigung.
@@ -123,8 +126,9 @@ flowchart LR
 
 - `recommendations.logic` nach außen: `Suggestions.forPlanning(routeId, count, departure?)`, `Suggestions.forConsequence(consequenceId, count)`, `Suggestions.get(setId)`, `SuggestionApplication.apply(optionId)`. Ergebnis `SuggestionResult` (Set, Vorschläge, `reference`, ggf. Problem wie `MISSING_DEPARTURE`).
 - **`network`** (Erweiterung von `RouteOptions`, ersetzt den Satz „derzeit nur `blockedSegmentIds`“ in [network.md](network.md#schnittstellen-networklogic)):
-  - `RouteOptions(blockedSegmentIds, penalizedSegments: Map<Long, Double>, delayedSegments: Map<Long, Duration>)`.
-  - `BlockedEdgesWeighting` wird `ScenarioWeighting`: gesperrt → unendlich, Strafe → Gewicht × Faktor, Verzögerung → Gewicht + Sekunden. Alle Werte nur ≥ 1 bzw. ≥ 0: Gewichte steigen nur, die LM-Schätzung bleibt gültig.
+  - `RouteOptions(blockedSegmentIds, delayedSegments: Map<Long, Duration>)`.
+  - `BlockedEdgesWeighting` wird `ScenarioWeighting`: gesperrt → unendlich, Verzögerung → Gewicht + Sekunden (≥ 0). Gewichte steigen nur, die LM-Schätzung bleibt gültig. Gilt für normales Routing und `alternative_route` gleich.
+  - Neu `Routing.alternatives(RoutePoint from, RoutePoint to, RouteOptions, AlternativeOptions)`: genau zwei Punkte, `algorithm=alternative_route`, ohne `curbsides` und `pass_through`. Ergebnis `List<RouteResult>`, erster Eintrag = schnellste. `AlternativeOptions`: `maxPaths`, `maxWeightFactor`, `maxShareFactor`.
   - Neu `Routing.evaluate(segmentIds)` nicht nötig: Dauern der Referenz stehen schon in den Sections.
 - **`incidents`:** `ConsequenceChanged` (Event), `IncidentOverlap` (reine Funktion, auch von `ConsequenceMatcher` genutzt), `ActiveIncidents.onSegments(segmentIds, from, to)` (Lesen).
 - **`trips`:** `RouteLogic.replaceWaypoints(…)`, Abfahrt am Stop ändern, `RoutePlanning.plan`, Lesen von Stops, Waypoints und Sections über eine schmale Klasse `RouteSnapshot` in `trips.logic` statt Repositories.
@@ -153,9 +157,9 @@ flowchart LR
 ## Tests
 
 - `SuggestionEngineTest` auf dem Wellington-Extrakt: Terrace Tunnel gesperrt → Vorschlag ohne Tunnel, `KEEP_ROUTE` unfahrbar; ohne Sperre → `n` Vorschläge mit `sharedRatio` ≤ 0,6.
-- `PenaltyGenerator` mit Via-Punkt und Bordsteinseite (dort, wo `alternative_route` scheitert).
+- `AlternativesGenerator` mit Via-Punkt: Abschnitte kombiniert, Kombination mit Wenden am Via-Punkt verworfen.
 - `DepartureShiftGenerator` ohne Routing (Zeiten), inkl. „bereits unterwegs“.
-- `ViaPointExtractor`: übernommener Vorschlag reproduziert ≥ 90 % der Strecke.
+- `ViaPointExtractor`: übernommener Vorschlag (inkl. Bordsteinseite beim Neuplanen) reproduziert ≥ 90 % der Strecke.
 - Lebenszyklus: `RouteChanged` → `STALE`, `apply` auf `STALE` → 409, `apply` entfernt die Consequence.
 
 ## Offen

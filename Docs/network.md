@@ -39,8 +39,8 @@
 
 - Andere Module nutzen nur diese Interfaces und Records, nie Entities, Repositories oder GraphHopper-Typen. Geometrie als eigene Records (`GeoPoint`, `GeoLine`, `GeoArea`).
 - `Routing.route(List<RoutePoint>, RouteOptions)`: `RoutePoint` mit `STOP`/`VIA` und optionalem Straßenhinweis. Stops nur als erster und letzter Punkt, dazwischen Via-Punkte (`RoutePlanning` plant je Stop-Paar), sonst `IllegalArgumentException`.
-  - `RouteOptions`: derzeit nur `blockedSegmentIds`. Geplant mit `recommendations`: `penalizedSegments` (Faktor ≥ 1, Penalty-Methode für Alternativen) und `delayedSegments` (Zuschlag ≥ 0), siehe [recommendations.md](recommendations.md#schnittstellen). Gewichte steigen nur, LM bleibt gültig. Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
-  - Kein GraphHopper `alternative_route`: in 11.1 nur mit zwei Punkten, ohne `pass_through` und `curbsides`.
+  - `RouteOptions`: derzeit nur `blockedSegmentIds`. Geplant mit `recommendations`: `delayedSegments` (Zuschlag ≥ 0), siehe [recommendations.md](recommendations.md#schnittstellen). Gewichte steigen nur, LM bleibt gültig. Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
+  - Geplant `Routing.alternatives`: Alternativen über GraphHopper `alternative_route` (mit LM möglich). In 11.1 nur zwei Punkte, ohne `pass_through` und `curbsides`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
   - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph, später 503).
 - `SegmentQueries`: Details zu Segmenten (`ref`, Name, Geometrie, ausgemustert) für API und Benachrichtigungen.
