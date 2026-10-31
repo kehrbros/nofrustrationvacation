@@ -11,6 +11,8 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      EXPO_NO_TELEMETRY: 1
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -20,30 +22,7 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run generate:api
+      - run: npm run typecheck
       - run: npm test
-
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set image name
-        id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/frontend" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:dev
-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}
+      # JS bundles of the app, fails on unresolved imports; native builds run on EAS
+      - run: npx expo export --platform android --platform ios --output-dir dist

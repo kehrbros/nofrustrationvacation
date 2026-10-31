@@ -34,7 +34,8 @@
 
 - Signaturschlüssel: `vacantagent.auth.signing-key` (PEM, PKCS#8 RSA, Secret `VACANTAGENT_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
 - Autorisierungen (Codes, Access und Refresh Tokens) und Consents liegen in der Datenbank (`JdbcOAuth2AuthorizationService`).
-- Client `vacantagent-frontend`: öffentlich, Authorization Code + PKCE, Redirect `http://localhost:5173/auth/callback`, kein Consent-Screen.
+- Client `vacantagent-app` (App in `frontend/`): öffentlich, Authorization Code + PKCE, Redirect `vacantagent://auth/callback` (privates URI-Schema nach RFC 8252), Logout-Redirect `vacantagent://auth/logout`, kein Consent-Screen. Access Token 15 Minuten, Refresh Token 30 Tage mit Rotation (`reuse-refresh-tokens=false`, `PublicClientRefresh*` wie bei MCP-Clients).
+- Client `vacantagent-swagger`: Swagger UI des Backends, Authorization Code + PKCE, Redirect `${BACKEND_URL}/swagger-ui/oauth2-redirect.html`, kein Refresh Token.
 - MCP-Clients: nicht vorregistriert, sondern über ihre `client_id`-URL, siehe unten.
 
 ## Konfiguration
@@ -53,29 +54,29 @@ vacantagent.mcp.resource-uri=${vacantagent.backend-url}/mcp
 vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools brauchen mcp:write
 ```
 
-## Frontend
+## App
 
-- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:8080`, `vacantagent-frontend`).
-- `RequireAuth` schützt das Dashboard: nicht angemeldet → `signinRedirect` → Login-Seite des IdP.
-- `/auth/callback` (`AuthCallback`): Code-Tausch durch den `AuthProvider`, danach Weiterleitung auf die Dashboard-Startseite `/`.
-- Tokens im `sessionStorage`. Kein Refresh Token (öffentlicher Client): bei Ablauf des Access Tokens oder einer 401 der API wird der Nutzer entfernt und der Login neu gestartet; solange die IdP-Session besteht, ohne erneute Passworteingabe.
-- `frontend/src/api/apiClient.ts`: generierter API-Client mit `Authorization: Bearer …`, relative URLs (`/api` wird vom Vite-Dev-Server an das Backend weitergeleitet, `VITE_API_BASE_URL` überschreibt).
-- Abmelden: `signoutRedirect` (OIDC-Logout des IdP, zurück auf `/`, von dort wieder zum Login).
+- `expo-auth-session` in `frontend/src/auth/oidc.ts`: Login im Systembrowser (iOS `ASWebAuthenticationSession`, Android Custom Tabs), die App sieht das Passwort nie. Konfiguration über `EXPO_PUBLIC_BACKEND_URL`, `EXPO_PUBLIC_OIDC_ISSUER` (Default: Backend-URL), `EXPO_PUBLIC_OIDC_CLIENT_ID` (Default `vacantagent-app`).
+- Der Redirect auf `vacantagent://auth/callback` funktioniert nur im Development Build bzw. der gebauten App, nicht in Expo Go (eigenes Schema `exp://`).
+- `Session` (`frontend/src/auth/session.ts`): Tokens im Secure Store (Keychain/Keystore), Login bleibt über App-Neustarts erhalten. Access Token wird 30 s vor Ablauf per Refresh Token erneuert, gleichzeitige Requests teilen sich einen Refresh (rotierte Refresh Tokens gelten nur einmal). Scheitert der Refresh, endet die Session.
+- Routen: `src/app/(app)/**` nur mit Login (`Stack.Protected`), sonst `login`. `src/app/auth/[step].tsx` fängt die Redirect-Deep-Links ab.
+- `frontend/src/api/apiClient.ts`: generierter API-Client mit `EXPO_PUBLIC_BACKEND_URL` als Basis und `Authorization: Bearer …`. Eine 401 der API beendet die Session, die App zeigt wieder den Login.
+- Abmelden: Tokens löschen, danach OIDC-Logout des IdP im Browser (`id_token_hint`, zurück auf `vacantagent://auth/logout`), damit der nächste Login wieder nach dem Passwort fragt.
 
 ## Workflows
 
 ### Registrierung
 
-1. Frontend startet den Login (`/oauth2/authorize`) → IdP leitet auf `/login` um.
+1. App startet den Login (`/oauth2/authorize`) → IdP leitet auf `/login` um.
 2. Nutzer folgt dem Link „Create an account“ → `GET /register`.
 3. `POST /register` validiert die Eingaben und legt einen `AuthAccount` mit bcrypt-Hash an. Doppelter Username: Prüfung vorab, bei gleichzeitiger Registrierung der Unique-Constraint.
 4. Weiterleitung nach `/login?registered`. Es wird **kein `AppUser`** angelegt.
 
 ### Login (Authorization Code + PKCE)
 
-1. Frontend → `GET /oauth2/authorize?response_type=code&client_id=vacantagent-frontend&code_challenge=…`.
-2. Login per Formular. Danach setzt der IdP die gespeicherte Anfrage fort und leitet mit `code` zurück zum Frontend.
-3. Frontend → `POST /oauth2/token` mit `code` + `code_verifier` → Access Token (JWT, `sub` = Username, `roles`, `email`) und ID Token.
+1. App → `GET /oauth2/authorize?response_type=code&client_id=vacantagent-app&redirect_uri=vacantagent://auth/callback&code_challenge=…` im Systembrowser.
+2. Login per Formular. Danach setzt der IdP die gespeicherte Anfrage fort und leitet mit `code` auf `vacantagent://auth/callback` zurück, der Browser übergibt an die App.
+3. App → `POST /oauth2/token` mit `code` + `code_verifier` → Access Token (JWT, `sub` = Username, `roles`, `email`), ID Token und Refresh Token.
 
 ### Authentifizierter API-Request
 
@@ -148,13 +149,12 @@ MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization S
 4. MCP: Keycloak muss CIMD unterstützen und `aud` auf `vacantagent.mcp.resource-uri` setzen (Audience-Mapper), die Scopes `mcp:read`/`mcp:write` anlegen. `ProtectedResourceMetadataController` meldet dann den Keycloak-Issuer.
 5. Entfernen: Paket `com.vacantagent.auth`, `templates/auth`, die Properties `spring.security.oauth2.authorizationserver.*` und `vacantagent.auth.*`, die Abhängigkeiten `spring-boot-starter-security-oauth2-authorization-server` und `spring-boot-starter-thymeleaf`.
 6. Migrationen `V3__auth_account.sql` und `V17__oauth2_authorization.sql` im Repo lassen (Flyway-Historie) und die Tabellen mit einer neuen Migration droppen.
-7. Frontend: nur `authority` (Issuer) und `client_id` der OIDC-Konfiguration ändern.
+7. App: öffentlichen Client mit Redirect `vacantagent://auth/callback` und Refresh Tokens anlegen, `EXPO_PUBLIC_OIDC_ISSUER` und `EXPO_PUBLIC_OIDC_CLIENT_ID` setzen.
 
 ## Offen
 
-- Access Token lebt 5 Minuten (Default des Authorization Servers), danach Redirect-Runde über den IdP. Ggf. `…token.access-token-time-to-live` erhöhen.
-- Produktion: Frontend (nginx) leitet `/api` noch nicht an das Backend weiter.
+- Abmelden in der App widerruft das Refresh Token nicht serverseitig (Revocation für öffentliche Clients fehlt), es verfällt erst nach 30 Tagen bzw. beim nächsten Refresh.
 - Abgelaufene Einträge in `oauth2_authorization` werden nicht aufgeräumt (Job fehlt).
 - Wiederverwendung eines rotierten Refresh Tokens widerruft noch nicht die ganze Token-Familie (nur das alte Token ist ungültig).
-- Link auf `/account/connections` im Frontend fehlt.
+- Link auf `/account/connections` in der App fehlt.
 - `tools/list` zeigt auch mit `mcp:read` alle Tools, schreibende Aufrufe werden erst beim Aufruf abgelehnt.

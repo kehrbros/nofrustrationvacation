@@ -83,7 +83,7 @@ class ClientMetadataValidatorTest {
     void acceptsClientId() {
         assertEquals("client.example", ClientMetadataValidator.validateClientId(CLIENT_ID).getHost());
         assertTrue(ClientMetadataValidator.isUrl(CLIENT_ID));
-        assertFalse(ClientMetadataValidator.isUrl("vacantagent-frontend"));
+        assertFalse(ClientMetadataValidator.isUrl("vacantagent-app"));
     }
 
     private static String document(String fields) {

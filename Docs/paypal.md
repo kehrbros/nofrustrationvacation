@@ -23,7 +23,7 @@
   vacantagent.paypal.checkout-cancel-url=${vacantagent.frontend-url}/consumer/guthaben/paypal?abgebrochen=1
   ```
 
-- Alle Return-URLs hängen an `vacantagent.frontend-url` (Env `VACANTAGENT_FRONTEND_URL`, Standard `http://localhost:5173`), ebenso Login-Redirect-URIs und CORS.
+- Alle Return-URLs hängen an `vacantagent.frontend-url` (Env `VACANTAGENT_FRONTEND_URL`, Standard `http://localhost:5173`), ebenso CORS. Sie zeigen auf Seiten des früheren Web-Frontends, das durch die App ersetzt ist; für die App bräuchte es App Links / Universal Links (offen).
 
 - **Lokal:** Umgebungsvariablen in der IntelliJ-Run-Configuration setzen, oder `backend/config/application-local.properties` anlegen und mit Profil `local` starten (`mvn spring-boot:run -Dspring-boot.run.profiles=local`). `backend/config/` und `.env` sind in `.gitignore`.
 - **Produktion:** Docker Secrets `vacantagent_paypal_client_id`/`vacantagent_paypal_client_secret`, im Container als `/run/secrets/PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` und per `configtree` eingelesen, dazu `PAYPAL_ENVIRONMENT=live`, siehe [deployment.md](deployment.md).
@@ -42,10 +42,7 @@
 - PayPal akzeptiert `localhost` nicht als Return URL. Ein Tunnel (ngrok) ist trotzdem unnötig: PayPal ruft die URL nie selbst auf, nur der Browser wird dorthin umgeleitet.
 - Stattdessen einen Hostnamen nehmen, der öffentlich auf `127.0.0.1` auflöst, z. B. `localtest.me` (Alternative `127.0.0.1.nip.io`).
 - **Nur mit HTTPS:** Außer `localhost` gilt eine `http`-Seite im Browser nicht als sicherer Kontext, dann fehlt `crypto.subtle` und der Login (PKCE) scheitert.
-- **Docker Compose:** `LOCAL_FRONTEND_URL=https://localtest.me:5443` in der `.env`, App unter `https://localtest.me:5443` öffnen und die Zertifikatswarnung einmal bestätigen. Der Service `local-cert` erzeugt beim ersten Start ein selbstsigniertes Zertifikat (Volume `local-cert`), nginx liefert HTTPS über `frontend/nginx.local-tls.conf` auf Port 5443 aus. `http://localhost:5173` funktioniert weiter, aber nur mit der Standard-URL.
-- Das Backend leitet aus `VACANTAGENT_FRONTEND_URL` Login-Redirect-URIs, CORS und alle PayPal-URLs ab. Es bleibt `http://localhost:8080`; Browser erlauben Aufrufe an `http://localhost` auch von HTTPS-Seiten.
-- Login-Session (sessionStorage) und PayPal-Rückkehr müssen im selben Origin landen, also nicht zwischen localhost und localtest.me wechseln.
-- `npm run dev` unterstützt das noch nicht: Vite lässt den Host über `server.allowedHosts` zu (`VACANTAGENT_FRONTEND_URL` setzen), bräuchte aber zusätzlich ein Zertifikat (z. B. `@vitejs/plugin-basic-ssl`).
+- Das HTTPS-Setup dafür (nginx mit selbstsigniertem Zertifikat auf `https://localtest.me:5443`, Service `local-cert`) gehörte zum Web-Frontend und ist mit ihm entfernt. `VACANTAGENT_FRONTEND_URL` bzw. `LOCAL_FRONTEND_URL` steuern weiter die PayPal-URLs.
 
 ## Offen
 

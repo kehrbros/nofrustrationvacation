@@ -2,13 +2,13 @@
 
 - **Ziel der App:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung). Fachliches Modell siehe [domain.md](domain.md).
 - **Herkunft:** Das Repository war die App VacantAgent (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
-- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md).
+- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, App für Android und iOS mit React Native/Expo (TypeScript) in `frontend/`, siehe [App (Frontend)](#app-frontend), PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md).
 
 ## System Context
 
 ```mermaid
 flowchart LR
-    user([Reisende]) -->|Browser| fe[Frontend]
+    user([Reisende]) -->|Android, iOS| fe[App]
     mcp([MCP-Clients<br>Claude, ChatGPT]) -->|/mcp| be
     fe -->|/api/v1| be[Backend]
     feed[(Verkehrsdaten-Feed)] -.->|Abruf, offen| be
@@ -19,7 +19,7 @@ flowchart LR
     be -->|Kurse| ecb[(EZB)]
 ```
 
-- **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
+- **Reisende:** nutzen die App und melden sich über den eigenen Identity Provider an (OIDC im Systembrowser, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
 - **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools gibt es derzeit keine.
 - **Verkehrsdatenquellen:** liefern Ereignisse in das Modul `input`, entweder abgerufen (`TRAFFIC_FEED`) oder gepusht (`WEBHOOK`). Noch keine Quelle angebunden.
 - **Routing-Dienst:** soll aus den Stops eines Trips die Abschnitte einer Route mit erwarteter Durchfahrt berechnen. Noch nicht gewählt.
@@ -69,6 +69,19 @@ flowchart LR
 - **`incidents` liest den Index aus `trips`:** `ConsequenceMatcher` nutzt `RouteSectionRepository` (Index Segment → RouteSection). Später ggf. durch eine schmale Schnittstelle in `trips.logic` ersetzen.
 - **`auth`** ist per ArchUnit (`AuthModuleIsolationTest`) isoliert. Für die neuen Module gibt es noch keine ArchUnit-Regeln.
 
+## App (Frontend)
+
+- **Ziel:** native App für Android und iOS, ersetzt das frühere Web-Frontend (React/Vite/antd, nginx). Kein Web-Frontend mehr, das Backend wird von der App direkt unter `BACKEND_URL` angesprochen.
+- **Technik:** Expo SDK 58 (React Native 0.88, React 19), Expo Router (dateibasierte Routen in `frontend/src/app/`), TypeScript strict. Details und Befehle in [frontend/README.md](../frontend/README.md).
+- **Entscheidungen:**
+  - Expo statt „bare“ React Native: native Projekte werden aus `app.json` generiert (Continuous Native Generation, `android/`/`ios/` nicht eingecheckt), Cloud-Builds über EAS auch für iOS ohne Mac.
+  - Development Build (`expo-dev-client`) statt Expo Go, weil der Login die eigene Redirect-URI `vacantagent://auth/callback` braucht.
+  - Login per OIDC Authorization Code + PKCE im Systembrowser (`expo-auth-session`), Tokens im Secure Store, Refresh Tokens mit Rotation, siehe [authentication.md](authentication.md#app).
+  - API-Client wie bisher aus der eingecheckten `frontend/openapi.json` generiert (`@hey-api/openapi-ts`, Fetch-Client).
+  - Gestaltung über eigene Design-Tokens (`frontend/src/theme`: Schwarz/Weiß, Akzent Gelb `#f2b705`, Schrift Outfit) und wenige Basiskomponenten, keine UI-Bibliothek. Nur Light Mode. Vorläufig aus dem VacantAgent-Look übernommen.
+  - Sprache der Oberfläche Deutsch.
+- **Stand:** Login, Logout, Session über Neustarts, Startseite „Meine Reisen“ als Platzhalter mit Profilabruf (`GET /api/v1/users/me`) als API-Prüfung.
+
 ## Runtime View
 
 1. **Ereignis kommt an** (offen): Quelle → `input` speichert ein `Event` unverändert (`payload`), doppelte Zustellung über `externalId` erkannt.
@@ -97,10 +110,11 @@ flowchart LR
 - Integrationstests mit `@SpringBootTest` gegen H2 und alle Migrationen, z. B. `ConsequenceMatchingTest`. Die Migrationen sind zusätzlich gegen PostgreSQL 16 geprüft (manuell).
 - Architekturregeln mit ArchUnit (`AuthModuleIsolationTest`, `MoneyArchitectureTest`, `PayPalModuleTest`).
 - CI (`.github/workflows/backend.yml`): `mvn verify`, danach Abgleich der generierten `frontend/openapi.json`.
+- App: Jest (`jest-expo`) und React Native Testing Library, CI (`.github/workflows/frontend.yml`): Typecheck, Tests, JS-Bundle für Android und iOS (`expo export`).
 
 ## Altbestand
 
-- Aus VacantAgent stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding` sowie im Frontend die Rollen Consumer, Provider und Betreiber mit ihren Seiten (Aufträge, Angebote, Marktplatz, Guthaben, Einnahmen).
+- Aus VacantAgent stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding`. Das Web-Frontend mit den Rollen Consumer, Provider und Betreiber und ihren Seiten ist mit der Umstellung auf die App entfernt. Die PayPal-Return-URLs (`vacantagent.frontend-url`) zeigen noch auf dessen Seiten.
 - Ob davon etwas für die Reise-App gebraucht wird (z. B. bezahlte Benachrichtigungen), ist offen. Bis dahin bleibt der Code unverändert.
 
 ## Offene Punkte
@@ -111,6 +125,7 @@ flowchart LR
 - **Benachrichtigung:** Kanal (Web-Push, E-Mail, MCP), Auslöser (neue oder geänderte Consequence), Duplikate vermeiden.
 - **Skalierung der Zuordnung:** derzeit synchron in der Transaktion. Bei vielen Routen oder Events asynchron nach dem Commit (`@TransactionalEventListener`, Queue).
 - **Räumliche Abfragen:** falls nötig PostGIS, dann aber H2-Ersatz für Tests (z. B. Testcontainers).
-- **API und Frontend** für Trips, Stops, Buchungen, Incidents und Consequences, MCP-Tools.
+- **API und App-Screens** für Trips, Stops, Buchungen, Incidents und Consequences, MCP-Tools.
+- **App:** Push-Benachrichtigungen (z. B. `expo-notifications`), Karten, Store-Veröffentlichung und native Builds in CI (EAS), Icon und Splash.
 - **ArchUnit-Regeln** für die neuen Module (nur Id-Referenzen, keine Zyklen).
-- **Altbestand:** entscheiden, ob Abrechnung, PayPal, Onboarding und die alten Frontend-Seiten bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.vacantagent`).
+- **Altbestand:** entscheiden, ob Abrechnung, PayPal und Onboarding bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.vacantagent`, App-Name, Bundle-Id `com.vacantagent.app` und Schema `vacantagent`).

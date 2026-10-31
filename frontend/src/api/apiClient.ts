@@ -1,23 +1,23 @@
-import type { UserManager } from 'oidc-client-ts';
-
+import type { Session } from '../auth/session';
+import { config } from '../config';
 import { client } from '../generated/api/client.gen';
 
 /**
- * Configures the generated API client: same origin (the dev server proxies /api to the backend) and the
- * access token of the logged in user. A rejected token logs the user out, which restarts the login.
+ * Configures the generated API client (npm run generate:api): backend URL and the access token of the session. A
+ * rejected token ends the session, the app then shows the login.
  */
-export function configureApiClient(userManager: UserManager) {
-  client.setConfig({ baseUrl: import.meta.env.VITE_API_BASE_URL ?? '' });
-  client.interceptors.request.use(async (request) => {
-    const user = await userManager.getUser();
-    if (user) {
-      request.headers.set('Authorization', `Bearer ${user.access_token}`);
+export function configureApiClient(session: Session, apiClient = client) {
+  apiClient.setConfig({ baseUrl: config.backendUrl });
+  apiClient.interceptors.request.use(async (request) => {
+    const accessToken = await session.accessToken();
+    if (accessToken) {
+      request.headers.set('Authorization', `Bearer ${accessToken}`);
     }
     return request;
   });
-  client.interceptors.response.use(async (response) => {
+  apiClient.interceptors.response.use(async (response) => {
     if (response.status === 401) {
-      await userManager.removeUser();
+      await session.end();
     }
     return response;
   });

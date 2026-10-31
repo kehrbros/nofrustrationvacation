@@ -1,6 +1,6 @@
 # Abrechnung
 
-- **Modul `com.vacantagent.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus VacantAgent, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Nutzt `com.vacantagent.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
+- **Modul `com.vacantagent.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus VacantAgent, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Die Seiten des früheren Web-Frontends dazu (Guthaben, Einnahmen, Auszahlungskonto) sind entfernt, nur das Backend besteht noch. Nutzt `com.vacantagent.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
 
 ## Konten und Buchungen
 
@@ -37,7 +37,7 @@
 
 ## API-Fehler
 
-- Problem Details mit stabilem Feld `code`: `INVALID_AMOUNT`, `LINK_STATE_INVALID` (400), `INSUFFICIENT_BALANCE`, `PAYOUT_ACCOUNT_REQUIRED`, `PAYPAL_ACCOUNT_IN_USE`, `PAYOUTS_OPEN` (409), `AMOUNT_OUT_OF_RANGE`, `PAYMENT_NOT_APPROVED`, `PAYMENT_DECLINED` (422), `TOP_UP_NOT_FOUND` (404), `PAYPAL_ERROR` (502), `PAYPAL_NOT_CONFIGURED`, `EXCHANGE_RATE_UNAVAILABLE` (503). Deutsche Texte im Frontend (`src/accounting/problems.ts`).
+- Problem Details mit stabilem Feld `code`: `INVALID_AMOUNT`, `LINK_STATE_INVALID` (400), `INSUFFICIENT_BALANCE`, `PAYOUT_ACCOUNT_REQUIRED`, `PAYPAL_ACCOUNT_IN_USE`, `PAYOUTS_OPEN` (409), `AMOUNT_OUT_OF_RANGE`, `PAYMENT_NOT_APPROVED`, `PAYMENT_DECLINED` (422), `TOP_UP_NOT_FOUND` (404), `PAYPAL_ERROR` (502), `PAYPAL_NOT_CONFIGURED`, `EXCHANGE_RATE_UNAVAILABLE` (503). Deutsche Texte dazu hatte das frühere Web-Frontend.
 
 ## Konfiguration
 

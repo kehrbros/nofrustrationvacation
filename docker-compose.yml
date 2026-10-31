@@ -1,4 +1,5 @@
-# Docker Swarm stack of VacantAgent (PostgreSQL, backend and frontend), see Docs/deployment.md.
+# Docker Swarm stack of VacantAgent (PostgreSQL and backend), see Docs/deployment.md. The app (frontend/) is a
+# React Native app and talks to BACKEND_URL directly.
 #
 #   docker compose build                                  # optional, builds the images locally
 #   docker stack deploy -c docker-compose.yml vacantagent
@@ -18,7 +19,7 @@ services:
       POSTGRES_DB: vacantagent
       POSTGRES_USER: vacantagent
       PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
-      # Public URLs as seen by the browser: issuer of the IdP, redirect URIs, CORS and PayPal return URLs
+      # Public URLs: issuer of the IdP and API URL of the app; FRONTEND_URL only for the legacy PayPal return URLs
       VACANTAGENT_BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
       VACANTAGENT_FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
@@ -83,35 +84,6 @@ services:
       resources:
         limits:
           memory: 512M
-
-  frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/kehrbros/vacantagent/frontend:dev}
-    build:
-      context: ./frontend
-      args:
-        # Build time only (Vite), images from CI use the default http://localhost:8080
-        VITE_OIDC_AUTHORITY: ${BACKEND_URL:-http://localhost:8080}
-    environment:
-      # nginx forwards /api/** to this upstream, see frontend/nginx.conf
-      BACKEND_UPSTREAM: http://backend:8080
-    ports:
-      - target: 80
-        published: ${FRONTEND_PORT:-80}
-        protocol: tcp
-    networks:
-      - vacantagent
-    deploy:
-      replicas: 2
-      update_config:
-        parallelism: 1
-        order: start-first
-        failure_action: rollback
-      restart_policy:
-        condition: on-failure
-        delay: 5s
-      resources:
-        limits:
-          memory: 128M
 
 networks:
   vacantagent:

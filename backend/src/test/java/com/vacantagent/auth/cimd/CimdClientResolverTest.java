@@ -78,7 +78,7 @@ class CimdClientResolverTest {
     void neverFetchesClientsOutsideTheAllowlist() {
         assertNull(resolver.findByClientId("https://evil.example/metadata.json"));
         assertNull(resolver.findByClientId("https://client.example/oauth/other.json"));
-        assertNull(resolver.findByClientId("vacantagent-frontend"));
+        assertNull(resolver.findByClientId("vacantagent-app"));
         assertEquals(0, fetches.get());
     }
 

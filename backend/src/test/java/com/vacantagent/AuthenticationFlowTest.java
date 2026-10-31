@@ -10,6 +10,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.RequestBuilder;
 import org.springframework.web.util.UriComponentsBuilder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -22,6 +23,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -31,14 +33,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Registration, login via Authorization Code + PKCE and an API call with the issued token. The resource server
- * fetches the signing keys from the running server like it would from an external IdP.
+ * Registration, login of the mobile app via Authorization Code + PKCE, token refresh and an API call with the issued
+ * token. The resource server fetches the signing keys from the running server like it would from an external IdP.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 @AutoConfigureMockMvc
 class AuthenticationFlowTest {
-    private static final String CLIENT_ID = "vacantagent-frontend";
-    private static final String REDIRECT_URI = "http://localhost:5173/auth/callback";
+    private static final String CLIENT_ID = "vacantagent-app";
+    private static final String REDIRECT_URI = "vacantagent://auth/callback";
 
     @Autowired
     private MockMvc mockMvc;
@@ -69,7 +71,7 @@ class AuthenticationFlowTest {
                 .andExpect(redirectedUrl("/login?registered"));
         assertEquals(0, countAppUsers("alice"), "registration must not create an AppUser");
 
-        String accessToken = login("alice", "secret-password");
+        String accessToken = login("alice", "secret-password").get("access_token").asString();
 
         mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
@@ -81,11 +83,28 @@ class AuthenticationFlowTest {
 
     @Test
     void seededTestAccountLogsIn() throws Exception {
-        String accessToken = login("test", "test");
+        String accessToken = login("test", "test").get("access_token").asString();
 
         mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + accessToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value("test"));
+    }
+
+    @Test
+    void appRefreshesTokensWithRotation() throws Exception {
+        JsonNode tokens = login("test", "test");
+        String refreshToken = tokens.get("refresh_token").asString();
+        assertNotNull(refreshToken, "the app needs a refresh token to stay logged in");
+
+        JsonNode refreshed = JsonMapper.builder().build().readTree(mockMvc.perform(refreshRequest(refreshToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        assertNotEquals(refreshToken, refreshed.get("refresh_token").asString(), "refresh tokens are rotated");
+        mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + refreshed.get("access_token").asString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value("test"));
+
+        mockMvc.perform(refreshRequest(refreshToken)).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -98,9 +117,9 @@ class AuthenticationFlowTest {
     }
 
     /**
-     * Authorization Code flow with PKCE as the frontend runs it.
+     * Authorization Code flow with PKCE as the app runs it, returns the token response.
      */
-    private String login(String username, String password) throws Exception {
+    private JsonNode login(String username, String password) throws Exception {
         MvcResult loginResult = mockMvc.perform(post("/login").with(csrf())
                         .param("username", username).param("password", password))
                 .andExpect(status().is3xxRedirection())
@@ -135,8 +154,14 @@ class AuthenticationFlowTest {
                         .param("code_verifier", codeVerifier))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        JsonNode token = JsonMapper.builder().build().readTree(tokenResponse);
-        return token.get("access_token").asString();
+        return JsonMapper.builder().build().readTree(tokenResponse);
+    }
+
+    private static RequestBuilder refreshRequest(String refreshToken) {
+        return post("/oauth2/token")
+                .param("grant_type", "refresh_token")
+                .param("refresh_token", refreshToken)
+                .param("client_id", CLIENT_ID);
     }
 
     private int countAppUsers(String username) {
