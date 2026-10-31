@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // Same variable as the backend (vacantagent.frontend-url). Set it to serve the dev server under another host than
@@ -12,5 +12,9 @@ export default defineConfig({
     proxy: {
       '/api': 'http://localhost:8080',
     },
+  },
+  test: {
+    // fixed time zone for the date formatting tests (summer time +02:00, winter time +01:00)
+    env: { TZ: 'Europe/Berlin' },
   },
 });

@@ -8,6 +8,8 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import lombok.Getter;
+import org.hibernate.annotations.TimeZoneStorage;
+import org.hibernate.annotations.TimeZoneStorageType;
 import org.hibernate.envers.Audited;
 
 import java.time.OffsetDateTime;
@@ -26,7 +28,10 @@ public class Stop extends AbstractEntity {
     private String name;
     private @Nullable Double latitude;
     private @Nullable Double longitude;
+    /** Local time at the stop, the offset is kept (own {@code _tz} column). */
+    @TimeZoneStorage(TimeZoneStorageType.COLUMN)
     private @Nullable OffsetDateTime arrivalAt;
+    @TimeZoneStorage(TimeZoneStorageType.COLUMN)
     private @Nullable OffsetDateTime departureAt;
 
     protected Stop() {

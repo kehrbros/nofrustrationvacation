@@ -3,32 +3,51 @@ import { Navigate, Route, Routes } from 'react-router';
 import AuthCallback from './auth/AuthCallback';
 import { CALLBACK_PATH } from './auth/paths';
 import RequireAuth from './auth/RequireAuth';
-import PlaceholderPage from './components/PlaceholderPage';
-import DashboardLayout from './layout/DashboardLayout';
 import { HOME_PATH } from './layout/navigation';
+import IncidentSheet from './pages/IncidentSheet';
+import NewTripPage from './pages/NewTripPage';
+import RouteSheet from './pages/RouteSheet';
+import StopSheet from './pages/StopSheet';
+import TripPage from './pages/TripPage';
+import TripsPage from './pages/TripsPage';
 
+/**
+ * Pages of the travel app, see the UI concept in Docs/architecture.md. Dialogs over the map (incident, route, new
+ * stop) are child routes of the trip, so they have their own URL and the back button closes them.
+ */
 export default function App() {
   return (
     <Routes>
       <Route path={CALLBACK_PATH} element={<AuthCallback />} />
       <Route
+        path={HOME_PATH}
         element={
           <RequireAuth>
-            <DashboardLayout />
+            <TripsPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path={`${HOME_PATH}/neu`}
+        element={
+          <RequireAuth>
+            <NewTripPage />
+          </RequireAuth>
+        }
+      />
+      <Route
+        path={`${HOME_PATH}/:tripId`}
+        element={
+          <RequireAuth>
+            <TripPage />
           </RequireAuth>
         }
       >
-        <Route
-          path={HOME_PATH.slice(1)}
-          element={
-            <PlaceholderPage
-              title="Meine Reisen"
-              description="Hier erscheinen deine Routen und Ereignisse, die sie betreffen."
-            />
-          }
-        />
-        <Route path="*" element={<Navigate to={HOME_PATH} replace />} />
+        <Route path="stops/neu" element={<StopSheet />} />
+        <Route path="hinweise/:routeId/:incidentId" element={<IncidentSheet />} />
+        <Route path="routen/:routeId" element={<RouteSheet />} />
       </Route>
+      <Route path="*" element={<Navigate to={HOME_PATH} replace />} />
     </Routes>
   );
 }

@@ -1,0 +1,145 @@
+/**
+ * Points in time are exchanged with the backend as ISO 8601 with offset. The frontend uses the time zone of the
+ * system: entered values get its offset, shown values are converted into it.
+ */
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+/** ISO 8601 with the offset of the system time zone at that moment, e.g. 2027-07-12T00:00:00+02:00. */
+export function toOffsetIso(date: Date): string {
+  const offsetMinutes = -date.getTimezoneOffset();
+  const sign = offsetMinutes >= 0 ? '+' : '-';
+  const abs = Math.abs(offsetMinutes);
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}` +
+    `${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`
+  );
+}
+
+/** Local day from an input of type date (yyyy-mm-dd), null if empty or invalid. */
+function parseDay(day: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day);
+  if (!match) {
+    return null;
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+/** Begin of the day (00:00) in the system time zone. */
+export function startOfDayIso(day: string): string | null {
+  const date = parseDay(day);
+  return date ? toOffsetIso(date) : null;
+}
+
+/** End of the day (23:59:59) in the system time zone, the trip end is inclusive. */
+export function endOfDayIso(day: string): string | null {
+  const date = parseDay(day);
+  if (!date) {
+    return null;
+  }
+  date.setHours(23, 59, 59);
+  return toOffsetIso(date);
+}
+
+/** Value of an input of type datetime-local (yyyy-mm-ddThh:mm) as ISO with offset, null if empty. */
+export function localDateTimeIso(value: string): string | null {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : toOffsetIso(date);
+}
+
+/** Day of an ISO point in time in the system time zone, as yyyy-mm-dd for inputs of type date. */
+export function toDayInput(iso: string): string {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+const dayMonthYear = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
+const dayMonth = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long' });
+const weekdayDayMonthTime = new Intl.DateTimeFormat('de-DE', {
+  weekday: 'short',
+  day: 'numeric',
+  month: 'long',
+  hour: 'numeric',
+  minute: '2-digit',
+});
+const weekdayDayMonth = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
+const time = new Intl.DateTimeFormat('de-DE', { hour: 'numeric', minute: '2-digit' });
+
+/** "12.–26. Juli 2027", "30. Juli – 2. August 2027" or "30. Dezember 2027 – 2. Januar 2028". */
+export function formatPeriod(startIso: string, endIso: string): string {
+  const start = new Date(startIso);
+  const end = new Date(endIso);
+  if (start.getFullYear() !== end.getFullYear()) {
+    return `${dayMonthYear.format(start)} – ${dayMonthYear.format(end)}`;
+  }
+  if (start.getMonth() !== end.getMonth()) {
+    return `${dayMonth.format(start)} – ${dayMonthYear.format(end)}`;
+  }
+  if (start.getDate() === end.getDate()) {
+    return dayMonthYear.format(start);
+  }
+  return `${start.getDate()}.–${dayMonthYear.format(end)}`;
+}
+
+/** "Sa., 14. Juli, 09:00" */
+export function formatDateTime(iso: string): string {
+  return weekdayDayMonthTime.format(new Date(iso));
+}
+
+/** "Sa., 14. Juli" */
+export function formatDay(iso: string): string {
+  return weekdayDayMonth.format(new Date(iso));
+}
+
+/** "09:00" */
+export function formatTime(iso: string): string {
+  return time.format(new Date(iso));
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/** Calendar days between two dates in the system time zone. */
+function daysBetween(from: Date, to: Date): number {
+  const a = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const b = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((b - a) / MS_PER_DAY);
+}
+
+/** Day of the trip and its length in days, e.g. { day: 3, of: 15 } on the third day. */
+export function tripDay(startIso: string, endIso: string, now: Date = new Date()) {
+  const start = new Date(startIso);
+  return { day: daysBetween(start, now) + 1, of: daysBetween(start, new Date(endIso)) + 1 };
+}
+
+/** "heute", "morgen", "in 34 Tagen" until the start, null once it has started. */
+export function untilStart(startIso: string, now: Date = new Date()): string | null {
+  const days = daysBetween(now, new Date(startIso));
+  if (days < 0 || new Date(startIso) <= now) {
+    return null;
+  }
+  if (days === 0) {
+    return 'heute';
+  }
+  return days === 1 ? 'morgen' : `in ${days} Tagen`;
+}
+
+/** "vor 20 Min.", "vor 3 Std.", "vor 2 Tagen" */
+export function formatAgo(iso: string, now: Date = new Date()): string {
+  const minutes = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60000));
+  if (minutes < 1) {
+    return 'gerade eben';
+  }
+  if (minutes < 60) {
+    return `vor ${minutes} Min.`;
+  }
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) {
+    return `vor ${hours} Std.`;
+  }
+  const days = Math.round(hours / 24);
+  return days === 1 ? 'vor 1 Tag' : `vor ${days} Tagen`;
+}

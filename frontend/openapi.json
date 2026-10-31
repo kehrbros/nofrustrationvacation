@@ -14,6 +14,9 @@
     "description" : "Pay out earnings via PayPal",
     "name" : "Payouts"
   }, {
+    "description" : "Incidents affecting the trips of the authenticated user",
+    "name" : "Incidents"
+  }, {
     "description" : "Steps before a user can act in a role",
     "name" : "Onboarding"
   }, {
@@ -22,6 +25,9 @@
   }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
+  }, {
+    "description" : "Trips, stops and title photos of the authenticated user",
+    "name" : "Trips"
   } ],
   "paths" : {
     "/.well-known/oauth-protected-resource" : {
@@ -396,6 +402,29 @@
         "tags" : [ "Top-ups" ]
       }
     },
+    "/api/v1/incidents/trip-counts" : {
+      "get" : {
+        "description" : "Only trips with at least one incident.",
+        "operationId" : "getTripIncidentCounts",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/TripIncidentCountDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Number of current incidents per trip",
+        "tags" : [ "Incidents" ]
+      }
+    },
     "/api/v1/onboarding/provider" : {
       "get" : {
         "description" : "Registration and PayPal account for payouts.",
@@ -414,6 +443,233 @@
         },
         "summary" : "Provider onboarding checklist",
         "tags" : [ "Onboarding" ]
+      }
+    },
+    "/api/v1/trips" : {
+      "get" : {
+        "description" : "Ascending by start, with the phase relative to now.",
+        "operationId" : "listTrips",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/TripSummaryDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "All trips",
+        "tags" : [ "Trips" ]
+      },
+      "post" : {
+        "operationId" : "createTrip",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateTripDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Create a trip",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}" : {
+      "get" : {
+        "operationId" : "getTrip",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Trip with stops and routes",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/cover-image" : {
+      "get" : {
+        "description" : "Image bytes, 404 if the trip has none.",
+        "operationId" : "getCoverImage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "image/jpeg" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              },
+              "image/png" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              },
+              "image/webp" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Title photo",
+        "tags" : [ "Trips" ]
+      },
+      "put" : {
+        "description" : "JPEG, PNG or WebP up to 5 MB, replaces the current one.",
+        "operationId" : "uploadCoverImage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  }
+                },
+                "required" : [ "file" ]
+              }
+            }
+          }
+        },
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Upload a title photo",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/incidents" : {
+      "get" : {
+        "description" : "Incidents not ended yet, ascending by start.",
+        "operationId" : "getTripIncidents",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/TripIncidentDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Current incidents of a trip",
+        "tags" : [ "Incidents" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/stops" : {
+      "post" : {
+        "description" : "From the second stop on, a route from the previous stop is created.",
+        "operationId" : "addStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/CreateStopDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StopDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Append a stop",
+        "tags" : [ "Trips" ]
       }
     },
     "/api/v1/users/me" : {
@@ -491,6 +747,48 @@
           }
         },
         "required" : [ "credit", "earnings" ]
+      },
+      "CreateStopDto" : {
+        "type" : "object",
+        "description" : "Stop appended to the trip, points in time with the offset of the place or the user",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "CreateTripDto" : {
+        "type" : "object",
+        "description" : "New trip. Points in time with the offset of the user's time zone, e.g. 2027-07-12T00:00:00+02:00",
+        "properties" : {
+          "endAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "startAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
       },
       "LedgerEntryDto" : {
         "type" : "object",
@@ -660,6 +958,61 @@
         },
         "required" : [ "complete", "payoutAccountLinked", "registered" ]
       },
+      "RouteDto" : {
+        "type" : "object",
+        "description" : "Way between two consecutive stops",
+        "properties" : {
+          "fromStopId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "plannedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "When the way was last planned, null until a routing service planned it"
+          },
+          "toStopId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "StopDto" : {
+        "type" : "object",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
       "TopUpDto" : {
         "type" : "object",
         "properties" : {
@@ -714,6 +1067,144 @@
           }
         },
         "required" : [ "approveUrl", "topUp" ]
+      },
+      "TripDetailDto" : {
+        "type" : "object",
+        "properties" : {
+          "endAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "hasCoverImage" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "phase" : {
+            "type" : "string",
+            "enum" : [ "UPCOMING", "CURRENT", "PAST" ]
+          },
+          "routes" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RouteDto"
+            }
+          },
+          "startAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "stops" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/StopDto"
+            }
+          }
+        }
+      },
+      "TripIncidentCountDto" : {
+        "type" : "object",
+        "properties" : {
+          "count" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "TripIncidentDto" : {
+        "type" : "object",
+        "description" : "Incident affecting a route of a trip, one entry per incident and route",
+        "properties" : {
+          "delayMinutes" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Expected delay on this route in minutes, null if unknown"
+          },
+          "description" : {
+            "type" : [ "string", "null" ]
+          },
+          "detectedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "impact" : {
+            "type" : "string",
+            "enum" : [ "BLOCKED", "DELAYED" ]
+          },
+          "incidentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "routeId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "CLOSURE", "CONGESTION", "ROADWORKS", "ACCIDENT", "OTHER" ]
+          },
+          "updatedAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "validFrom" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "validTo" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "null: until further notice"
+          }
+        }
+      },
+      "TripSummaryDto" : {
+        "type" : "object",
+        "description" : "Trip in the trip list",
+        "properties" : {
+          "endAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "End of the trip (inclusive) with the offset it was entered in"
+          },
+          "hasCoverImage" : {
+            "type" : "boolean"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "nextStopName" : {
+            "type" : [ "string", "null" ],
+            "description" : "Next stop with an arrival in the future"
+          },
+          "phase" : {
+            "type" : "string",
+            "description" : "Relative to the time of the request",
+            "enum" : [ "UPCOMING", "CURRENT", "PAST" ]
+          },
+          "startAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Begin of the trip with the offset it was entered in"
+          },
+          "stopCount" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
       }
     },
     "securitySchemes" : {
@@ -731,4 +1222,4 @@
       }
     }
   }
-}
+}

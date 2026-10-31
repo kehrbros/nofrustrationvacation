@@ -9,6 +9,7 @@ const authenticated: Partial<AuthContextProps> = {
   isLoading: false,
   isAuthenticated: true,
   user: { profile: { sub: 'test', preferred_username: 'test' } } as AuthContextProps['user'],
+  events: { addAccessTokenExpired: () => () => undefined } as unknown as AuthContextProps['events'],
 };
 
 function renderApp(auth: Partial<AuthContextProps>, path: string) {
@@ -22,11 +23,20 @@ function renderApp(auth: Partial<AuthContextProps>, path: string) {
 }
 
 describe('App', () => {
-  it('renders the trips page with the navigation', () => {
+  it('renders the trip list with tabs and the button to add a trip', () => {
     const html = renderApp(authenticated, '/reisen');
 
-    expect(html).toContain('VacantAgent');
     expect(html).toContain('Meine Reisen');
+    expect(html).toContain('Reise hinzufügen');
+    expect(html).toContain('Profil, Einstellungen und Abmelden');
+  });
+
+  it('renders the form for a new trip', () => {
+    const html = renderApp(authenticated, '/reisen/neu');
+
+    expect(html).toContain('Neue Reise');
+    expect(html).toContain('Titelfoto');
+    expect(html).toContain('Reise anlegen');
   });
 
   it('does not render pages for unauthenticated users', () => {

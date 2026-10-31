@@ -166,7 +166,7 @@ class ConsequenceMatchingTest {
     private long newRoute() {
         return inTransaction(() -> {
             long userId = appUserProvisioning.findOrCreate("trip-" + UUID.randomUUID(), null, null).getId();
-            Trip trip = tripRepository.save(new Trip(userId, "Urlaub", DEPARTURE.minusDays(2)));
+            Trip trip = tripRepository.save(new Trip(userId, "Urlaub", DEPARTURE, DEPARTURE.plusDays(7), DEPARTURE.minusDays(2)));
             Stop start = stopRepository.save(new Stop(trip, 0, "Heilbronn", null, null, null, DEPARTURE));
             Stop end = stopRepository.save(new Stop(trip, 1, "Kupferzell", null, null, DEPARTURE.plusHours(1), null));
             return routeRepository.save(new Route(trip, start, end)).getId();

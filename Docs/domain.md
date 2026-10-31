@@ -2,24 +2,31 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, `V21__trip_cover_image.sql`, `V22__trip_period_and_offsets.sql`.
 
 ## Bounded Contexts
 
 | Modul | Entitäten |
 |---|---|
-| `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection` |
+| `com.vacantagent.trips` | `Trip`, `TripCoverImage`, `Stop`, `Route`, `RouteSection` |
 | `com.vacantagent.network` (Streckennetz) | `Road`, `Segment` |
 | `com.vacantagent.bookings` | `Booking` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.vacantagent.incidents` | `Incident`, `Consequence` |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
 - `Trip` (gehört einem Nutzer) 1–* `Stop` (geordnet über `position`, optional Koordinaten, Ankunft, Abfahrt).
+- `Trip` hat einen Reisezeitraum `startAt`–`endAt` (Zeitpunkte als `OffsetDateTime`, beide inklusive, Pflicht beim Anlegen, `endAt` ≥ `startAt`, auch als Check-Constraint). Gespeichert statt aus den Stops berechnet, damit eine Reise schon ohne Stops einen Zeitraum hat. `reschedule(…)` ändert ihn.
+- Das Frontend schickt die Zeitpunkte mit dem Offset der Zeitzone des Systems (Reise vom 12. bis 26. Juli: `2027-07-12T00:00:00+02:00` bis `2027-07-26T23:59:59+02:00`). Der Offset bleibt erhalten, siehe Zeiten in [architecture.md](architecture.md#persistence).
+- `Trip.phaseAt(zeitpunkt)` liefert `UPCOMING`, `CURRENT` oder `PAST` (Vergleich der Zeitpunkte, Offset egal) und steuert die Reiseliste: aktuelle Reise oben, darunter Tabs „Anstehende“ (inkl. weiterer aktueller Reisen) und „Vergangene“, jeweils aufsteigend nach `startAt`.
+- Auch Ankunft und Abfahrt eines `Stop` behalten ihren Offset.
+- Bestehende Trips ohne Zeitraum erhielten bei der Migration `createdAt` (UTC) als Start und Ende.
+- Ein neuer Stop wird ans Ende der Reise gehängt; ab dem zweiten Stop entsteht automatisch eine `Route` vom vorigen Stop (noch ohne Sections, bis ein Routing-Dienst plant).
+- `Trip` 1–0..1 `TripCoverImage` (Titelfoto, `tripId` eindeutig): Herkunft `GENERATED` (im Backend erzeugt, z. B. per Bildmodell) oder `UPLOADED` (vom Nutzer), `contentType`, Bilddaten (`content`, `BYTEA`, lazy geladen), `createdAt`. Eigene Tabelle, damit Reiselisten die Bilddaten nicht laden; wird mit dem Trip gelöscht (`ON DELETE CASCADE`). `replace(…)` tauscht das Bild, z. B. Upload statt generiertem Bild.
 - `Route`: eine Instanz pro Trip, verbindet genau 2 Stops (`fromStop`, `toStop`, eindeutig je Paar). Fährt ein anderer Trip denselben Weg, hat er eine eigene Route.
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
 - `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`. Woher die Sections kommen (Routing-Dienst), ist noch offen.
@@ -67,3 +74,5 @@
 - **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung) und Herkunft der Daten (manuell, Import).
 - **Benachrichtigung:** wer wann worüber informiert wird, Schwellen (z. B. erst ab 15 min Verzögerung).
 - **Trips teilen:** derzeit gehört ein Trip genau einem Nutzer.
+- **Stops einfügen und umsortieren:** derzeit nur Anhängen am Ende (`Stop.moveTo` existiert, API fehlt).
+- **Zeitraum und Stops:** ob Ankunft/Abfahrt der Stops innerhalb des Reisezeitraums liegen müssen, ist noch nicht geprüft.
