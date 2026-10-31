@@ -33,6 +33,14 @@
                 <artifactId>swagger-annotations-jakarta</artifactId>
                 <version>2.2.47</version>
             </dependency>
+            <!-- GraphHopper brings commons-io 1.3.1 (via xmlgraphics-commons), which wins over the version Testcontainers
+                 needs (commons-compress) and breaks the test database on fresh machines (NoSuchMethodError
+                 IOUtils.toString(InputStream, Charset)). Keep in sync with commons-compress of Testcontainers. -->
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>2.20.0</version>
+            </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
