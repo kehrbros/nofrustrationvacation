@@ -37,8 +37,8 @@ public class RouteLogic {
         List<RouteSection> saved = routeSectionRepository.saveAllAndFlush(IntStream.range(0, sections.size())
                 .mapToObj(i -> {
                     PlannedSection section = sections.get(i);
-                    return new RouteSection(route, i, section.segmentId(), section.expectedPassageStart(),
-                            section.expectedPassageEnd());
+                    return new RouteSection(route, i, section.segmentId(), section.fromFraction(),
+                            section.toFraction(), section.expectedPassageStart(), section.expectedPassageEnd());
                 })
                 .toList());
         events.publishEvent(new RouteChanged(routeId));

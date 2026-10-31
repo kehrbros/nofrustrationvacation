@@ -2,13 +2,13 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Streckennetz `V21__road_network.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Streckennetz `V21__road_network.sql`, Routenplanung `V22__route_planning.sql`.
 
 ## Bounded Contexts
 
 | Modul | Entitäten |
 |---|---|
-| `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection`, `Waypoint` (geplant) |
+| `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection`, `Waypoint` |
 | `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
 | `com.vacantagent.bookings` | `Booking` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
@@ -23,9 +23,12 @@
 - `Route`: eine Instanz pro Trip, verbindet genau 2 Stops (`fromStop`, `toStop`, eindeutig je Paar). Fährt ein anderer Trip denselben Weg, hat er eine eigene Route.
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
 - `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`.
-- **`Waypoint`** (geplant): Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet, ohne Aufenthalt. Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert.
-- **Planen** (geplant): `RoutePlanning.plan` holt Stops, Waypoints und Vorlieben, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus Abfahrt und Dauer und übergibt `PlannedSection`s an `RouteLogic.replaceSections`.
-- **Anteile** (geplant): `RouteSection` und `PlannedSection` bekommen `fromFraction`/`toFraction`, welcher Teil des Segments befahren wird (nur am ersten und letzten Abschnitt nicht 0–1). Verhindert Fehlalarme an langen Segmenten.
+- **`Waypoint`:** Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet (`position`, eindeutig je Route), ohne Aufenthalt. Koordinate Pflicht, optional Name und Straßenhinweis (z. B. `SH 73`). Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert, die Referenz auf die Route nicht (Route ist nicht historisiert).
+- **Planen:** `RoutePlanning.plan(routeId)` holt Stops und Waypoints, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus der Abfahrt am Start-Stop plus den Dauern der Segmente davor und übergibt `PlannedSection`s an `RouteLogic.replaceSections`. Routing läuft außerhalb der Transaktion.
+  - Ergebnis `PlanResult`: `PLANNED`, `MISSING_COORDINATES` (ein Stop ohne Koordinaten), `MISSING_DEPARTURE` (Start-Stop ohne Abfahrt, keine Zeit geraten), `NO_ROUTE` (mit Grund). Außer bei `PLANNED` bleiben die Sections unverändert.
+  - `RoutingUnavailableException` (Streckennetz noch nicht geladen) wird weitergereicht, später erneut versuchen.
+  - Die Ankunft am Ziel-Stop bleibt, was der Nutzer eingetragen hat. Abgleich mit der geplanten Ankunft ist offen.
+- **Anteile:** `RouteSection` und `PlannedSection` haben `fromFraction`/`toFraction`, welcher Teil des Segments befahren wird (nur am ersten und letzten Abschnitt nicht 0–1). Verhindert Fehlalarme an langen Segmenten, sobald auch `incident_segment` Anteile hat.
 
 ## Streckennetz
 
@@ -60,7 +63,7 @@
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
 - **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
-- **Neuplanung:** wenn sich Abfahrt, Stops oder Waypoints ändern und nach `NetworkRefreshed` (geplant), Umfahrung bei `BLOCKED` über `recommendations`.
+- **Neuplanung:** wer `plan` aufruft, fehlt noch: keine API für Trips, Stops und Waypoints. Später bei Änderungen an Abfahrt, Stops oder Waypoints und nach `NetworkRefreshed`. Umfahrung bei `BLOCKED` über `recommendations`.
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.
