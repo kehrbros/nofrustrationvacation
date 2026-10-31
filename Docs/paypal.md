@@ -23,7 +23,7 @@
   vacantagent.paypal.checkout-cancel-url=${vacantagent.frontend-url}/consumer/guthaben/paypal?abgebrochen=1
   ```
 
-- Alle Return-URLs hängen an `vacantagent.frontend-url` (Env `VACANTAGENT_FRONTEND_URL`, Standard `http://localhost:5173`), ebenso Login-Redirect-URIs und CORS.
+- Alle Return-URLs hängen an `vacantagent.frontend-url` (Env `VACANTAGENT_FRONTEND_URL`, Standard `http://localhost:5173`), ebenso Login-Redirect-URIs und CORS. Die Frontend-Seiten hinter den PayPal-URLs (`/paypal/connected`, `/consumer/guthaben/paypal`) sind entfernt.
 
 - **Lokal:** Umgebungsvariablen in der IntelliJ-Run-Configuration setzen, oder `backend/config/application-local.properties` anlegen und mit Profil `local` starten (`mvn spring-boot:run -Dspring-boot.run.profiles=local`). `backend/config/` und `.env` sind in `.gitignore`.
 - **Produktion:** Docker Secrets `vacantagent_paypal_client_id`/`vacantagent_paypal_client_secret`, im Container als `/run/secrets/PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` und per `configtree` eingelesen, dazu `PAYPAL_ENVIRONMENT=live`, siehe [deployment.md](deployment.md).

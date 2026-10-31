@@ -18,5 +18,5 @@ Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie dami
 - **Abhängigkeitsrichtung einhalten**, keine Zyklen. Rückwärts nur über Spring-Events (z. B. `RouteChanged`).
 - **`auth` bleibt isoliert** (`AuthModuleIsolationTest`).
 - **Schema nur per Flyway**, Standard-SQL für H2 und PostgreSQL (`SMALLINT` statt `TINYINT`, kein PostGIS). Bestehende Migrationen nie ändern, neue Version anlegen.
-- **Altbestand** (`accounting`, `paypal`, `onboarding`, alte Frontend-Seiten) nicht ändern, solange nicht entschieden ist, was davon bleibt.
+- **Altbestand** (`accounting`, `paypal`, `onboarding`) nicht ändern, solange nicht entschieden ist, was davon bleibt.
 - **Doku** in `Docs/` auf Deutsch in Stichpunkten, mit dem Code aktuell halten.

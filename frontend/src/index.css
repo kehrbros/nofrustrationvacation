@@ -2,6 +2,50 @@ body {
   margin: 0;
 }
 
+/* header: one line on phones, more room on larger screens */
+.va-header.ant-layout-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: auto;
+  min-height: 64px;
+  padding: 0 16px;
+}
+.va-brand {
+  font-weight: 800;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: #111111;
+  white-space: nowrap;
+}
+
+/* pages: full width with small padding on phones, centered column from tablet width */
+.va-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .va-header.ant-layout-header {
+    gap: 28px;
+    min-height: 72px;
+    padding: 0 32px;
+  }
+  .va-brand {
+    font-size: 24px;
+  }
+  .va-content {
+    gap: 28px;
+    padding: 32px;
+  }
+}
+
 /* selected entry of the top navigation: black text, yellow bar */
 .va-nav.ant-menu-horizontal > .ant-menu-item-selected {
   font-weight: 700;
@@ -9,16 +53,6 @@ body {
 .va-nav.ant-menu-horizontal > .ant-menu-item-selected::after,
 .va-nav.ant-menu-horizontal > .ant-menu-item:hover::after {
   border-bottom-color: #f2b705 !important;
-}
-
-/* role switcher: outlined pill */
-.va-role-switch.ant-segmented {
-  border: 2px solid #111111;
-  border-radius: 999px;
-}
-.va-role-switch .ant-segmented-item,
-.va-role-switch .ant-segmented-thumb {
-  border-radius: 999px;
 }
 
 /* call to action in the accent color */

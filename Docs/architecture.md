@@ -2,7 +2,7 @@
 
 - **Ziel der App:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung). Fachliches Modell siehe [domain.md](domain.md).
 - **Herkunft:** Das Repository war die App VacantAgent (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
-- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md).
+- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript, Ant Design) in `frontend/`, als Webseite mobile-first, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md).
 
 ## System Context
 
@@ -100,7 +100,7 @@ flowchart LR
 
 ## Altbestand
 
-- Aus VacantAgent stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding` sowie im Frontend die Rollen Consumer, Provider und Betreiber mit ihren Seiten (Aufträge, Angebote, Marktplatz, Guthaben, Einnahmen).
+- Aus VacantAgent stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding`. Die Frontend-Seiten dazu (Rollen Consumer, Provider, Betreiber, Onboarding, Guthaben, Einnahmen, PayPal-Verknüpfung) sind entfernt; die PayPal-Return-URLs (`vacantagent.frontend-url`) zeigen daher ins Leere.
 - Ob davon etwas für die Reise-App gebraucht wird (z. B. bezahlte Benachrichtigungen), ist offen. Bis dahin bleibt der Code unverändert.
 
 ## Offene Punkte
@@ -111,6 +111,7 @@ flowchart LR
 - **Benachrichtigung:** Kanal (Web-Push, E-Mail, MCP), Auslöser (neue oder geänderte Consequence), Duplikate vermeiden.
 - **Skalierung der Zuordnung:** derzeit synchron in der Transaktion. Bei vielen Routen oder Events asynchron nach dem Commit (`@TransactionalEventListener`, Queue).
 - **Räumliche Abfragen:** falls nötig PostGIS, dann aber H2-Ersatz für Tests (z. B. Testcontainers).
-- **API und Frontend** für Trips, Stops, Buchungen, Incidents und Consequences, MCP-Tools.
+- **API und Frontend** für Trips, Stops, Buchungen, Incidents und Consequences, MCP-Tools. Frontend derzeit: Login, Layout mit Navigation, Platzhalterseite `/reisen`.
+- **Frontend mobile-first:** Service Worker (Offline, Web-Push, installierbar als PWA) noch nicht eingerichtet.
 - **ArchUnit-Regeln** für die neuen Module (nur Id-Referenzen, keine Zyklen).
-- **Altbestand:** entscheiden, ob Abrechnung, PayPal, Onboarding und die alten Frontend-Seiten bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.vacantagent`).
+- **Altbestand:** entscheiden, ob Abrechnung, PayPal und Onboarding bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.vacantagent`).

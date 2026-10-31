@@ -18,7 +18,7 @@ export default function PageHeader({ title, eyebrow, description, extra }: PageH
     <Flex justify="space-between" align="flex-end" wrap gap={16}>
       <div>
         {eyebrow && <Typography.Text type="secondary">{eyebrow}</Typography.Text>}
-        <Typography.Title level={1} style={{ margin: 0, fontSize: 40, fontWeight: 800, letterSpacing: '-0.02em' }}>
+        <Typography.Title level={1} style={{ margin: 0, fontSize: 'clamp(28px, 7vw, 40px)', fontWeight: 800, letterSpacing: '-0.02em' }}>
           {title}
         </Typography.Title>
         {description && <div style={{ color: brand.muted, fontSize: 16, marginTop: 4 }}>{description}</div>}

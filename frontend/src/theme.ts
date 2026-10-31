@@ -29,7 +29,8 @@ export const theme: ThemeConfig = {
     lineWidth: 2,
   },
   components: {
-    Layout: { headerBg: brand.white, bodyBg: brand.white, headerHeight: 72, headerPadding: '0 32px' },
+    // header height and padding per screen width in index.css
+    Layout: { headerBg: brand.white, bodyBg: brand.white },
     Button: { borderRadius: 999, borderRadiusLG: 999, borderRadiusSM: 999, primaryShadow: 'none', fontWeight: 500 },
     Menu: {
       horizontalItemSelectedColor: brand.ink,
