@@ -1,14 +1,18 @@
 package com.vacantagent.network.logic;
 
+import com.carrotsearch.hppc.IntHashSet;
 import com.graphhopper.GraphHopper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 
 /**
@@ -69,6 +73,32 @@ class SegmentWriter {
                 WHERE region = ? AND last_seen_version_id <> ? AND retired_at IS NULL""",
                 Timestamp.from(clock.instant()), region, versionId);
         return segments;
+    }
+
+    /** {@code edge_key} to {@code road_segment.id} of a version, 0 for edges without segment. */
+    @Transactional(readOnly = true)
+    public long[] mapping(long versionId, int edgeKeys) {
+        long[] mapping = new long[edgeKeys];
+        jdbc.query("SELECT edge_key, road_segment_id FROM edge_mapping WHERE extract_version_id = ?",
+                (RowCallbackHandler) rs -> mapping[rs.getInt(1)] = rs.getLong(2), versionId);
+        return mapping;
+    }
+
+    /** All edge keys of the segments in a version, e.g. to block them for routing. */
+    @Transactional(readOnly = true)
+    public IntHashSet edgeKeys(long versionId, Collection<Long> segmentIds) {
+        IntHashSet keys = new IntHashSet();
+        if (segmentIds.isEmpty()) {
+            return keys;
+        }
+        jdbc.query(connection -> {
+            PreparedStatement statement = connection.prepareStatement(
+                    "SELECT edge_key FROM edge_mapping WHERE extract_version_id = ? AND road_segment_id = ANY(?)");
+            statement.setLong(1, versionId);
+            statement.setArray(2, connection.createArrayOf("bigint", segmentIds.toArray()));
+            return statement;
+        }, (RowCallbackHandler) rs -> keys.add(rs.getInt(1)));
+        return keys;
     }
 
     /** Removes the mapping of a version that is no longer in use. */

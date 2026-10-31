@@ -35,7 +35,7 @@ public class RegionImport {
             Path dir = graphDir(region, current.get().getId());
             if (Files.isDirectory(dir)) {
                 try {
-                    graphs.switchTo(region, current.get().getId(), NetworkGraphHopper.load(dir, config));
+                    graphs.switchTo(region, loaded(current.get().getId(), NetworkGraphHopper.load(dir, config)));
                     log.info("Region {}: graph of version {} loaded", region, current.get().getId());
                     return status(region);
                 } catch (RuntimeException e) {
@@ -61,7 +61,7 @@ public class RegionImport {
             int segments = segmentWriter.write(region, version.getId(), hopper);
             version.ready(hopper.dataDate(), segments, OffsetDateTime.now(clock));
             versionRepository.save(version);
-            Optional<Long> previous = graphs.switchTo(region, version.getId(), hopper);
+            Optional<Long> previous = graphs.switchTo(region, loaded(version.getId(), hopper));
             previous.ifPresent(old -> {
                 segmentWriter.deleteMapping(old);
                 NetworkGraphHopper.delete(graphDir(region, old));
@@ -82,6 +82,12 @@ public class RegionImport {
 
     public RegionStatus status(String region) {
         return graphs.status(region);
+    }
+
+    private Graphs.LoadedGraph loaded(long versionId, NetworkGraphHopper hopper) {
+        // Two directions per edge, edge key = 2 * edge + direction
+        long[] mapping = segmentWriter.mapping(versionId, 2 * hopper.getBaseGraph().getEdges());
+        return new Graphs.LoadedGraph(versionId, hopper, mapping, hopper.getBaseGraph().getBounds());
     }
 
     private NetworkProperties.Region config(String region) {

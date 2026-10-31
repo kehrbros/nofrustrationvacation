@@ -1,7 +1,11 @@
 package com.vacantagent.network.logic;
 
+import com.carrotsearch.hppc.IntSet;
 import com.graphhopper.GraphHopper;
 import com.graphhopper.GraphHopperConfig;
+import com.graphhopper.routing.DefaultWeightingFactory;
+import com.graphhopper.routing.WeightingFactory;
+import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.config.LMProfile;
 import com.graphhopper.config.Profile;
 import com.graphhopper.json.Statement;
@@ -25,6 +29,8 @@ import java.util.stream.Stream;
 /** Embedded GraphHopper of one region and version, profile {@code car} with turn costs and landmarks. */
 final class NetworkGraphHopper extends GraphHopper {
     static final String PROFILE = "car";
+    /** Request hint: {@code IntSet} of directed edge keys that are impassable. */
+    static final String BLOCKED_EDGE_KEYS = "blocked_edge_keys";
     /** Changing these needs a new import of every region. */
     private static final String ENCODED_VALUES = "car_access|block_private=false, car_average_speed, road_access, "
             + "road_class, road_environment, osm_way_id, max_speed, surface";
@@ -63,6 +69,16 @@ final class NetworkGraphHopper extends GraphHopper {
         hopper.init(config);
         hopper.importOrLoad();
         return hopper;
+    }
+
+    @Override
+    protected WeightingFactory createWeightingFactory() {
+        WeightingFactory defaults = new DefaultWeightingFactory(getBaseGraph(), getEncodingManager());
+        return (profile, hints, disableTurnCosts) -> {
+            Weighting weighting = defaults.createWeighting(profile, hints, disableTurnCosts);
+            IntSet blocked = hints.getObject(BLOCKED_EDGE_KEYS, null);
+            return blocked == null || blocked.isEmpty() ? weighting : new BlockedEdgesWeighting(weighting, blocked);
+        };
     }
 
     /** Timestamp of the OSM data from the file header, if the file has one. */
