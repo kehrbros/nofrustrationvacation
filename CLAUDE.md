@@ -8,6 +8,7 @@ Vor jeder Änderung an Code, Schema oder Doku lesen und einhalten:
 
 - [Docs/architecture.md](Docs/architecture.md): Module, Aufbau eines Moduls, Abhängigkeiten, Persistenz, Security, Tests, Altbestand.
 - [Docs/domain.md](Docs/domain.md): Bounded Contexts, Entitäten, Beziehungen, Historisierung, offene fachliche Punkte.
+- [Docs/network.md](Docs/network.md): Streckennetz, GraphHopper, Import, Schnittstellen.
 
 Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie damit nicht vereinbar, nicht stillschweigend abweichen, sondern nachfragen. Wird eine Abweichung beschlossen, das betroffene Dokument in derselben Änderung anpassen.
 

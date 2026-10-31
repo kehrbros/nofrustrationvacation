@@ -6,10 +6,10 @@ import com.vacantagent.incidents.entities.Impact;
 import com.vacantagent.incidents.entities.Incident;
 import com.vacantagent.incidents.entities.IncidentType;
 import com.vacantagent.incidents.logic.IncidentLogic;
-import com.vacantagent.network.data.RoadRepository;
-import com.vacantagent.network.data.SegmentRepository;
-import com.vacantagent.network.entities.Road;
-import com.vacantagent.network.entities.Segment;
+import com.vacantagent.network.data.ExtractVersionRepository;
+import com.vacantagent.network.data.RoadSegmentRepository;
+import com.vacantagent.network.entities.ExtractVersion;
+import com.vacantagent.network.entities.RoadSegment;
 import com.vacantagent.trips.data.RouteRepository;
 import com.vacantagent.trips.data.StopRepository;
 import com.vacantagent.trips.data.TripRepository;
@@ -24,6 +24,10 @@ import jakarta.persistence.EntityManager;
 import org.hibernate.envers.AuditReaderFactory;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -35,6 +39,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +48,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 class ConsequenceMatchingTest {
     private static final OffsetDateTime DEPARTURE = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).withNano(0);
+    private static final GeometryFactory GEOMETRY = new GeometryFactory(new PrecisionModel(), 4326);
 
     @Autowired
     private IncidentLogic incidentLogic;
@@ -51,9 +57,9 @@ class ConsequenceMatchingTest {
     @Autowired
     private ConsequenceRepository consequenceRepository;
     @Autowired
-    private RoadRepository roadRepository;
+    private ExtractVersionRepository extractVersionRepository;
     @Autowired
-    private SegmentRepository segmentRepository;
+    private RoadSegmentRepository roadSegmentRepository;
     @Autowired
     private TripRepository tripRepository;
     @Autowired
@@ -74,10 +80,11 @@ class ConsequenceMatchingTest {
 
     @BeforeEach
     void network() {
-        Road road = roadRepository.save(new Road("A" + UUID.randomUUID().toString().substring(0, 8), "Test"));
-        first = segment(road, "Heilbronn", "Weinsberg");
-        second = segment(road, "Weinsberg", "Öhringen");
-        elsewhere = segment(road, "Öhringen", "Kupferzell");
+        ExtractVersion version = extractVersionRepository.save(new ExtractVersion("test", DEPARTURE.minusDays(1)));
+        long way = ThreadLocalRandom.current().nextLong(1, Integer.MAX_VALUE);
+        first = segment(version, way, 0);
+        second = segment(version, way, 1);
+        elsewhere = segment(version, way, 2);
         routeId = newRoute();
     }
 
@@ -158,9 +165,14 @@ class ConsequenceMatchingTest {
         });
     }
 
-    private long segment(Road road, String from, String to) {
-        return segmentRepository.save(new Segment(road, from, to,
-                "{\"type\":\"LineString\",\"coordinates\":[[9.2,49.1],[9.3,49.1]]}")).getId();
+    /** Segment number {@code index} of a straight test road, 0.01 degrees each. */
+    private long segment(ExtractVersion version, long way, int index) {
+        int fromLon = 1_740_000_000 + index * 100_000;
+        int toLon = fromLon + 100_000;
+        LineString geometry = GEOMETRY.createLineString(new Coordinate[]{
+                new Coordinate(fromLon / 1e7, -41.0), new Coordinate(toLon / 1e7, -41.0)});
+        return roadSegmentRepository.save(new RoadSegment("test", way, -410_000_000, fromLon, -410_000_000, toLon,
+                index, null, "Test Road", "PRIMARY", false, false, 840, geometry, version)).getId();
     }
 
     private long newRoute() {
