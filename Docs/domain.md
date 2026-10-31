@@ -13,9 +13,10 @@
 | `com.vacantagent.bookings` | `Booking` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.vacantagent.incidents` | `Incident`, `Consequence` |
+| `com.vacantagent.recommendations` (Entwurf) | `SuggestionSet`, `RouteOption` |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, ``Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, ``Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` und `SuggestionSet`/`RouteOption` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
@@ -66,11 +67,16 @@
 - Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht.
 - Tests: `ConsequenceMatchingTest`.
 
+## Streckenvorschläge
+
+- Für eine Route bis zu `n` Vorschläge, wie gefahren werden kann, bei der Planung und wenn ein Incident die Route trifft. Beide aus einem `Scenario` (Punkte, Abfahrt, Sperren/Verzögerungen, Referenzroute) mit derselben Logik, Details in [recommendations.md](recommendations.md).
+- Übernehmen speichert Via-Punkte als `Waypoint` (`origin` `SUGGESTION`) und plant die Route neu, keine Segmentliste.
+
 ## Offen
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
 - **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
-- **Neuplanung:** wer `plan` aufruft, fehlt noch: keine API für Trips, Stops und Waypoints. Später bei Änderungen an Abfahrt, Stops oder Waypoints und nach `NetworkRefreshed`. Umfahrung bei `BLOCKED` über `recommendations`.
+- **Neuplanung:** wer `plan` aufruft, fehlt noch: keine API für Trips, Stops und Waypoints. Später bei Änderungen an Abfahrt, Stops oder Waypoints und nach `NetworkRefreshed`. Umfahrung bei `BLOCKED` über `recommendations`, Entwurf in [recommendations.md](recommendations.md).
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.

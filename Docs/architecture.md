@@ -2,7 +2,7 @@
 
 - **Ziel der App:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung). Fachliches Modell siehe [domain.md](domain.md).
 - **Herkunft:** Das Repository war die App VacantAgent (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
-- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md). Streckennetz und Routing mit eingebettetem GraphHopper und PostGIS (geplant), siehe [network.md](network.md).
+- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md). Streckennetz und Routing mit eingebettetem GraphHopper und PostGIS (geplant), siehe [network.md](network.md). Streckenvorschläge siehe [recommendations.md](recommendations.md).
 
 ## System Context
 
@@ -36,7 +36,7 @@ Jedes Modul ist ein Paket unter `com.vacantagent`.
 | `bookings` | Buchungen an Stops | neu |
 | `input` | Eingehende Ereignisse und ihre Quellen | neu |
 | `incidents` | Incidents, Consequences, Zuordnungslogik | neu |
-| `recommendations` | Alternativen zu Consequences (Umfahrung, spätere Abfahrt) | geplant |
+| `recommendations` | Streckenvorschläge aus Szenarien: bei der Planung und als Alternative zu Consequences (Umfahrung, spätere Abfahrt), siehe [recommendations.md](recommendations.md) | Entwurf |
 | `auth` | Eigener Identity Provider (OAuth2/OIDC, MCP-Clients per CIMD), unabhängig von allen anderen Modulen | Basis |
 | `user` | `AppUser`, Absicherung von `/api/**` und `/mcp`, `CurrentUser` | Basis |
 | `common` | `AbstractEntity`, Envers-Revision, Konverter, Fehlerbehandlung, OpenAPI | Basis |
@@ -65,6 +65,8 @@ flowchart LR
     trips --> user
     recommendations --> network
     recommendations --> incidents
+    recommendations --> trips
+    incidents -.->|ConsequenceChanged| recommendations
     network -.->|NetworkRefreshed| trips
 ```
 
@@ -72,6 +74,7 @@ flowchart LR
 - **Rückwärts über Events:** `trips` kennt `incidents` nicht. Nach dem Planen einer Route veröffentlicht `RouteLogic` das Spring-Event `RouteChanged`, `incidents` reagiert darauf (synchron, in derselben Transaktion).
 - **`network` nach außen nur über `network.logic`** (`Routing`, `SegmentQueries`, `RegionImport`, `NetworkRefreshed`), keine Entities, Repositories oder GraphHopper-Typen. Später per ArchUnit.
 - **`incidents` liest den Index aus `trips`:** `ConsequenceMatcher` nutzt `RouteSectionRepository` (Index Segment → RouteSection). Später ggf. durch eine schmale Schnittstelle in `trips.logic` ersetzen.
+- **`recommendations`** liest Routen über `trips.logic` und übernimmt Vorschläge dort (Waypoints, Planung). Reagiert auf `ConsequenceChanged` (nach dem Commit, eigener Thread) und `RouteChanged`, siehe [recommendations.md](recommendations.md).
 - **`auth`** ist per ArchUnit (`AuthModuleIsolationTest`) isoliert. Für die neuen Module gibt es noch keine ArchUnit-Regeln.
 
 ## Runtime View
@@ -80,8 +83,9 @@ flowchart LR
 2. **Ereignis verarbeiten** (offen): Straße und Ort → Segmente, neuer oder bestehender `Incident` über `IncidentLogic.create`/`change`, `Event.processed(incidentId)`.
 3. **Zuordnung:** `ConsequenceMatcher.matchIncident` findet über die Segmente die Routen, deren erwartete Durchfahrt die Gültigkeit überschneidet, und legt `Consequence`s an, aktualisiert oder entfernt sie.
 4. **Route planen:** `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
-5. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
-6. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
+5. **Vorschläge** (Entwurf): `ConsequenceChanged` → `recommendations` baut ein Szenario mit Sperre bzw. Verzögerung und speichert bis zu `n` Vorschläge. Bei der Planung auf Anfrage aus dem Frontend. Übernehmen → Waypoints → `RoutePlanning.plan`.
+6. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
+7. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
 
 ## Persistence
 
