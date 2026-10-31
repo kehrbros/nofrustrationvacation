@@ -1,6 +1,6 @@
 # Streckennetz und Routing (`network`)
 
-- **Status:** geplant, Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
+- **Status:** Schema ab `V21`, Import geplant. Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
 - **Routing:** GraphHopper 11.1 eingebettet als Bibliothek im Backend, kein eigener Dienst. Profil `car` mit Abbiegekosten und Landmarks (LM). Kein CH, weil Sperrungen und Umfahrungen die Gewichtung pro Anfrage ändern.
 - **Datenquelle:** Geofabrik-Extrakt (`.osm.pbf`) je Region. Graph und Segmente entstehen aus demselben Import und passen immer zusammen.
 - **Erste Region:** Neuseeland (`nz`). Weitere Region = neuer Konfigurationsblock, Code und Schema bleiben gleich.
@@ -16,7 +16,8 @@
 - `edge_mapping`: `edge_key` (Kante + Richtung) des aktuellen Graphen → `road_segment.id`.
   - n:1: identische Doppelkanten (Weg nutzt dasselbe Knotenpaar mehrfach) teilen ein Segment.
   - Kanten der Länge 0 (GraphHopper teilt an Sperren wie Pollern) haben kein Segment und werden in Routen übersprungen.
-  - Gilt nur für eine Graph-Version, wird bei jeder Aktualisierung neu geschrieben.
+  - Gilt nur für eine Graph-Version (Schlüssel `extract_version_id`, `edge_key`): eine Aktualisierung schreibt ihr Mapping neben das alte, nach dem Umschalten wird das alte gelöscht. Keine Entity, nur JDBC.
+- Staging nur für Segmente, als temporäre Tabelle im Import, nicht im Schema.
 
 ## Import und Aktualisierung
 

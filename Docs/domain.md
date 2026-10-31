@@ -2,14 +2,14 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Streckennetz ab `V21` (geplant).
+- **Schema:** `V20__trips_and_incidents.sql`, Streckennetz `V21__road_network.sql`.
 
 ## Bounded Contexts
 
 | Modul | Entitäten |
 |---|---|
 | `com.vacantagent.trips` | `Trip`, `Stop`, `Route`, `RouteSection`, `Waypoint` (geplant) |
-| `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` (geplant, ersetzt `Road`, `Segment`) |
+| `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
 | `com.vacantagent.bookings` | `Booking` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.vacantagent.incidents` | `Incident`, `Consequence` |
@@ -30,8 +30,6 @@
 ## Streckennetz
 
 - Ein `RoadSegment` ist eine befahrbare Richtung einer Straße von Kreuzung zu Kreuzung mit stabiler Id, erzeugt aus OpenStreetMap. Details zu Schlüssel, Import und Aktualisierung in [network.md](network.md).
-- Bis zur Umstellung gelten noch `Road` (z. B. `A6`, eindeutige Nummer) 1–* `Segment` (von Anschlussstelle zu Anschlussstelle, je Richtung, Geometrie als GeoJSON-Text).
-
 ## Bookings
 
 - `Stop` 1–* `Booking` (`stopId`): Typ (`ACCOMMODATION`, `TRANSPORT`, `ACTIVITY`, `OTHER`), Titel, Anbieter, Buchungsnummer, Zeitraum.
