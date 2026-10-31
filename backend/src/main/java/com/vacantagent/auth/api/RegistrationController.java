@@ -36,7 +36,7 @@ public class RegistrationController {
                 registrationLogic.register(username, password, email == null || email.isBlank() ? null : email.trim());
                 return "redirect:/login?registered";
             } catch (RegistrationLogic.UsernameTakenException e) {
-                error = "Username is already taken.";
+                error = "Dieser Benutzername ist bereits vergeben.";
             }
         }
         model.addAttribute("error", error);
@@ -47,10 +47,10 @@ public class RegistrationController {
 
     private static String validate(String username, String password) {
         if (!USERNAME_PATTERN.matcher(username).matches()) {
-            return "Username must have 3 to 64 characters (letters, digits, '.', '_', '-').";
+            return "Der Benutzername muss 3 bis 64 Zeichen lang sein (Buchstaben, Ziffern, '.', '_', '-').";
         }
         if (password.length() < MIN_PASSWORD_LENGTH) {
-            return "Password must have at least " + MIN_PASSWORD_LENGTH + " characters.";
+            return "Das Passwort muss mindestens " + MIN_PASSWORD_LENGTH + " Zeichen lang sein.";
         }
         return null;
     }

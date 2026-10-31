@@ -1,40 +1,44 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>VacantAgent – Allow access</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{auth/layout :: head('Zugriff erlauben')}"></head>
 <body>
-<h1>Allow access to your VacantAgent account?</h1>
-<p>
-    <strong th:text="${clientName}">Client</strong>
-    <span th:if="${clientHost}">(<span th:text="${clientHost}">claude.ai</span>)</span>
-    wants to access the account <strong th:text="${username}">user</strong>.
-</p>
-<p th:if="${redirectHost}">After your decision you will be sent back to <strong th:text="${redirectHost}">claude.ai</strong>.</p>
-<p th:if="${local}">
-    This application runs on your computer. VacantAgent cannot verify which program on your computer receives the
-    access, only allow it if you just started the connection yourself.
-</p>
-<p th:if="${readOnly}">Applications on your computer only get read access.</p>
-<form th:action="@{/oauth2/authorize}" method="post">
-    <input type="hidden" name="client_id" th:value="${clientId}">
-    <input type="hidden" name="state" th:value="${state}">
-    <ul>
-        <li th:each="scope : ${scopes}">
-            <label>
-                <input type="checkbox" name="scope" th:value="${scope.value}" checked>
-                <span th:text="${scope.description}">Scope</span>
-            </label>
-        </li>
-    </ul>
-    <button type="submit">Allow</button>
-</form>
-<form th:action="@{/oauth2/authorize}" method="post">
-    <input type="hidden" name="client_id" th:value="${clientId}">
-    <input type="hidden" name="state" th:value="${state}">
-    <button type="submit">Deny</button>
-</form>
-<p>You can revoke the access at any time under <a th:href="@{/account/connections}">Connections</a>.</p>
+<header th:replace="~{auth/layout :: hero('Verbindung mit einer Anwendung')}"></header>
+<main class="va-sheet">
+    <div class="va-sheet-inner">
+        <h1 class="va-title">Zugriff erlauben?</h1>
+        <p class="va-text">
+            <strong th:text="${clientName}">Client</strong>
+            <span th:if="${clientHost}">(<span th:text="${clientHost}">claude.ai</span>)</span>
+            möchte auf das Konto <strong th:text="${username}">user</strong> zugreifen.
+        </p>
+        <p class="va-text" th:if="${redirectHost}">Nach deiner Entscheidung geht es zurück zu <strong th:text="${redirectHost}">claude.ai</strong>.</p>
+        <p class="va-note" th:if="${local}">
+            Diese Anwendung läuft auf deinem Computer. Wir können nicht prüfen, welches Programm dort den Zugriff
+            erhält. Erlaube ihn nur, wenn du die Verbindung gerade selbst gestartet hast.
+        </p>
+        <p class="va-note" th:if="${readOnly}">Anwendungen auf deinem Computer erhalten nur Lesezugriff.</p>
+        <form class="va-form" id="allow" th:action="@{/oauth2/authorize}" method="post">
+            <input type="hidden" name="client_id" th:value="${clientId}">
+            <input type="hidden" name="state" th:value="${state}">
+            <ul class="va-scopes">
+                <li th:each="scope : ${scopes}">
+                    <label class="va-scope">
+                        <input type="checkbox" name="scope" th:value="${scope.value}" checked>
+                        <span th:text="${scope.description}">Scope</span>
+                    </label>
+                </li>
+            </ul>
+        </form>
+        <div class="va-actions">
+            <button class="va-btn va-btn-primary" type="submit" form="allow">Erlauben</button>
+            <form class="va-form" th:action="@{/oauth2/authorize}" method="post">
+                <input type="hidden" name="client_id" th:value="${clientId}">
+                <input type="hidden" name="state" th:value="${state}">
+                <button class="va-btn" type="submit">Ablehnen</button>
+            </form>
+        </div>
+        <p class="va-switch">Du kannst den Zugriff jederzeit unter <a th:href="@{/account/connections}">Verbindungen</a> widerrufen.</p>
+    </div>
+</main>
 </body>
 </html>

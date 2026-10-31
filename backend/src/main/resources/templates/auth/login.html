@@ -1,19 +1,25 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>VacantAgent – Sign in</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{auth/layout :: head('Anmelden')}"></head>
 <body>
-<h1>Sign in</h1>
-<p th:if="${param.registered}">Registration successful, please sign in.</p>
-<p th:if="${param.error}">Invalid username or password.</p>
-<p th:if="${param.logout}">You have been signed out.</p>
-<form th:action="@{/login}" method="post">
-    <label>Username <input type="text" name="username" autocomplete="username" required autofocus></label>
-    <label>Password <input type="password" name="password" autocomplete="current-password" required></label>
-    <button type="submit">Sign in</button>
-</form>
-<p><a th:href="@{/register}">Create an account</a></p>
+<header th:replace="~{auth/layout :: hero('Deine Reisen im Blick. Störungen, bevor sie dich treffen.')}"></header>
+<main class="va-sheet">
+    <div class="va-sheet-inner">
+        <h1 class="va-title">Anmelden</h1>
+        <p class="va-note" th:if="${param.registered}">Registrierung erfolgreich. Bitte melde dich an.</p>
+        <p class="va-note va-note-error" th:if="${param.error}" role="alert">Benutzername oder Passwort ist falsch.</p>
+        <p class="va-note" th:if="${param.logout}">Du wurdest abgemeldet.</p>
+        <form class="va-form" th:action="@{/login}" method="post">
+            <label class="va-field">Benutzername
+                <input class="va-input" type="text" name="username" autocomplete="username" autocapitalize="none" required autofocus>
+            </label>
+            <label class="va-field">Passwort
+                <input class="va-input" type="password" name="password" autocomplete="current-password" required>
+            </label>
+            <button class="va-btn va-btn-primary" type="submit">Anmelden</button>
+        </form>
+        <p class="va-switch">Noch kein Konto? <a th:href="@{/register}">Registrieren</a></p>
+    </div>
+</main>
 </body>
 </html>

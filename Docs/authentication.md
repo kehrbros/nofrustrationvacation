@@ -22,7 +22,7 @@
 | `auth/config/AuthSecurityConfig` | Filterketten für die Protokoll-Endpunkte des Authorization Servers (`getEndpointsMatcher()`: `/oauth2/**`, AS-Metadaten, OIDC-Discovery) und die Seiten (Login, Registrierung, Consent, Verbindungen); Token-Claims (`preferred_username`, `email`, `roles`, `aud`); Signaturschlüssel; Token-Generator mit Refresh Tokens für öffentliche Clients; `PasswordEncoder` |
 | `auth/config/CimdConfig`, `auth/cimd/*` | MCP-Clients per Client ID Metadata Document, Autorisierungen und Consents per JDBC, siehe [MCP-Clients (CIMD)](#mcp-clients-cimd) |
 | `auth/entities/AuthAccount` | Login-Account: `username` (unique), Passwort-Hash, `email`, Rollen (Default `user`) |
-| `auth/api`, `templates/auth` | `/login`, `/register`, `/oauth2/consent`, `/account/connections` (serverseitig gerendert, wie bei Keycloak) |
+| `auth/api`, `templates/auth` | `/login`, `/register`, `/oauth2/consent`, `/account/connections` (serverseitig gerendert, wie bei Keycloak; deutsch, im Noir-Look der App mit Wortmarke „NoFrustration.Vacation.“; gemeinsames Layout mit Inline-CSS in `templates/auth/layout.html`, daher keine statischen Ressourcen hinter der Security-Filterkette) |
 | `db/migration/auth/V3__auth_account.sql` | `auth_account`, `auth_account_role` – ohne Fremdschlüssel zu Fachtabellen |
 | `db/migration/auth/V17__oauth2_authorization.sql` | `oauth2_authorization`, `oauth2_authorization_consent` (Schema von Spring Authorization Server, `VARCHAR` statt `BLOB`), `auth_cimd_client` (Cache der Metadata Documents) |
 | `user/security/ApiSecurityConfig` | Filterkette `/api/**`: stateless, JWT-Validierung über `issuer-uri`, Tokens für `/mcp` werden abgelehnt |
@@ -67,7 +67,7 @@ vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen
 ### Registrierung
 
 1. Frontend startet den Login (`/oauth2/authorize`) → IdP leitet auf `/login` um.
-2. Nutzer folgt dem Link „Create an account“ → `GET /register`.
+2. Nutzer folgt dem Link „Registrieren“ → `GET /register`.
 3. `POST /register` validiert die Eingaben und legt einen `AuthAccount` mit bcrypt-Hash an. Doppelter Username: Prüfung vorab, bei gleichzeitiger Registrierung der Unique-Constraint.
 4. Weiterleitung nach `/login?registered`. Es wird **kein `AppUser`** angelegt.
 

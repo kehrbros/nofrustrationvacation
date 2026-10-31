@@ -10,9 +10,9 @@ final class Scopes {
 
     static Scope describe(String scope) {
         return switch (scope) {
-            case "mcp:read" -> new Scope(scope, "Read your data");
-            case "mcp:write" -> new Scope(scope, "Act on your behalf");
-            case "openid", "profile", "email" -> new Scope(scope, "Your username and email address");
+            case "mcp:read" -> new Scope(scope, "Deine Daten lesen");
+            case "mcp:write" -> new Scope(scope, "In deinem Namen handeln");
+            case "openid", "profile", "email" -> new Scope(scope, "Dein Benutzername und deine E-Mail-Adresse");
             default -> new Scope(scope, scope);
         };
     }

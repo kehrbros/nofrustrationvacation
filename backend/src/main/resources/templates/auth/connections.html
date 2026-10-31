@@ -1,46 +1,36 @@
 <!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org" lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>VacantAgent – Connections</title>
-</head>
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:replace="~{auth/layout :: head('Verbindungen')}"></head>
 <body>
-<h1>Connected applications</h1>
-<p>Applications such as Claude or ChatGPT that access the account <strong th:text="${username}">user</strong> via MCP.</p>
-<p th:if="${param.revoked}">Access revoked. The application has to ask for access again.</p>
-<p th:if="${connections.isEmpty()}">No connected applications.</p>
-<table th:unless="${connections.isEmpty()}">
-    <thead>
-    <tr>
-        <th>Application</th>
-        <th>Access</th>
-        <th>Last token</th>
-        <th></th>
-    </tr>
-    </thead>
-    <tbody>
-    <tr th:each="view : ${connections}">
-        <td>
-            <strong th:text="${view.connection.clientName}">Claude</strong><br>
-            <small th:text="${view.connection.clientId}">https://claude.ai/...</small>
-        </td>
-        <td>
-            <ul>
-                <li th:each="scope : ${view.scopes}" th:text="${scope.description}">Read your data</li>
-            </ul>
-        </td>
-        <td th:text="${view.lastIssuedAt}">2026-10-28 12:00 UTC</td>
-        <td>
-            <form th:action="@{/account/connections/revoke}" method="post">
-                <input type="hidden" name="id" th:value="${view.connection.registeredClientId}">
-                <button type="submit">Revoke</button>
-            </form>
-        </td>
-    </tr>
-    </tbody>
-</table>
-<form th:action="@{/logout}" method="post">
-    <button type="submit">Sign out</button>
-</form>
+<header th:replace="~{auth/layout :: hero('Verbundene Anwendungen')}"></header>
+<main class="va-sheet">
+    <div class="va-sheet-inner">
+        <h1 class="va-title">Verbindungen</h1>
+        <p class="va-text">Anwendungen wie Claude oder ChatGPT, die per MCP auf das Konto <strong th:text="${username}">user</strong> zugreifen.</p>
+        <p class="va-note" th:if="${param.revoked}">Zugriff widerrufen. Die Anwendung muss erneut um Zugriff bitten.</p>
+        <p class="va-text" th:if="${connections.isEmpty()}">Keine verbundenen Anwendungen.</p>
+        <ul class="va-cards" th:unless="${connections.isEmpty()}">
+            <li class="va-card" th:each="view : ${connections}">
+                <div class="va-card-head">
+                    <div>
+                        <p class="va-card-title" th:text="${view.connection.clientName}">Claude</p>
+                        <p class="va-card-sub" th:text="${view.connection.clientId}">https://claude.ai/...</p>
+                    </div>
+                    <form th:action="@{/account/connections/revoke}" method="post">
+                        <input type="hidden" name="id" th:value="${view.connection.registeredClientId}">
+                        <button class="va-btn va-btn-small" type="submit">Widerrufen</button>
+                    </form>
+                </div>
+                <ul class="va-chips">
+                    <li class="va-chip" th:each="scope : ${view.scopes}" th:text="${scope.description}">Deine Daten lesen</li>
+                </ul>
+                <p class="va-card-sub" th:if="${!#strings.isEmpty(view.lastIssuedAt)}" th:text="|Zuletzt genutzt: ${view.lastIssuedAt}|">Zuletzt genutzt: 28.10.2026 12:00 UTC</p>
+            </li>
+        </ul>
+        <form class="va-form" th:action="@{/logout}" method="post">
+            <button class="va-btn" type="submit">Abmelden</button>
+        </form>
+    </div>
+</main>
 </body>
 </html>

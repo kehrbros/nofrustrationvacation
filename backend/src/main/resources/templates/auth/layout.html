@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<!--/* Shared parts of the sign-in pages in the "Noir" look of the app (colors and font as in frontend/src/theme.ts).
+       The CSS is inline, so the pages need no static resources behind the security filter chain. */-->
+<html xmlns:th="http://www.thymeleaf.org" lang="de">
+<head th:fragment="head(title)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#111111">
+    <title th:text="|NoFrustration.Vacation. – ${title}|">NoFrustration.Vacation.</title>
+    <link rel="icon" type="image/svg+xml"
+          href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='96' fill='%23111111'/%3E%3Cpath d='M150 380 C150 300 362 330 362 250' fill='none' stroke='%23f2b705' stroke-width='40' stroke-linecap='round'/%3E%3Ccircle cx='150' cy='380' r='44' fill='%23ffffff'/%3E%3Cpath d='M362 70 C318 70 286 102 286 144 C286 196 362 262 362 262 C362 262 438 196 438 144 C438 102 406 70 362 70 Z' fill='%23ffffff'/%3E%3Ccircle cx='362' cy='144' r='26' fill='%23111111'/%3E%3C/svg%3E">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ink: #111111;
+            --muted: #4a4a4a;
+            --line: #c9c9c4;
+            --accent: #f2b705;
+            --accent-soft: #fff4cc;
+            --danger: #b42318;
+            font-family: Outfit, system-ui, -apple-system, 'Segoe UI', sans-serif;
+            font-size: 15px;
+            color: var(--ink);
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; min-height: 100vh; background: var(--ink); display: flex; flex-direction: column; }
+        a { color: var(--ink); font-weight: 600; }
+
+        .va-hero {
+            padding: 48px 24px 40px;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+            text-align: center;
+        }
+        .va-hero-logo { width: 64px; height: 64px; }
+        .va-wordmark { margin: 0; font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+        .va-wordmark .va-accent { color: var(--accent); }
+        .va-tagline { margin: 0; color: #c9c9c4; font-size: 15px; }
+
+        .va-sheet {
+            flex: 1;
+            background: #ffffff;
+            border-radius: 28px 28px 0 0;
+            padding: 28px 20px calc(32px + env(safe-area-inset-bottom));
+        }
+        .va-sheet-inner { max-width: 420px; margin: 0 auto; display: flex; flex-direction: column; gap: 18px; }
+        .va-title { margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+        .va-text { margin: 0; color: var(--muted); line-height: 1.45; }
+        .va-text strong { color: var(--ink); }
+
+        .va-form { display: flex; flex-direction: column; gap: 14px; margin: 0; }
+        .va-field { display: flex; flex-direction: column; gap: 6px; font-weight: 600; font-size: 14px; }
+        .va-field small { font-weight: 400; color: var(--muted); }
+        .va-input {
+            font: inherit;
+            font-size: 16px;
+            font-weight: 400;
+            height: 48px;
+            padding: 0 14px;
+            border: 2px solid var(--ink);
+            border-radius: 12px;
+            background: #ffffff;
+            color: var(--ink);
+        }
+        .va-input:focus { outline: none; box-shadow: 0 0 0 4px var(--accent-soft); border-color: var(--ink); }
+
+        .va-btn {
+            font: inherit;
+            font-size: 16px;
+            font-weight: 600;
+            height: 50px;
+            padding: 0 22px;
+            border-radius: 999px;
+            border: 2px solid var(--ink);
+            background: #ffffff;
+            color: var(--ink);
+            cursor: pointer;
+            width: 100%;
+        }
+        .va-btn-primary { background: var(--ink); color: #ffffff; }
+        .va-btn-primary:hover { background: #2a2a2a; }
+        .va-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+        .va-btn-small { height: 38px; font-size: 14px; width: auto; padding: 0 16px; }
+
+        .va-note {
+            margin: 0;
+            padding: 12px 14px;
+            border-radius: 12px;
+            border: 2px solid var(--ink);
+            background: var(--accent-soft);
+            line-height: 1.4;
+        }
+        .va-note-error { background: #fdecea; border-color: var(--danger); color: var(--danger); font-weight: 600; }
+
+        .va-switch { margin: 4px 0 0; text-align: center; color: var(--muted); }
+
+        .va-scopes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+        .va-scope {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 14px;
+            border: 2px solid var(--ink);
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .va-scope input { width: 20px; height: 20px; accent-color: var(--ink); margin: 0; }
+        .va-actions { display: flex; flex-direction: column; gap: 10px; }
+
+        .va-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+        .va-card { border: 2px solid var(--ink); border-radius: 16px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+        .va-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+        .va-card-title { margin: 0; font-size: 17px; font-weight: 700; }
+        .va-card-sub { margin: 0; color: var(--muted); font-size: 13px; word-break: break-all; }
+        .va-chips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+        .va-chip { border-radius: 999px; padding: 3px 10px; font-size: 13px; font-weight: 700; background: var(--accent-soft); border: 1.5px solid var(--ink); }
+
+        @media (min-width: 720px) {
+            body { justify-content: center; align-items: center; padding: 40px 20px; }
+            .va-hero { padding-top: 0; }
+            .va-sheet { flex: none; width: 100%; max-width: 480px; border-radius: 28px; padding: 32px 28px; }
+        }
+    </style>
+</head>
+<body>
+<header th:fragment="hero(tagline)" class="va-hero">
+    <svg class="va-hero-logo" viewBox="0 0 512 512" aria-hidden="true">
+        <rect width="512" height="512" rx="96" fill="#1f1f1f"/>
+        <path d="M150 380 C150 300 362 330 362 250" fill="none" stroke="#f2b705" stroke-width="40" stroke-linecap="round"/>
+        <circle cx="150" cy="380" r="44" fill="#ffffff"/>
+        <path d="M362 70 C318 70 286 102 286 144 C286 196 362 262 362 262 C362 262 438 196 438 144 C438 102 406 70 362 70 Z" fill="#ffffff"/>
+        <circle cx="362" cy="144" r="26" fill="#1f1f1f"/>
+    </svg>
+    <p class="va-wordmark">NoFrustration.<span class="va-accent">Vacation.</span></p>
+    <p class="va-tagline" th:text="${tagline}">Reisen ohne Frust.</p>
+</header>
+</body>
+</html>
