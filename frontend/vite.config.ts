@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
-        name: 'NoFrustrationVacation',
-        short_name: 'NoFrustrationVacation',
+        name: 'NoFrustration.Vacation.',
+        short_name: 'NoFrustration.',
         description: 'Reisen planen und über Sperrungen und Störungen auf der Route informiert werden.',
         lang: 'de',
         start_url: '/reisen',
