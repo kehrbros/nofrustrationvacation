@@ -1,6 +1,6 @@
 # Streckennetz und Routing (`network`)
 
-- **Status:** Schema ab `V21`, Import geplant. Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
+- **Status:** Schema `V21`, Erstimport aus lokaler Datei (`RegionImport`). Download, Zeitplan, `min-segment-ratio` und `NetworkRefreshed` folgen. Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
 - **Routing:** GraphHopper 11.1 eingebettet als Bibliothek im Backend, kein eigener Dienst. Profil `car` mit Abbiegekosten und Landmarks (LM). Kein CH, weil Sperrungen und Umfahrungen die Gewichtung pro Anfrage ändern.
 - **Datenquelle:** Geofabrik-Extrakt (`.osm.pbf`) je Region. Graph und Segmente entstehen aus demselben Import und passen immer zusammen.
 - **Erste Region:** Neuseeland (`nz`). Weitere Region = neuer Konfigurationsblock, Code und Schema bleiben gleich.
@@ -18,6 +18,7 @@
   - Kanten der Länge 0 (GraphHopper teilt an Sperren wie Pollern) haben kein Segment und werden in Routen übersprungen.
   - Gilt nur für eine Graph-Version (Schlüssel `extract_version_id`, `edge_key`): eine Aktualisierung schreibt ihr Mapping neben das alte, nach dem Umschalten wird das alte gelöscht. Keine Entity, nur JDBC.
 - Staging nur für Segmente, als temporäre Tabelle im Import, nicht im Schema.
+- Fuß- und Radwege, Treppen usw. werden nicht importiert (`import.osm.ignored_highways`): Straßen werden nur an Kreuzungen für Autos geteilt, das macht Segmente stabiler. Fußgängerzonen (`pedestrian`) bleiben, manche sind für Autos frei.
 
 ## Import und Aktualisierung
 
@@ -29,7 +30,8 @@
 6. Ausgemusterte Segmente ohne Referenz löschen.
 
 - Kein Umschalten, wenn ein Schritt fehlschlägt oder deutlich weniger Segmente entstehen (`min-segment-ratio`).
-- Start: Graph der aktuellen Version wird geladen (Memory-Mapped). Fehlt er, Import im Hintergrund, Routing antwortet bis `READY` mit 503.
+- Graph-Verzeichnis je Version: `graph-dir/<extractVersionId>`, das alte wird nach dem Umschalten gelöscht. Schlägt ein Import fehl, bleibt der alte Graph in Gebrauch (Status `FAILED`).
+- Start: `RegionImport.loadOrImport` je Region auf einem eigenen virtuellen Thread. Graph der aktuellen Version wird geladen (`data-access=MMAP`: außerhalb des Heaps). Fehlt er oder passt er nicht (andere Encoded Values, Profile), neuer Import. Routing antwortet bis `READY` mit 503.
 - Rhythmus: geplant wöchentlich (`refresh-cron`). Im Spike blieben in Wellington-Zentrum nach 6 Monaten 87,8 % der Segmente erhalten, fast alle Abgänge durch neue oder verschobene Kreuzungen. Die Neuplanung nach `NetworkRefreshed` ist daher Pflicht.
 - Erster Umsetzungsschritt: nur Erstimport, Aktualisierung folgt.
 
@@ -54,22 +56,30 @@
 
   ```properties
   vacantagent.network.import-on-start=true
-  vacantagent.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
-  # Statt download-url, z. B. in Tests
-  vacantagent.network.regions.nz.osm-file=
+  vacantagent.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
   vacantagent.network.regions.nz.graph-dir=./data/graphs/nz
-  vacantagent.network.regions.nz.refresh-cron=0 0 3 * * SUN
-  vacantagent.network.regions.nz.min-segment-ratio=0.95
+  # MMAP: Graph außerhalb des Heaps, RAM_STORE in Tests
+  vacantagent.network.regions.nz.data-access=MMAP
   vacantagent.network.regions.nz.driving-side=LEFT
   vacantagent.network.regions.nz.ferries=true
+  # Geplant
+  vacantagent.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
+  vacantagent.network.regions.nz.refresh-cron=0 0 3 * * SUN
+  vacantagent.network.regions.nz.min-segment-ratio=0.95
   ```
 
-- `ferries=true` für NZ: Nord- und Südinsel sind nur per Fähre verbunden.
+- Noch keine Region in `application.properties`, bis der Download kommt.
+- `ferries=true` für NZ: Nord- und Südinsel sind nur per Fähre verbunden. `ferries` und die Encoded Values gehören zum Graphen, eine Änderung braucht einen neuen Import.
 
 ## Tests
 
-- Testextrakt Wellington-Zentrum (Overpass, Bbox `-41.32,174.75,-41.27,174.80`, Straßen und Abbiegeverbote), enthält Terrace Tunnel und Mount Victoria Tunnel (SH 1). Wird einmal geladen und committet, Tests laden nichts nach.
-- Import dauert unter 1 s, 27.613 Kanten.
+- Testextrakt Wellington-Zentrum `backend/src/test/resources/osm/wellington.osm.gz`, enthält Terrace Tunnel und Mount Victoria Tunnel (SH 1). Wird einmal geladen und committet, Tests laden nichts nach. Neu erzeugen über Overpass (`overpass-api.de/api/interpreter`, User-Agent nötig):
+
+  ```
+  [out:xml][bbox:-41.32,174.75,-41.27,174.80];(way[highway];rel[type=restriction];);(._;>;);out meta;
+  ```
+
+- Testregion `wellington` in `src/test/resources/config/application.properties`, kein Import beim Start. `RegionImportTest` importiert ausdrücklich: rund 1,5 s, 13.096 Segmente.
 
 ## Spike-Ergebnisse (Oktober 2026, Wellington)
 
