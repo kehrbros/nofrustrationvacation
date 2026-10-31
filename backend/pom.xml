@@ -81,13 +81,7 @@
             <artifactId>spring-boot-starter-flyway</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>com.h2database</groupId>
-            <artifactId>h2</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-
-        <!-- Database of the Docker stack, profile "postgres" (application-postgres.properties) -->
+        <!-- Database (PostgreSQL with PostGIS), see Docs/architecture.md#persistence -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
@@ -136,6 +130,18 @@
         </dependency>
 
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- PostGIS for tests and the OpenAPI start, JDBC URL jdbc:tc:postgis:..., see Docs/architecture.md#tests -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
             <groupId>com.tngtech.archunit</groupId>
             <artifactId>archunit-junit5</artifactId>
             <version>${archunit.version}</version>
@@ -158,6 +164,13 @@
                         <goals>
                             <goal>start</goal>
                         </goals>
+                        <configuration>
+                            <!-- Test properties: PostGIS via Testcontainers, no ECB or PayPal calls -->
+                            <useTestClasspath>true</useTestClasspath>
+                            <additionalClasspathElements>
+                                <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
+                            </additionalClasspathElements>
+                        </configuration>
                     </execution>
                     <execution>
                         <id>stop-after-openapi</id>

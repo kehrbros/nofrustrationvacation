@@ -15,7 +15,7 @@ name: vacantagent-local
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgis/postgis:17-3.5-alpine
     environment:
       POSTGRES_DB: vacantagent
       POSTGRES_USER: vacantagent
@@ -37,7 +37,6 @@ services:
       context: ./backend
       dockerfile: Dockerfile.local
     environment:
-      SPRING_PROFILES_ACTIVE: postgres
       POSTGRES_HOST: postgres
       POSTGRES_DB: vacantagent
       POSTGRES_USER: vacantagent
