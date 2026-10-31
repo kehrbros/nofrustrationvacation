@@ -161,7 +161,8 @@ class RoutePlanningTest {
     private long newRoute(double[] from, @Nullable double[] to, @Nullable OffsetDateTime departure) {
         return inTransaction(() -> {
             long userId = appUserProvisioning.findOrCreate("trip-" + UUID.randomUUID(), null, null).getId();
-            Trip trip = tripRepository.save(new Trip(userId, "Wellington", DEPARTURE.minusDays(2)));
+            Trip trip = tripRepository.save(new Trip(userId, "Wellington", DEPARTURE, DEPARTURE.plusDays(7),
+                    DEPARTURE.minusDays(2)));
             Stop start = stopRepository.save(new Stop(trip, 0, "Te Aro", from[0], from[1], null, departure));
             Stop end = stopRepository.save(new Stop(trip, 1, "Thorndon", to == null ? null : to[0],
                     to == null ? null : to[1], null, null));

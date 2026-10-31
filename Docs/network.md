@@ -1,6 +1,6 @@
 # Streckennetz und Routing (`network`)
 
-- **Status:** Schema `V21`, Erstimport aus lokaler Datei (`RegionImport`), `Routing` mit Sperren. Download, Zeitplan, `min-segment-ratio` und `NetworkRefreshed` folgen. Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
+- **Status:** Schema `V23` (Routenplanung `V24`), Erstimport aus lokaler Datei (`RegionImport`), `Routing` mit Sperren. Download, Zeitplan, `min-segment-ratio` und `NetworkRefreshed` folgen. Machbarkeit im Spike `spike/graphhopper` geprüft (Ergebnisse unten).
 - **Routing:** GraphHopper 11.1 eingebettet als Bibliothek im Backend, kein eigener Dienst. Profil `car` mit Abbiegekosten und Landmarks (LM). Kein CH, weil Sperrungen und Umfahrungen die Gewichtung pro Anfrage ändern.
 - **Datenquelle:** Geofabrik-Extrakt (`.osm.pbf`) je Region. Graph und Segmente entstehen aus demselben Import und passen immer zusammen.
 - **Erste Region:** Neuseeland (`nz`). Weitere Region = neuer Konfigurationsblock, Code und Schema bleiben gleich.

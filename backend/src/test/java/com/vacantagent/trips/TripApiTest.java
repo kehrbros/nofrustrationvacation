@@ -3,10 +3,10 @@ package com.vacantagent.trips;
 import com.jayway.jsonpath.JsonPath;
 import com.vacantagent.incidents.entities.IncidentType;
 import com.vacantagent.incidents.logic.IncidentLogic;
-import com.vacantagent.network.data.RoadRepository;
-import com.vacantagent.network.data.SegmentRepository;
-import com.vacantagent.network.entities.Road;
-import com.vacantagent.network.entities.Segment;
+import com.vacantagent.network.data.ExtractVersionRepository;
+import com.vacantagent.network.data.RoadSegmentRepository;
+import com.vacantagent.network.entities.ExtractVersion;
+import com.vacantagent.network.entities.RoadSegment;
 import com.vacantagent.trips.logic.PlannedSection;
 import com.vacantagent.trips.logic.RouteLogic;
 import com.vacantagent.user.entities.AppUser;
@@ -15,6 +15,10 @@ import com.vacantagent.user.security.AppUserAuthentication;
 import com.vacantagent.user.security.CurrentUser;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
+import org.locationtech.jts.geom.GeometryFactory;
+import org.locationtech.jts.geom.LineString;
+import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -31,6 +35,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
@@ -59,9 +64,9 @@ class TripApiTest {
     @Autowired
     private RouteLogic routeLogic;
     @Autowired
-    private RoadRepository roadRepository;
+    private ExtractVersionRepository extractVersionRepository;
     @Autowired
-    private SegmentRepository segmentRepository;
+    private RoadSegmentRepository roadSegmentRepository;
     @Autowired
     private TransactionTemplate transactionTemplate;
 
@@ -177,9 +182,13 @@ class TripApiTest {
                 .andReturn().getResponse().getContentAsString();
         long routeId = ((Number) JsonPath.read(detail, "$.routes[0].id")).longValue();
 
-        Road road = roadRepository.save(new Road("A" + UUID.randomUUID().toString().substring(0, 8), "Brenner"));
-        long segmentId = segmentRepository.save(new Segment(road, "Innsbruck", "Brenner",
-                "{\"type\":\"LineString\",\"coordinates\":[[11.4,47.2],[11.5,47.0]]}")).getId();
+        ExtractVersion version = extractVersionRepository.save(new ExtractVersion("test", departure.minusDays(1)));
+        LineString geometry = new GeometryFactory(new PrecisionModel(), 4326).createLineString(new Coordinate[]{
+                new Coordinate(11.4, 47.2), new Coordinate(11.5, 47.0)});
+        long segmentId = roadSegmentRepository.save(new RoadSegment("test",
+                ThreadLocalRandom.current().nextLong(1, Integer.MAX_VALUE),
+                472_000_000, 114_000_000, 470_000_000, 115_000_000, 0,
+                "A13", "Brenner", "MOTORWAY", false, false, 25_000, geometry, version)).getId();
         routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, departure, departure.plusHours(1))));
         transactionTemplate.executeWithoutResult(_ -> incidentLogic.create(IncidentType.CLOSURE, "Vollsperrung A22",
                 departure.minusHours(1), departure.plusHours(4), null, Set.of(segmentId)));
