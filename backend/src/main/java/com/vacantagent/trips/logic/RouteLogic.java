@@ -2,8 +2,10 @@ package com.vacantagent.trips.logic;
 
 import com.vacantagent.trips.data.RouteRepository;
 import com.vacantagent.trips.data.RouteSectionRepository;
+import com.vacantagent.trips.entities.PlanOutcome;
 import com.vacantagent.trips.entities.Route;
 import com.vacantagent.trips.entities.RouteSection;
+import jakarta.annotation.Nullable;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -15,7 +17,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.stream.IntStream;
 
-/** Plans the way of a {@link Route}. Where the sections come from (routing service) is still open. */
+/** Sections and planning status of a {@link Route}, planned by {@link RoutePlanning}. */
 @Service
 @RequiredArgsConstructor
 public class RouteLogic {
@@ -31,8 +33,7 @@ public class RouteLogic {
     @Transactional
     public List<RouteSection> replaceSections(long routeId, List<PlannedSection> sections) {
         routeSectionRepository.deleteByRouteId(routeId);
-        Route route = routeRepository.findById(routeId)
-                .orElseThrow(() -> new EntityNotFoundException("route " + routeId));
+        Route route = route(routeId);
         route.planned(OffsetDateTime.now(clock));
         List<RouteSection> saved = routeSectionRepository.saveAllAndFlush(IntStream.range(0, sections.size())
                 .mapToObj(i -> {
@@ -43,5 +44,26 @@ public class RouteLogic {
                 .toList());
         events.publishEvent(new RouteChanged(routeId));
         return saved;
+    }
+
+    /**
+     * Removes the sections after a change of stops or waypoints, so that incidents no longer match the old way.
+     * Consequences go with them ({@code ON DELETE CASCADE}). Publishes {@link RouteChanged}.
+     */
+    @Transactional
+    public void discardSections(long routeId) {
+        routeSectionRepository.deleteByRouteId(routeId);
+        route(routeId).discarded();
+        events.publishEvent(new RouteChanged(routeId));
+    }
+
+    /** Records a failed planning, the sections stay as they are. */
+    @Transactional
+    public void planFailed(long routeId, PlanOutcome outcome, @Nullable String reason) {
+        route(routeId).planFailed(outcome, reason);
+    }
+
+    private Route route(long routeId) {
+        return routeRepository.findById(routeId).orElseThrow(() -> new EntityNotFoundException("route " + routeId));
     }
 }

@@ -15,7 +15,7 @@ import type {
   TripIncidentDto,
   TripSummaryDto,
 } from '../generated/api';
-import type { NewStop, NewTrip, Stop, TripDetail, TripIncident, TripSummary } from './model';
+import type { NewStop, NewTrip, Route, Stop, TripDetail, TripIncident, TripSummary } from './model';
 
 /** Error of a trips API call, with the problem code of the backend if there is one. */
 export class TripsApiError extends Error {
@@ -48,8 +48,15 @@ function toStop(dto: StopDto): Stop {
   };
 }
 
-function toRoute(dto: RouteDto) {
-  return { id: dto.id!, fromStopId: dto.fromStopId!, toStopId: dto.toStopId!, plannedAt: dto.plannedAt ?? null };
+function toRoute(dto: RouteDto): Route {
+  return {
+    id: dto.id!,
+    fromStopId: dto.fromStopId!,
+    toStopId: dto.toStopId!,
+    plannedAt: dto.plannedAt ?? null,
+    planOutcome: dto.planOutcome ?? null,
+    planReason: dto.planReason ?? null,
+  };
 }
 
 function toDetail(dto: TripDetailDto): TripDetail {
@@ -109,8 +116,9 @@ export async function createTrip(trip: NewTrip): Promise<TripDetail> {
   return toDetail(await unwrap(createTripRequest({ body: trip })));
 }
 
-export async function addStop(tripId: number, stop: NewStop): Promise<Stop> {
-  return toStop(await unwrap(addStopRequest({ path: { tripId }, body: stop })));
+/** Appends the stop; the response is the whole trip, since routes are created and planned with it. */
+export async function addStop(tripId: number, stop: NewStop): Promise<TripDetail> {
+  return toDetail(await unwrap(addStopRequest({ path: { tripId }, body: stop })));
 }
 
 export async function uploadCoverImage(tripId: number, file: File): Promise<void> {

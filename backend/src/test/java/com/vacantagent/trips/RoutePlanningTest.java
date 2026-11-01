@@ -13,13 +13,17 @@ import com.vacantagent.trips.data.RouteSectionRepository;
 import com.vacantagent.trips.data.StopRepository;
 import com.vacantagent.trips.data.TripRepository;
 import com.vacantagent.trips.data.WaypointRepository;
+import com.vacantagent.trips.entities.PlanOutcome;
 import com.vacantagent.trips.entities.Route;
 import com.vacantagent.trips.entities.RouteSection;
 import com.vacantagent.trips.entities.Stop;
 import com.vacantagent.trips.entities.Trip;
 import com.vacantagent.trips.entities.Waypoint;
+import com.vacantagent.trips.logic.NewStop;
+import com.vacantagent.trips.logic.NewWaypoint;
 import com.vacantagent.trips.logic.PlanResult;
 import com.vacantagent.trips.logic.RoutePlanning;
+import com.vacantagent.trips.logic.TripEditing;
 import com.vacantagent.user.logic.AppUserProvisioning;
 import jakarta.annotation.Nullable;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,6 +37,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -50,6 +55,8 @@ class RoutePlanningTest {
 
     @Autowired
     private RoutePlanning routePlanning;
+    @Autowired
+    private TripEditing tripEditing;
     @Autowired
     private RegionImport regionImport;
     @Autowired
@@ -86,7 +93,7 @@ class RoutePlanningTest {
 
         PlanResult result = routePlanning.plan(routeId);
 
-        assertThat(result.outcome()).isEqualTo(PlanResult.Outcome.PLANNED);
+        assertThat(result.outcome()).isEqualTo(PlanOutcome.PLANNED);
         List<RouteSection> sections = routeSectionRepository.findByRouteIdOrderByPosition(routeId);
         assertThat(sections).isNotEmpty();
         assertThat(sections.getFirst().getExpectedPassageStart()).isEqualTo(DEPARTURE);
@@ -114,7 +121,7 @@ class RoutePlanningTest {
                 KELBURN[0], KELBURN[1], "Kelburn", null)));
         PlanResult result = routePlanning.plan(routeId);
 
-        assertThat(result.outcome()).isEqualTo(PlanResult.Outcome.PLANNED);
+        assertThat(result.outcome()).isEqualTo(PlanOutcome.PLANNED);
         assertThat(duration(routeId)).isGreaterThan(direct);
     }
 
@@ -124,8 +131,58 @@ class RoutePlanningTest {
 
         PlanResult result = routePlanning.plan(routeId);
 
-        assertThat(result.outcome()).isEqualTo(PlanResult.Outcome.MISSING_DEPARTURE);
+        assertThat(result.outcome()).isEqualTo(PlanOutcome.MISSING_DEPARTURE);
         assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).isEmpty();
+        Route route = routeRepository.findById(routeId).orElseThrow();
+        assertThat(route.getPlanOutcome()).isEqualTo(PlanOutcome.MISSING_DEPARTURE);
+        assertThat(route.getPlanReason()).contains("Te Aro");
+    }
+
+    /** A new departure discards the sections and plans the route again, from the new departure. */
+    @Test
+    void changedDepartureReplansTheRoute() {
+        long routeId = newRoute(TE_ARO, THORNDON, DEPARTURE);
+        routePlanning.plan(routeId);
+        Route route = routeRepository.findById(routeId).orElseThrow();
+        Stop start = stopRepository.findById(route.getFromStop().getId()).orElseThrow();
+        long userId = tripRepository.findById(start.getTrip().getId()).orElseThrow().getAppUserId();
+
+        Map<Long, PlanResult> results = tripEditing.updateStop(userId, start.getTrip().getId(), start.getId(),
+                new NewStop("Te Aro", TE_ARO[0], TE_ARO[1], null, DEPARTURE.plusHours(2)));
+
+        assertThat(results).containsOnlyKeys(routeId);
+        assertThat(results.get(routeId).outcome()).isEqualTo(PlanOutcome.PLANNED);
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId).getFirst().getExpectedPassageStart())
+                .isEqualTo(DEPARTURE.plusHours(2));
+    }
+
+    /** Waypoints are reordered in place (unique positions), changed, added and removed in one call. */
+    @Test
+    void waypointsAreReplacedAndPlanned() {
+        long routeId = newRoute(TE_ARO, THORNDON, DEPARTURE);
+        Route route = routeRepository.findById(routeId).orElseThrow();
+        long tripId = stopRepository.findById(route.getFromStop().getId()).orElseThrow().getTrip().getId();
+        long userId = tripRepository.findById(tripId).orElseThrow().getAppUserId();
+        tripEditing.replaceWaypoints(userId, tripId, routeId, List.of(
+                new NewWaypoint(null, KELBURN[0], KELBURN[1], "Kelburn", null),
+                new NewWaypoint(null, -41.2900, 174.7760, "Lambton", null)));
+        List<Waypoint> first = waypointRepository.findByRouteIdOrderByPosition(routeId);
+
+        Map<Long, PlanResult> results = tripEditing.replaceWaypoints(userId, tripId, routeId, List.of(
+                new NewWaypoint(first.get(1).getId(), -41.2905, 174.7765, "Lambton Quay", null),
+                new NewWaypoint(first.get(0).getId(), KELBURN[0], KELBURN[1], "Kelburn", "Glenmore Street"),
+                new NewWaypoint(null, -41.2800, 174.7750, null, null)));
+
+        assertThat(results.get(routeId).outcome()).isEqualTo(PlanOutcome.PLANNED);
+        List<Waypoint> second = waypointRepository.findByRouteIdOrderByPosition(routeId);
+        assertThat(second).extracting(Waypoint::getId)
+                .startsWith(first.get(1).getId(), first.get(0).getId()).hasSize(3);
+        assertThat(second).extracting(Waypoint::getPosition).containsExactly(0, 1, 2);
+        assertThat(second.get(0).getName()).isEqualTo("Lambton Quay");
+        assertThat(second.get(1).getRoadHint()).isEqualTo("Glenmore Street");
+
+        tripEditing.replaceWaypoints(userId, tripId, routeId, List.of());
+        assertThat(waypointRepository.findByRouteIdOrderByPosition(routeId)).isEmpty();
     }
 
     @Test
@@ -134,7 +191,7 @@ class RoutePlanningTest {
 
         PlanResult result = routePlanning.plan(routeId);
 
-        assertThat(result.outcome()).isEqualTo(PlanResult.Outcome.MISSING_COORDINATES);
+        assertThat(result.outcome()).isEqualTo(PlanOutcome.MISSING_COORDINATES);
         assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).isEmpty();
     }
 

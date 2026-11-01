@@ -28,11 +28,16 @@ export interface Stop {
   departureAt: string | null;
 }
 
+export type PlanOutcome = 'PLANNED' | 'MISSING_COORDINATES' | 'MISSING_DEPARTURE' | 'NO_ROUTE' | 'ROUTING_UNAVAILABLE';
+
 export interface Route {
   id: number;
   fromStopId: number;
   toStopId: number;
   plannedAt: string | null;
+  /** Outcome of the last planning, null until planned or after a change of its stops or waypoints. */
+  planOutcome: PlanOutcome | null;
+  planReason: string | null;
 }
 
 export interface TripDetail {

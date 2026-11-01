@@ -51,6 +51,15 @@ public class Stop extends AbstractEntity {
         this.position = position;
     }
 
+    public void rename(String name) {
+        this.name = name;
+    }
+
+    public void relocate(@Nullable Double latitude, @Nullable Double longitude) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+    }
+
     public void reschedule(@Nullable OffsetDateTime arrivalAt, @Nullable OffsetDateTime departureAt) {
         this.arrivalAt = arrivalAt;
         this.departureAt = departureAt;

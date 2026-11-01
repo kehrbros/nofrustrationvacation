@@ -48,4 +48,11 @@ public class Waypoint extends AbstractEntity {
     public void moveTo(int position) {
         this.position = position;
     }
+
+    public void change(double latitude, double longitude, @Nullable String name, @Nullable String roadHint) {
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.name = name;
+        this.roadHint = roadHint;
+    }
 }
