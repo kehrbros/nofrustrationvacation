@@ -90,7 +90,7 @@
 
 1. **Incident neu oder geändert** (`IncidentLogic.create`/`change`): Segmente des Incidents → über den Index Segment → RouteSection (`ix_route_section_segment`) die Sections darauf, deren erwartete Durchfahrt die Gültigkeit überschneidet → je Route eine Consequence.
 2. **Route neu oder geändert** (`RouteChanged`, synchron in derselben Transaktion): Segmente der Route → aktive Incidents darauf (`validTo` leer oder nicht vorbei) → dieselbe Prüfung auf Überschneidung.
-- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`).
+- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`). Als reine Funktion `IncidentOverlap` in `incidents.logic`, auch für die Bewertung von Streckenvorschlägen. Andere Module lesen Incidents über `ActiveIncidents.onSegments` (Records, keine Entities).
 - Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht.
 - Tests: `ConsequenceMatchingTest`.
 

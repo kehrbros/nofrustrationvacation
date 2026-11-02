@@ -15,7 +15,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -99,24 +98,16 @@ class SegmentWriter {
     }
 
     /**
-     * Extra seconds per edge key of the delayed segments in a version. A segment can consist of several edges, each
-     * gets an equal share, so driving the segment in one direction costs the delay exactly once.
+     * Extra seconds per edge key of the delayed segments in a version. A segment is one direction of an edge, several
+     * edge keys only for identical duplicate edges: a passage uses one of them, so each gets the full delay.
      */
     @Transactional(readOnly = true)
     public IntDoubleHashMap edgeDelays(long versionId, Map<Long, Duration> delays) {
         IntDoubleHashMap seconds = new IntDoubleHashMap();
-        if (delays.isEmpty()) {
-            return seconds;
+        if (!delays.isEmpty()) {
+            queryEdgeKeys(versionId, delays.keySet(),
+                    rs -> seconds.put(rs.getInt(1), delays.get(rs.getLong(2)).toMillis() / 1000.0));
         }
-        Map<Long, List<Integer>> keysBySegment = new HashMap<>();
-        queryEdgeKeys(versionId, delays.keySet(), rs -> keysBySegment
-                .computeIfAbsent(rs.getLong(2), id -> new ArrayList<>()).add(rs.getInt(1)));
-        keysBySegment.forEach((segmentId, keys) -> {
-            // an edge key is edge * 2 + direction
-            long edges = keys.stream().map(key -> key >> 1).distinct().count();
-            double share = delays.get(segmentId).toMillis() / 1000.0 / edges;
-            keys.forEach(key -> seconds.put(key, share));
-        });
         return seconds;
     }
 

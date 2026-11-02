@@ -47,7 +47,7 @@
   - Ohne Bordsteinseite an den Stops ist die schnellste Alternative ggf. schneller als `route` (Newtown → Thorndon: ~11 %).
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
   - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
-- `SegmentQueries`: Details zu Segmenten (`ref`, Name, Geometrie, ausgemustert) für API und Benachrichtigungen.
+- `SegmentQueries.segments(ids)` → `SegmentInfo`: `ref`, Name, Länge, Mittelpunkt (`ST_LineInterpolatePoint`), Gegenrichtung (`reverseId`: gleicher Weg, Start und Ende vertauscht, `null` bei Einbahnstraßen). Genutzt von `recommendations` (Via-Punkte, „über SH 2“, Wenden am Via-Punkt). Später Geometrie und ausgemustert für API und Benachrichtigungen.
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
 - `NetworkRefreshed` (Spring-Event): Region, neue `ExtractVersion`, ausgemusterte Segment-Ids.
@@ -57,7 +57,7 @@
 
 - **Stops:** `curbsides` nach `driving-side` der Region (NZ `left`), mit `force_curbside=false`: GraphHopper hält die Seite ein, wo möglich, sonst wird sie ignoriert. Strikt schlägt das Routing auf Einbahnstraßen fehl.
 - **Via-Punkte:** `curbside` `any`, `pass_through=true` (kein Wenden am Via-Punkt), `point_hints` aus dem Straßenhinweis.
-- **Sperren und Verzögerungen** (`ScenarioWeighting`): eigene `WeightingFactory`. `edge_key`s gesperrter Segmente (alle Kanten eines Segments, richtungsgenau) sind unpassierbar, verzögerte kosten Gewicht + Sekunden (Gewicht der Custom-Model-Gewichtung ≈ Sekunden). Besteht ein Segment aus mehreren Kanten, bekommt jede den gleichen Anteil, eine Durchfahrt kostet die Verzögerung genau einmal. Gewichte steigen nur, funktioniert mit LM. Gilt für `route` und `alternatives` gleich.
+- **Sperren und Verzögerungen** (`ScenarioWeighting`): eigene `WeightingFactory`. `edge_key`s gesperrter Segmente (alle Kanten eines Segments, richtungsgenau) sind unpassierbar, verzögerte kosten Gewicht + Sekunden (Gewicht der Custom-Model-Gewichtung ≈ Sekunden). Mehrere `edge_key`s je Segment gibt es nur bei identischen Doppelkanten, eine Durchfahrt nutzt eine davon: jede bekommt die volle Verzögerung. Gewichte steigen nur, funktioniert mit LM. Gilt für `route` und `alternatives` gleich.
 - **Anteile:** nur am ersten und letzten Abschnitt einer Route kleiner als 0–1, Position des gesnappten Start- bzw. Endpunkts auf der Kantengeometrie.
 - **Snappen:** `snap_preventions` `tunnel`, `bridge`, `ferry` (ein Stop landet nicht im Tunnel darunter), höchstens 500 m vom angefragten Punkt.
 - **Region:** die erste Region mit Graph, deren Bounding Box alle Punkte enthält.
