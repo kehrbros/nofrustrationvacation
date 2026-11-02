@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * Suggestions for one route from one scenario, so that API, notification and applying mean the same ones. Derived and
  * replaced, not historized. Route, consequence and incident are referenced by id (other modules), see
- * Docs/recommendations.md#datenmodell-v27__recommendationssql.
+ * Docs/recommendations.md#datenmodell-v29__recommendationssql.
  */
 @Getter
 @Entity

@@ -1,6 +1,6 @@
 # Streckenvorschläge (`recommendations`)
 
-- **Status:** Planung umgesetzt (Szenario, `ALTERNATIVES`, Bewertung, Ranking, Via-Punkte, Speichern, `V27__recommendations.sql`, `RouteChanged` → `STALE`, Aufräumen). Offen: Incidents (`forConsequence`, `KEEP_ROUTE`, `DEPARTURE_SHIFT`, `ConsequenceChanged`, `reroutedLegs`), Frontend, `suggestionSetId` an den Hinweisen.
+- **Status:** Planung umgesetzt (Szenario, `ALTERNATIVES`, Bewertung, Ranking, Via-Punkte, Speichern, `V29__recommendations.sql`, `RouteChanged` → `STALE`, Aufräumen). Offen: Incidents (`forConsequence`, `KEEP_ROUTE`, `DEPARTURE_SHIFT`, `ConsequenceChanged`, `reroutedLegs`), Frontend, `suggestionSetId` an den Hinweisen.
 - **Ziel:** Für eine Route bekommt der Nutzer bis zu `n` Vorschläge, wie er fahren kann. Dieselbe Logik liefert Vorschläge, wenn ein Incident die geplante Route trifft (Umfahrung, spätere Abfahrt, Verzögerung hinnehmen).
 - **Grundidee:** Ein Vorschlag entsteht immer aus einem **Szenario** (Ausgangslage: Punkte, Abfahrt, Einschränkungen im Netz, Referenzroute). Planung und Incident unterscheiden sich nur darin, wie das Szenario gebaut wird. Erzeugen, Bewerten, Aussortieren, Speichern, API und Frontend sind gemeinsam.
 - Ersetzt die Beispieldaten in `frontend/src/trips/routeExamples.ts` und schließt den offenen Punkt „Umfahrung bei `BLOCKED`“ aus [domain.md](domain.md#offen).
@@ -94,7 +94,7 @@ flowchart LR
 - **Ranking:** nach Ankunft am Ziel (inkl. Warten und Verzögerung), dann Distanz. Höchstens `n` Vorschläge, höchstens ein `DEPARTURE_SHIFT` je Richtung.
 - **Beschriften** (`labels`, mehrere möglich): `FASTEST`, `SHORTEST`, `CURRENT` (gleich der Referenz), `AVOIDS_INCIDENT`, `HAS_INCIDENT`, `LATER_DEPARTURE`, `EARLIER_DEPARTURE`, `FERRY` (noch nicht gesetzt, `SegmentInfo` kennt die Fähre nicht). `CURRENT`: Anteil gemeinsamer Strecke mit der Referenz ≥ `current-shared-ratio` (0,95). Dazu `via`: häufigste `ref` bzw. Straßenname im abweichenden Teil (über `SegmentQueries`), z. B. „über SH 2“. Texte baut das Frontend.
 
-## Datenmodell (`V27__recommendations.sql`)
+## Datenmodell (`V29__recommendations.sql`)
 
 - Nicht historisiert (abgeleitet, wird ersetzt), wie `Route`/`RouteSection`.
 - `SuggestionSet`: `routeId` (FK `route`, `ON DELETE CASCADE`), `waypointMode` (`IGNORE`, `FOLLOW`), `trigger`, optional `consequenceId` (FK `consequence`, `ON DELETE SET NULL`) und `incidentId` (FK `incident`), `requestedCount`, `departureAt` des Szenarios, `basisHash`, `status`, `createdAt`, `expiresAt`.

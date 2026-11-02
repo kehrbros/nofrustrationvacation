@@ -13,7 +13,7 @@
 | `com.nfv.bookings` | `Booking`, `AccommodationDetails` |
 | `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.nfv.incidents` | `Incident`, `Consequence` |
-| `com.nfv.recommendations` (Entwurf) | `SuggestionSet`, `RouteOption` |
+| `com.nfv.recommendations` | `SuggestionSet`, `RouteOption` (mit `RouteOptionPoint`, `RouteOptionConflict`) |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
 - **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` und `SuggestionSet`/`RouteOption` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
