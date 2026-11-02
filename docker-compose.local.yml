@@ -5,11 +5,10 @@
 #
 # Frontend http://localhost:5173 (port of the Vite dev server, so the registered redirect URIs and the PayPal
 # return URL fit), backend http://localhost:8080, login test/test. Reset the database with "down -v".
-# For the PayPal sandbox, which rejects localhost as return URL, set LOCAL_FRONTEND_URL=https://localtest.me:5443 in
-# .env and open the frontend there (HTTPS with a self-signed certificate, accept the browser warning once), see
-# Docs/paypal.md.
-# Secrets come from the git-ignored .env (copy .env.example): database password required, PayPal and encryption
-# key optional.
+# For the PayPal sandbox, which rejects localhost as return URL, tunnel the frontend with ngrok (ngrok http 5173), set
+# LOCAL_FRONTEND_URL to the ngrok URL in .env and open the frontend there, see Docs/paypal.md.
+# Secrets come from the git-ignored .env (copy .env.example): database password required, PayPal, IdP signing key
+# and OpenAI API key optional.
 
 name: nfv-local
 
@@ -57,21 +56,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  # Creates a self-signed certificate for localhost and localtest.me once (kept in the volume local-cert)
-  local-cert:
-    image: alpine:3.20
-    command:
-      - sh
-      - -c
-      - >-
-        test -f /certs/local.crt ||
-        (apk add --no-cache openssl >/dev/null &&
-        openssl req -x509 -newkey rsa:2048 -nodes -days 825 -subj /CN=localtest.me
-        -addext subjectAltName=DNS:localtest.me,DNS:localhost,IP:127.0.0.1
-        -keyout /certs/local.key -out /certs/local.crt)
-    volumes:
-      - local-cert:/certs
-
   frontend:
     image: nfv-frontend:local
     build:
@@ -84,18 +68,10 @@ services:
       CANONICAL_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
     ports:
       - "5173:80"
-      # HTTPS, for a frontend host other than localhost (LOCAL_FRONTEND_URL)
-      - "5443:443"
-    volumes:
-      - ./frontend/nginx.local-tls.conf:/etc/nginx/templates/local-tls.conf.template:ro
-      - local-cert:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_started
-      local-cert:
-        condition: service_completed_successfully
     restart: unless-stopped
 
 volumes:
   postgres-data:
-  local-cert:

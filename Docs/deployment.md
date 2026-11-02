@@ -31,7 +31,7 @@
   | `nfv_postgres_password` | `/run/secrets/POSTGRES_PASSWORD` (Backend), `/run/secrets/postgres_password` (Postgres, `POSTGRES_PASSWORD_FILE`) | `spring.datasource.password` |
 
 - **Wie das Backend sie liest:** `spring.config.import=optional:configtree:/run/secrets/` in `application.properties`. Jede Datei wird zur Property mit dem Dateinamen als Schlüssel (abschließender Zeilenumbruch wird entfernt), die vorhandenen Platzhalter `${PAYPAL_CLIENT_ID:}` usw. lösen darauf auf. Ohne `/run/secrets` (lokal) greifen wie bisher Umgebungsvariablen bzw. `application-local.properties`, siehe [paypal.md](paypal.md).
-- **Anlegen** (vor dem ersten Deploy, alle vier sind Pflicht):
+- **Anlegen** (vor dem ersten Deploy, alle fünf sind Pflicht):
 
   ```sh
   printf '%s' '<client-id>'     | docker secret create nfv_paypal_client_id -

@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 // Same variable as the backend (nfv.frontend-url). Set it to serve the dev server under another host than
-// localhost, e.g. http://localtest.me:5173 for the PayPal sandbox, see Docs/paypal.md.
+// localhost, e.g. an ngrok URL for the PayPal sandbox, see Docs/paypal.md.
 const frontendUrl = process.env.NFV_FRONTEND_URL;
 
 export default defineConfig({
