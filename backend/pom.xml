@@ -206,6 +206,9 @@
                             <additionalClasspathElements>
                                 <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
                             </additionalClasspathElements>
+                            <!-- CI runners need longer than the default 30 s (PostGIS container, 30 migrations) -->
+                            <wait>1000</wait>
+                            <maxAttempts>180</maxAttempts>
                         </configuration>
                     </execution>
                     <execution>
