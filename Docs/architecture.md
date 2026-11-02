@@ -44,7 +44,8 @@ Jedes Modul ist ein Paket unter `com.nfv`.
 | `user` | `AppUser`, Absicherung von `/api/**` und `/mcp`, `CurrentUser` | Basis |
 | `common` | `AbstractEntity`, Envers-Revision, Konverter, Fehlerbehandlung, OpenAPI | Basis |
 | `currency` | Wechselkurse (EZB), Umrechnung an der API | Basis, wird nur von `accounting` gebraucht |
-| `accounting`, `paypal`, `onboarding` | Konten, Ein- und Auszahlung über PayPal, Provider-Onboarding | Altbestand |
+| `paypal` | Technische Anbindung an PayPal (Checkout, Payouts, Connect), kennt keine Fachmodule | Basis, wird für Zahlungen von Buchungen angepasst (Konzept [accommodation-alternatives.md](accommodation-alternatives.md#zahlung)) |
+| `accounting`, `onboarding` | Konten, Ein- und Auszahlung über PayPal, Provider-Onboarding | Altbestand |
 
 ### Aufbau eines Moduls
 
@@ -160,6 +161,7 @@ flowchart LR
 
 - Aus Nfv stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding`. Die Frontend-Seiten dazu (Rollen Consumer, Provider, Betreiber, Onboarding, Guthaben, Einnahmen, PayPal-Verknüpfung) sind entfernt; die PayPal-Return-URLs (`nfv.frontend-url`) zeigen daher ins Leere.
 - Ob davon etwas für die Reise-App gebraucht wird (z. B. bezahlte Benachrichtigungen), ist offen. Bis dahin bleibt der Code unverändert.
+- **Entschieden (2026-11-02):** `paypal` ist kein Altbestand mehr, es wird für die Zahlung alternativer Unterkünfte angepasst und weiterverwendet, siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung). `accounting` und `onboarding` bleiben Altbestand.
 
 ## Offene Punkte
 

@@ -95,60 +95,61 @@ export default function TripPage() {
             bottomPadding={SHEET_COLLAPSED}
           />
         </Suspense>
-        {!expanded && (
-          <Link to="stops/neu" className="va-fab va-fab-map" aria-label="Stop hinzufügen">
-            <PlusOutlined />
-          </Link>
-        )}
       </div>
 
-      <section aria-label="Stops und Hinweise" className={`va-trip-sheet ${expanded ? 'va-trip-sheet-expanded' : ''}`}>
-        <button
-          type="button"
-          className="va-trip-sheet-toggle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <span className="va-sheet-grip" aria-hidden="true" />
-          <span className="va-row va-space-between va-baseline va-full">
-            <span className="va-sheet-summary">
-              {stopCount === 1 ? '1 Stop' : `${stopCount} Stops`} · {incidents.length === 1 ? '1 Hinweis' : `${incidents.length} Hinweise`}
+      {/* the dock keeps the add button right above the sheet, collapsed or expanded */}
+      <div className="va-trip-dock">
+        <Link to="stops/neu" className="va-fab va-fab-dock" aria-label="Stop hinzufügen">
+          <PlusOutlined />
+        </Link>
+        <section aria-label="Stops und Hinweise" className={`va-trip-sheet ${expanded ? 'va-trip-sheet-expanded' : ''}`}>
+          <button
+            type="button"
+            className="va-trip-sheet-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            <span className="va-sheet-grip" aria-hidden="true" />
+            <span className="va-row va-space-between va-baseline va-full">
+              <span className="va-sheet-summary">
+                {stopCount === 1 ? '1 Stop' : `${stopCount} Stops`} · {incidents.length === 1 ? '1 Hinweis' : `${incidents.length} Hinweise`}
+              </span>
+              <span className="va-muted">{expanded ? 'Karte ↓' : 'Liste ↑'}</span>
             </span>
-            <span className="va-muted">{expanded ? 'Karte ↓' : 'Liste ↑'}</span>
-          </span>
-        </button>
+          </button>
 
-        {stopCount === 0 && <p className="va-empty">Noch keine Stops. Füge mit + den ersten Stop hinzu.</p>}
+          {stopCount === 0 && <p className="va-empty">Noch keine Stops. Füge mit + den ersten Stop hinzu.</p>}
 
-        {!expanded &&
-          collapsedRoutes.slice(0, 1).map((route) => <RouteRow key={route.id} context={context} routeId={route.id} />)}
+          {!expanded &&
+            collapsedRoutes.slice(0, 1).map((route) => <RouteRow key={route.id} context={context} routeId={route.id} />)}
 
-        {expanded && (
-          <ol className="va-stop-list">
-            {trip.stops.map((stop, index) => {
-              const next = routes.find((route) => route.fromStopId === stop.id);
-              return (
-                <li key={stop.id}>
-                  <div className="va-row va-gap">
-                    <span className="va-stop-number">{index + 1}</span>
-                    <span className="va-column">
-                      <span className="va-strong">{stop.name}</span>
-                      <span className="va-small va-muted">
-                        {[stop.arrivalAt && `an ${formatDateTime(stop.arrivalAt)}`, stop.departureAt && `ab ${formatDateTime(stop.departureAt)}`]
-                          .filter(Boolean)
-                          .join(' · ') || 'ohne Zeiten'}
-                        {stop.latitude == null && ' · nicht auf der Karte'}
+          {expanded && (
+            <ol className="va-stop-list">
+              {trip.stops.map((stop, index) => {
+                const next = routes.find((route) => route.fromStopId === stop.id);
+                return (
+                  <li key={stop.id}>
+                    <div className="va-row va-gap">
+                      <span className="va-stop-number">{index + 1}</span>
+                      <span className="va-column">
+                        <span className="va-strong">{stop.name}</span>
+                        <span className="va-small va-muted">
+                          {[stop.arrivalAt && `an ${formatDateTime(stop.arrivalAt)}`, stop.departureAt && `ab ${formatDateTime(stop.departureAt)}`]
+                            .filter(Boolean)
+                            .join(' · ') || 'ohne Zeiten'}
+                          {stop.latitude == null && ' · nicht auf der Karte'}
+                        </span>
                       </span>
-                    </span>
-                  </div>
-                  <StopBookings bookings={bookingsByStop.get(stop.id) ?? []} stopId={stop.id} />
-                  {next && <RouteRow context={context} routeId={next.id} />}
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
+                    </div>
+                    <StopBookings bookings={bookingsByStop.get(stop.id) ?? []} stopId={stop.id} />
+                    {next && <RouteRow context={context} routeId={next.id} />}
+                  </li>
+                );
+              })}
+            </ol>
+          )}
+        </section>
+      </div>
 
       <Outlet context={context} />
     </div>

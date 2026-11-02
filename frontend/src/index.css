@@ -210,10 +210,12 @@ a {
   color: var(--ink);
   z-index: 5;
 }
-.va-fab-map {
-  position: absolute;
-  right: 20px;
-  bottom: 196px;
+.va-fab-dock {
+  position: static;
+  flex: none;
+  align-self: flex-end;
+  margin: 0 20px 20px 0;
+  pointer-events: auto;
 }
 .va-link-disabled {
   min-height: 44px;
@@ -507,11 +509,20 @@ a {
   width: 100%;
   height: 100%;
 }
-.va-trip-sheet {
+/* spans the trip page, click-through, stacks the add button on top of the sheet */
+.va-trip-dock {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+  z-index: 3;
+}
+.va-trip-sheet {
+  position: relative;
+  width: 100%;
+  pointer-events: auto;
   max-width: 720px;
   margin: 0 auto;
   max-height: 170px;
@@ -863,8 +874,7 @@ a {
   cursor: pointer;
   box-sizing: border-box;
 }
-.va-choice > .anticon,
-.va-choice-logo {
+.va-choice > .anticon {
   flex: none;
   width: 36px;
   height: 36px;
@@ -943,13 +953,6 @@ a {
 }
 .va-details[open] summary {
   margin-bottom: 8px;
-}
-.va-steps-list {
-  margin: 0;
-  padding-left: 22px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 .va-divider {
   display: flex;

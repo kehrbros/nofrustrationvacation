@@ -1,6 +1,6 @@
 # PayPal-Anbindung
 
-- **Modul `com.nfv.paypal`:** nur die technische Anbindung an die PayPal REST API. Kennt keine Fachmodule, nur `common` (ArchUnit `PayPalModuleTest`). Einziger Nutzer ist `com.nfv.accounting`, siehe [accounting.md](accounting.md).
+- **Modul `com.nfv.paypal`:** nur die technische Anbindung an die PayPal REST API. Kennt keine Fachmodule, nur `common` (ArchUnit `PayPalModuleTest`). Bisher einziger Nutzer ist `com.nfv.accounting`, siehe [accounting.md](accounting.md). Geplant: Zahlung alternativer Unterkünfte in `com.nfv.bookings` (Authorize, Capture, Void, Refund, Return-URL je Aufruf), siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung).
 - **Fassaden:**
   - `PayPalConnect`: „Log in with PayPal“ (OAuth 2.0 Authorization Code). Der Provider meldet sich bei PayPal an und bestätigt sein Konto; wir erhalten `payer_id`, E-Mail und Verifizierungsstatus (Code-Tausch über `/v1/identity/openidconnect/tokenservice`, dann `/v1/oauth2/token/userinfo?schema=openid`, wie in PayPals Doku zu Payouts-Empfängern; der Tausch über `/v1/oauth2/token` mit `schema=paypalv1.1` scheiterte in der Sandbox mit `400 invalid_request`, Scope `openid email https://uri.paypal.com/services/paypalattributes`). Kein PayPal-Passwort, keine manuell eingetippte E-Mail.
   - `PayPalCheckout`: Einzahlungen über die Orders API v2 (`intent=CAPTURE`): Order anlegen → Zahler bestätigt bei PayPal (`payer-action`-Link) → Capture.

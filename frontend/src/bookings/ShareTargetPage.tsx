@@ -7,19 +7,30 @@ import type { TripDetail, TripSummary } from '../trips/model';
 import { localDateTimeIso, toDayInput } from '../trips/time';
 import { addStop, fetchTrip, fetchTrips } from '../trips/tripsApi';
 import AccommodationFields from './AccommodationFields';
-import { createAccommodationBooking, extractAccommodation } from './bookingsApi';
-import { emptyForm, formFromDraft, stopTimesFromForm, toInput, validateForm, type FilledForm } from './form';
-import { clearShared, readShared } from './shareTarget';
+import { createAccommodationBooking, isExtractionAvailable } from './bookingsApi';
+import ConfirmationInput from './ConfirmationInput';
+import { emptyForm, stopTimesFromForm, toInput, validateForm, type FilledForm } from './form';
+import type { BookingSource } from './model';
+import { readConfirmation } from './readConfirmation';
+import { clearShared, readShared, type SharedContent } from './shareTarget';
 
 const NEW_STOP = -1;
 
 /**
- * Target of "Teilen" on Android: reads the shared confirmation, suggests trip and stop (or a new stop for the
- * accommodation) and saves after the user checked the form.
+ * Target of "Teilen" on Android: the same way as "Bestätigung einfügen" (AddBookingSheet). The shared content can be
+ * completed with pasted text or a file, the assistant reads all of it, then the page suggests trip and stop (or a new
+ * stop for the accommodation) and saves after the user checked the form.
  */
 export default function ShareTargetPage() {
   const navigate = useNavigate();
-  const [phase, setPhase] = useState<'reading' | 'review' | 'nothing' | 'failed'>('reading');
+  const [phase, setPhase] = useState<'loading' | 'paste' | 'review' | 'nothing'>('loading');
+  const [shared, setShared] = useState<SharedContent | null>(null);
+  const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [available, setAvailable] = useState<boolean | null>(null);
+  const [reading, setReading] = useState(false);
+  const [readError, setReadError] = useState<string | null>(null);
+  const [source, setSource] = useState<BookingSource>('SHARE');
   const [filled, setFilled] = useState<FilledForm>({ form: emptyForm(), filled: new Set(), uncertain: new Set() });
   const [trips, setTrips] = useState<TripSummary[]>([]);
   const [tripId, setTripId] = useState<number | null>(null);
@@ -31,32 +42,42 @@ export default function ShareTargetPage() {
 
   useEffect(() => {
     let active = true;
+    void isExtractionAvailable().then((value) => active && setAvailable(value));
     (async () => {
-      const shared = await readShared().catch(() => null);
-      if (!shared) {
-        if (active) setPhase('nothing');
-        return;
-      }
-      const [draft, allTrips] = await Promise.all([
-        extractAccommodation(shared.text, shared.file).catch(() => null),
+      const [content, allTrips] = await Promise.all([
+        readShared().catch(() => null),
         fetchTrips().catch(() => [] as TripSummary[]),
       ]);
       if (!active) return;
-      const open = allTrips.filter((candidate) => candidate.phase !== 'PAST');
-      setTrips(open);
-      if (!draft?.found) {
-        setPhase('failed');
-        return;
-      }
-      const result = formFromDraft(draft);
-      setFilled(result);
-      setTripId(suggestTrip(open, result.form.checkInDate)?.id ?? null);
-      setPhase('review');
+      setTrips(allTrips.filter((candidate) => candidate.phase !== 'PAST'));
+      setShared(content);
+      setPhase(content ? 'paste' : 'nothing');
     })();
     return () => {
       active = false;
     };
   }, []);
+
+  const showReview = (result: FilledForm, how: BookingSource) => {
+    setFilled(result);
+    setSource(how);
+    setTripId(suggestTrip(trips, result.form.checkInDate)?.id ?? null);
+    setPhase('review');
+  };
+
+  const read = async () => {
+    setReading(true);
+    setReadError(null);
+    const result = await readConfirmation(shared, text, file);
+    setReading(false);
+    if (result.ok) {
+      showReview(result.filled, shared ? 'SHARE' : 'DOCUMENT');
+    } else {
+      setReadError(result.message);
+    }
+  };
+
+  const manual = () => showReview({ form: emptyForm(), filled: new Set(), uncertain: new Set() }, 'MANUAL');
 
   useEffect(() => {
     if (tripId == null) {
@@ -101,7 +122,7 @@ export default function ShareTargetPage() {
         });
         target = stop.id;
       }
-      const booking = await createAccommodationBooking(target, toInput(form, 'SHARE'));
+      const booking = await createAccommodationBooking(target, toInput(form, source));
       await clearShared();
       navigate(`/reisen/${tripId}/buchungen/${booking.id}`, { replace: true });
     } catch {
@@ -124,36 +145,51 @@ export default function ShareTargetPage() {
         <h1 className="va-page-title va-page-title-small">Geteilte Buchung</h1>
       </header>
 
-      {phase === 'reading' && (
+      {phase === 'loading' && (
         <div className="va-column va-gap">
           <Spin />
-          <p className="va-muted">Bestätigung wird gelesen …</p>
         </div>
       )}
       {phase === 'nothing' && (
         <>
-          <p className="va-muted">Hier ist nichts angekommen. Teile eine Buchungsbestätigung aus der Mail- oder Booking.com-App an NoFrustration.</p>
+          <p className="va-muted">Hier ist nichts angekommen. Teile eine Buchungsbestätigung (Mail, Link, Screenshot oder PDF) an NoFrustration.</p>
           <Link to="/reisen">Zu Meine Reisen</Link>
         </>
       )}
-      {phase === 'failed' && (
+      {phase === 'paste' && (
         <>
-          <Alert
-            type="warning"
-            showIcon
-            message="Darin haben wir keine Unterkunftsbuchung erkannt."
-            description="Öffne die Reise und füge die Buchung beim Stop hinzu, dort kannst du sie auch manuell eingeben."
+          <ConfirmationInput
+            shared={shared}
+            onSharedChange={setShared}
+            text={text}
+            onTextChange={setText}
+            file={file}
+            onFileChange={setFile}
+            available={available}
+            error={readError}
+            onError={setReadError}
+            onManual={manual}
           />
-          <button type="button" className="va-button va-button-outline" onClick={() => void discard()}>
-            Zu Meine Reisen
+          <button
+            type="button"
+            className="va-button va-button-accent va-block"
+            disabled={reading || available === false || (!text.trim() && !file && !shared)}
+            onClick={() => void read()}
+          >
+            {reading ? 'Bestätigung wird gelesen …' : 'Auslesen'}
           </button>
         </>
       )}
       {phase === 'review' && (
         <>
-          <p className="va-note">
-            <span className="va-ai-mark">✦</span> aus der Bestätigung gelesen. <strong>Gelb markierte Felder bitte prüfen.</strong>
-          </p>
+          <button type="button" className="va-text-button va-back" onClick={() => setPhase('paste')}>
+            ← Zurück
+          </button>
+          {source !== 'MANUAL' && (
+            <p className="va-note">
+              <span className="va-ai-mark">✦</span> aus der Bestätigung gelesen. <strong>Gelb markierte Felder bitte prüfen.</strong>
+            </p>
+          )}
           <div className="va-form">
             <div className="va-field">
               <label htmlFor="share-trip">Reise</label>
@@ -197,7 +233,7 @@ export default function ShareTargetPage() {
             onChange={(next) => setFilled((current) => ({ ...current, form: next }))}
             filled={filled.filled}
             uncertain={filled.uncertain}
-            autoLocate
+            autoLocate={source !== 'MANUAL'}
           />
           {error && <Alert type="error" showIcon message={error} />}
           <button type="button" className="va-button va-button-accent va-block" disabled={saving || tripId == null} onClick={() => void save()}>

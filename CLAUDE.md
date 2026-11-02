@@ -19,5 +19,5 @@ Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie dami
 - **Abhängigkeitsrichtung einhalten**, keine Zyklen. Rückwärts nur über Spring-Events (z. B. `RouteChanged`).
 - **`auth` bleibt isoliert** (`AuthModuleIsolationTest`).
 - **Schema nur per Flyway**, Standard-SQL (`SMALLINT` statt `TINYINT`). Datenbank PostgreSQL mit PostGIS (auch in Tests), PostGIS nur für Geometrie, siehe [Docs/network.md](Docs/network.md). Bestehende Migrationen nie ändern, neue Version anlegen.
-- **Altbestand** (`accounting`, `paypal`, `onboarding`) nicht ändern, solange nicht entschieden ist, was davon bleibt.
+- **Altbestand** (`accounting`, `onboarding`) nicht ändern, solange nicht entschieden ist, was davon bleibt. `paypal` bleibt und wird für Zahlungen von Buchungen angepasst, siehe [Docs/accommodation-alternatives.md](Docs/accommodation-alternatives.md#zahlung).
 - **Doku** in `Docs/` auf Deutsch in Stichpunkten, mit dem Code aktuell halten.

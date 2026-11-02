@@ -37,6 +37,20 @@ export async function readShared(): Promise<SharedContent | null> {
   return joined || file ? { text: joined, file } : null;
 }
 
+/**
+ * What goes to the assistant: the shared text and the pasted text together (e.g. a shared link plus the pasted
+ * confirmation), and one file, the chosen one before the shared one.
+ */
+export function combineInput(shared: SharedContent | null, text: string, file: File | null): { text: string; file: File | null } {
+  return {
+    text: [shared?.text, text]
+      .map((part) => part?.trim())
+      .filter(Boolean)
+      .join('\n\n'),
+    file: file ?? shared?.file ?? null,
+  };
+}
+
 /** Removes the shared content, it is never kept longer than needed. */
 export async function clearShared(): Promise<void> {
   if (typeof caches !== 'undefined') {

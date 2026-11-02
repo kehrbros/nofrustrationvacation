@@ -60,7 +60,7 @@
 - Umgesetzt sind bisher nur Unterkünfte (`ACCOMMODATION`). Konzept mit allen Eingabewegen: https://claude.ai/artifact/Nc2uQiZfZdib9xT8SN8nTr
 - `Booking` zusätzlich:
   - `status`: `CONFIRMED` (Standard), `CANCELLED` (`cancel()`, noch ohne API).
-  - `source`: wie die Buchung in die App kam, `MANUAL`, `DOCUMENT` (Bestätigung eingefügt oder hochgeladen), `SHARE` (an die App geteilt), später `SEARCH` (Sprach-/Namenssuche) und `EMAIL` (Weiterleitung).
+  - `source`: wie die Buchung in die App kam, `MANUAL`, `DOCUMENT` (Bestätigung eingefügt oder hochgeladen), `SHARE` (an die App geteilt, ggf. ergänzt um eingefügten Text oder eine Datei), später `SEARCH` (Sprach-/Namenssuche) und `EMAIL` (Weiterleitung).
   - `manageUrl` (Link zur Buchung beim Anbieter, nur http(s)), `price` + `currency` (ISO 4217), `cancellationDeadline` (kostenlos stornierbar bis), `notes`.
   - `change(…)` ersetzt alles, was der Nutzer bearbeiten kann; `source` und `status` bleiben.
 - **Zeitzone der Unterkunft:** Check-in (`startsAt`), Check-out (`endsAt`) und Stornofrist sind Ortszeit der Unterkunft, nicht die des Geräts. Das Frontend schickt sie ohne Offset (`LocalDateTime`), das Backend bestimmt die Zone aus den Koordinaten (timeshape, OSM-Zeitzonengrenzen, offline) und speichert `OffsetDateTime` mit dem dort gültigen Offset (Sommerzeit). Ohne Koordinaten gilt die Zone, die das Frontend mitschickt (`fallbackTimeZone`, Zone des Geräts), sonst UTC. Offsets in `_tz`-Spalten wie bei Stops. Angezeigt wird die Uhrzeit, wie sie am Ort gilt.
