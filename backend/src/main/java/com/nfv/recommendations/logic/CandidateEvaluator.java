@@ -1,0 +1,109 @@
+package com.nfv.recommendations.logic;
+
+import com.nfv.incidents.entities.Impact;
+import com.nfv.incidents.logic.ActiveIncident;
+import com.nfv.network.logic.RouteOptions;
+import com.nfv.recommendations.entities.RouteOption;
+import jakarta.annotation.Nullable;
+
+import java.time.Duration;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Passage times, incidents and delays along a way, for candidates and the planned route alike, see
+ * Docs/recommendations.md#bewertung-aussortieren-ranking. Pure functions.
+ */
+final class CandidateEvaluator {
+    private CandidateEvaluator() {
+    }
+
+    /** One driven segment. */
+    record Step(long segmentId, double distanceMeters, Duration duration) {
+    }
+
+    /**
+     * @param delay     sum of the delays on the way, already in {@code arrival}
+     * @param blocked   passes a closure (blocked segment or incident with impact {@code BLOCKED}) during its validity
+     * @param conflicts incidents passed during their validity, each once
+     */
+    record Outcome(OffsetDateTime departure, OffsetDateTime arrival, double distanceMeters, Duration duration,
+                   Duration delay, boolean blocked, List<RouteOption.Conflict> conflicts) {
+        Set<Long> incidentIds() {
+            Set<Long> ids = new HashSet<>();
+            conflicts.forEach(conflict -> ids.add(conflict.incidentId()));
+            return ids;
+        }
+    }
+
+    /**
+     * Passage of every segment: departure plus the durations and delays before it. A delay (incident or scenario)
+     * counts once and shifts all following segments, so later incidents are checked at the delayed time.
+     */
+    static Outcome evaluate(List<Step> steps, OffsetDateTime departure, RouteOptions constraints,
+                            Collection<ActiveIncident> incidents) {
+        Map<Long, List<ActiveIncident>> bySegment = new HashMap<>();
+        for (ActiveIncident incident : incidents) {
+            incident.segmentIds().forEach(id -> bySegment.computeIfAbsent(id, k -> new ArrayList<>()).add(incident));
+        }
+        OffsetDateTime passage = departure;
+        Duration delay = Duration.ZERO;
+        Duration duration = Duration.ZERO;
+        double distance = 0;
+        boolean blocked = false;
+        Set<Long> delayedSeen = new HashSet<>();
+        Map<Long, RouteOption.Conflict> conflicts = new LinkedHashMap<>();
+        for (Step step : steps) {
+            OffsetDateTime end = passage.plus(step.duration());
+            Duration extra = Duration.ZERO;
+            if (constraints.blockedSegmentIds().contains(step.segmentId())) {
+                blocked = true;
+            }
+            Duration scenarioDelay = constraints.delayedSegments().get(step.segmentId());
+            if (scenarioDelay != null && delayedSeen.add(step.segmentId())) {
+                extra = extra.plus(scenarioDelay);
+            }
+            for (ActiveIncident incident : bySegment.getOrDefault(step.segmentId(), List.of())) {
+                if (conflicts.containsKey(incident.id()) || !incident.overlaps(passage, end)) {
+                    continue;
+                }
+                conflicts.put(incident.id(), new RouteOption.Conflict(incident.id(), incident.impact(),
+                        incident.expectedDelay()));
+                if (incident.impact() == Impact.BLOCKED) {
+                    blocked = true;
+                } else if (incident.expectedDelay() != null) {
+                    extra = extra.plus(incident.expectedDelay());
+                }
+            }
+            delay = delay.plus(extra);
+            duration = duration.plus(step.duration());
+            distance += step.distanceMeters();
+            passage = end.plus(extra);
+        }
+        return new Outcome(departure, passage, distance, duration, delay, blocked, List.copyOf(conflicts.values()));
+    }
+
+    /** Part of the distance on segments of the other way, {@code null} without the other way. */
+    @Nullable
+    static Double sharedRatio(List<Step> steps, Set<Long> otherSegmentIds) {
+        if (otherSegmentIds.isEmpty()) {
+            return null;
+        }
+        double total = 0;
+        double shared = 0;
+        for (Step step : steps) {
+            total += step.distanceMeters();
+            if (otherSegmentIds.contains(step.segmentId())) {
+                shared += step.distanceMeters();
+            }
+        }
+        return total == 0 ? 1.0 : shared / total;
+    }
+}

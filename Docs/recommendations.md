@@ -1,6 +1,6 @@
 # Streckenvorschläge (`recommendations`)
 
-- **Status:** Entwurf. Umgesetzt ist die Routing-Grundlage in `network` (`RouteOptions.delayedSegments`, `ScenarioWeighting`, `Routing.alternatives`), das Modul selbst noch nicht. Schema geplant als `V27__recommendations.sql`.
+- **Status:** Planung umgesetzt (Szenario, `ALTERNATIVES`, Bewertung, Ranking, Via-Punkte, Speichern, `V27__recommendations.sql`, `RouteChanged` → `STALE`, Aufräumen). Offen: Incidents (`forConsequence`, `KEEP_ROUTE`, `DEPARTURE_SHIFT`, `ConsequenceChanged`, `reroutedLegs`), Frontend, `suggestionSetId` an den Hinweisen.
 - **Ziel:** Für eine Route bekommt der Nutzer bis zu `n` Vorschläge, wie er fahren kann. Dieselbe Logik liefert Vorschläge, wenn ein Incident die geplante Route trifft (Umfahrung, spätere Abfahrt, Verzögerung hinnehmen).
 - **Grundidee:** Ein Vorschlag entsteht immer aus einem **Szenario** (Ausgangslage: Punkte, Abfahrt, Einschränkungen im Netz, Referenzroute). Planung und Incident unterscheiden sich nur darin, wie das Szenario gebaut wird. Erzeugen, Bewerten, Aussortieren, Speichern, API und Frontend sind gemeinsam.
 - Ersetzt die Beispieldaten in `frontend/src/trips/routeExamples.ts` und schließt den offenen Punkt „Umfahrung bei `BLOCKED`“ aus [domain.md](domain.md#offen).
@@ -38,7 +38,7 @@ flowchart LR
   - `routeId`, `trigger` (`PLANNING`, `INCIDENT`, später `WHAT_IF`), optional `consequenceId`.
   - `start`: Stop oder geschätzte Position (siehe unten), `end`: Ziel-Stop, `vias`: Waypoints des Nutzers (`RoutePoint` mit `VIA`), leer bei `waypoints` = `IGNORE`.
   - `waypoints`: `IGNORE` (nur Start und Ziel) oder `FOLLOW` (über alle Waypoints, Route in Abschnitte geteilt).
-  - `reroutedLegs`: Abschnitte, für die Alternativen gesucht werden (Standard: alle). Übrige Abschnitte bleiben wie in der Referenz.
+  - `reroutedLegs`: Abschnitte, für die Alternativen gesucht werden (Standard: alle). Übrige Abschnitte bleiben wie in der Referenz. Noch nicht umgesetzt, kommt mit Incidents (Planung sucht in allen Abschnitten).
   - `departure`: Abfahrt am Start.
   - `constraints`: `blockedSegmentIds`, `delayedSegments` (Segment-Id → Verzögerung), `avoidedSegmentIds` (Strafe statt Sperre, z. B. Vorlieben).
   - `reference`: aktuell geplante Sections der Route (leer, wenn noch nicht geplant). Grundlage für `KeepRouteGenerator`, Anteil gemeinsamer Strecke und „schneller/langsamer als bisher“.
@@ -61,7 +61,7 @@ flowchart LR
 
 ## Generatoren
 
-- Interface `CandidateGenerator { List<Candidate> generate(Scenario, GeneratorContext) }`, je Generator eine Spring-Bean mit `kind()`. `GeneratorContext` gibt Zugriff auf `Routing`.
+- Interface `CandidateGenerator { List<Candidate> generate(Scenario) }`, je Generator eine Spring-Bean mit `kind()`. Kein `GeneratorContext`: die Bean bekommt `Routing` und `SegmentQueries` injiziert.
 - `Candidate`: Herkunft (`kind`), `RouteResult`, ggf. geänderte Abfahrt, Via-Punkte, die zum Übernehmen gespeichert werden.
 - **`ALTERNATIVES`:** GraphHopper erzeugt die Vorschläge mit `algorithm=alternative_route` (`Routing.alternatives`, siehe [Schnittstellen](#schnittstellen)). Sperren und Verzögerungen des Szenarios wirken über dieselbe Gewichtung wie beim normalen Routing, GraphHopper umfährt den Incident also selbst.
   - Parameter: `alternative_route.max_paths` = `n + 1` (Reserve, falls ein Vorschlag nach der Bewertung wegfällt), `max_weight_factor` 1,4, `max_share_factor` 0,6. GraphHopper sortiert damit schon zu ähnliche und zu lange Strecken aus. Werte in `RecommendationProperties`.
@@ -69,7 +69,9 @@ flowchart LR
   - Der erste Pfad ist die schnellste Strecke, Label `FASTEST`.
   - **Grenzen in GraphHopper 11.1** (`Router.routeAlt`) und wie wir sie umgehen:
     - Nur zwei Punkte: Route ohne Waypoints → eine Anfrage Stop → Stop. `IGNORE` (Standard bei Planung) → ebenfalls eine Anfrage Stop → Stop. `FOLLOW` mit Waypoints → je Abschnitt in `reroutedLegs` (Stop → Via, Via → Via, Via → Stop) eine Anfrage mit Alternativen, übrige Abschnitte aus der Referenz, dann kombinieren: Kombinationen nach Gesamtdauer, die besten `n + 1` weiter in die Bewertung.
-    - Kein `pass_through`: Kombinationen, die an einem Via-Punkt wenden (letzte Kante eines Abschnitts = umgekehrte erste Kante des nächsten), fallen weg.
+      - Kombiniert wird Abschnitt für Abschnitt, nach jedem bleiben nur die besten `n + 1` (statt vollem Kreuzprodukt, das mit vielen Waypoints stark wächst).
+    - Kein `pass_through`: Kombinationen, die an einem Via-Punkt wenden (letztes Segment eines Abschnitts = Gegenrichtung des ersten des nächsten, `SegmentInfo.reverseId`), fallen weg.
+      - Ausnahme: Wenden alle Kombinationen dort, bleiben sie. Ein Via-Punkt auf einer Sackgasse lässt sich nur so verlassen, auch `Routing.route` wendet dort (Wellington-Test: Kelburn landet auf einer 39-m-Stichstraße).
     - Keine `curbsides`: Vorschläge ignorieren die Bordsteinseite an den Stops. Weil sie auch beim Planen nur weich gilt (`force_curbside=false`), ändert sich höchstens das letzte Stück. Nach dem Übernehmen plant `RoutePlanning` mit Bordsteinseite neu.
   - Liefert GraphHopper weniger als `n` Strecken (kurze Routen, wenig Netz), bekommt der Nutzer weniger Vorschläge. Keine eigenen Alternativen daneben.
 - **`KEEP_ROUTE`:** Referenzroute unverändert, bewertet mit Verzögerungen bzw. als unfahrbar bei Sperrung. Nur wenn es eine Referenz gibt. Ergebnis „Verzögerung hinnehmen“ oder (gesperrt) nicht im Ranking, aber als Vergleich in der Antwort (`reference`).
@@ -90,17 +92,18 @@ flowchart LR
   - Ähnlichkeit und Länge prüft GraphHopper (`max_share_factor`, `max_weight_factor`). Selbst geprüft nur, was GraphHopper nicht sehen kann: kombinierte Abschnitte (Anteil gemeinsamer Strecke > 0,6 mit einem besser platzierten Vorschlag → raus) und `KEEP_ROUTE` gegen gleichwertige Alternativen.
   - Alle Schwellen in `RecommendationProperties`.
 - **Ranking:** nach Ankunft am Ziel (inkl. Warten und Verzögerung), dann Distanz. Höchstens `n` Vorschläge, höchstens ein `DEPARTURE_SHIFT` je Richtung.
-- **Beschriften** (`labels`, mehrere möglich): `FASTEST`, `SHORTEST`, `CURRENT` (gleich der Referenz), `AVOIDS_INCIDENT`, `HAS_INCIDENT`, `LATER_DEPARTURE`, `EARLIER_DEPARTURE`, `FERRY`. Dazu `via`: häufigste `ref` bzw. Straßenname im abweichenden Teil (über `SegmentQueries`), z. B. „über SH 2“. Texte baut das Frontend.
+- **Beschriften** (`labels`, mehrere möglich): `FASTEST`, `SHORTEST`, `CURRENT` (gleich der Referenz), `AVOIDS_INCIDENT`, `HAS_INCIDENT`, `LATER_DEPARTURE`, `EARLIER_DEPARTURE`, `FERRY` (noch nicht gesetzt, `SegmentInfo` kennt die Fähre nicht). `CURRENT`: Anteil gemeinsamer Strecke mit der Referenz ≥ `current-shared-ratio` (0,95). Dazu `via`: häufigste `ref` bzw. Straßenname im abweichenden Teil (über `SegmentQueries`), z. B. „über SH 2“. Texte baut das Frontend.
 
 ## Datenmodell (`V27__recommendations.sql`)
 
 - Nicht historisiert (abgeleitet, wird ersetzt), wie `Route`/`RouteSection`.
 - `SuggestionSet`: `routeId` (FK `route`, `ON DELETE CASCADE`), `waypointMode` (`IGNORE`, `FOLLOW`), `trigger`, optional `consequenceId` (FK `consequence`, `ON DELETE SET NULL`) und `incidentId` (FK `incident`), `requestedCount`, `departureAt` des Szenarios, `basisHash`, `status`, `createdAt`, `expiresAt`.
-  - `basisHash`: Hash über Punkte, `waypointMode`, Abfahrt, Einschränkungen, Referenz-Sections und `extractVersionId`. Gleicher Hash → bestehendes Set wiederverwenden statt neu rechnen.
+  - `basisHash`: SHA-256 über Punkte, `waypointMode`, Abfahrt, Einschränkungen, Referenz-Sections und `requestedCount`. Gleicher Hash → bestehendes Set wiederverwenden statt neu rechnen. Ohne `extractVersionId` (außerhalb von `network` nicht sichtbar): nach einer Netz-Aktualisierung gilt ein Planungs-Set höchstens bis `expiresAt` (1 h), betroffene Routen werden neu geplant und ihre Sets damit `STALE`.
   - `status`: `CURRENT`, `STALE` (Route oder Incident seitdem geändert), `APPLIED`, `EXPIRED`.
   - `expiresAt`: Planung 1 h, Incident bis Durchfahrt der betroffenen Section bzw. `validTo`.
 - `SuggestionSet` 1–* `RouteOption` (`@ManyToOne` innerhalb des Moduls): `rank` (eindeutig je Set), `kind`, `labels`, `via`, `departureAt`, `arrivalAt`, `distanceMeters`, `duration`, `waiting`, `delay`, `sharedRatio`, `geometry` (`geometry(LineString, 4326)`, für die Karte), `appliedAt`.
-- `RouteOption` 1–* `RouteOptionPoint`: `position`, Koordinate, `roadHint`. Die Via-Punkte, die beim Übernehmen Waypoints werden.
+- `labels` in eigener Tabelle `route_option_label` (Standard-SQL statt Liste in einer Spalte), Ganzzahlen als `INTEGER` (passt zu `int` bei `ddl-auto=validate`).
+- `RouteOption` 1–* `RouteOptionPoint`: `position`, Koordinate, `roadHint`, optional `waypointId` (FK `waypoint`, `ON DELETE SET NULL`): bei `FOLLOW` der bestehende Waypoint des Nutzers, der beim Übernehmen mit seiner Id bleibt. Die Via-Punkte, die beim Übernehmen Waypoints werden.
 - `RouteOption` 1–* `RouteOptionConflict`: `incidentId` (FK), `impact`, `delay`. Was auf diesem Vorschlag noch passiert.
 - Keine Segmentliste je Vorschlag: nach dem Übernehmen plant `RoutePlanning` neu, die Sections entstehen dort.
 - `waypoint` bekommt `origin` (`USER`, `SUGGESTION`, `VARCHAR(16)`, Standard `USER`, auch in `waypoint_aud`): Frontend zeigt erzeugte Waypoints anders, „zurück zur schnellsten“ entfernt nur `SUGGESTION`-Waypoints.
@@ -138,7 +141,7 @@ flowchart LR
   - Neu `Routing.alternatives(RoutePoint from, RoutePoint to, RouteOptions, AlternativeOptions)`: genau zwei Punkte, `algorithm=alternative_route`, ohne `curbsides` und `pass_through`. Ergebnis `List<RouteResult>`, erster Eintrag = schnellste. `AlternativeOptions`: `maxPaths`, `maxWeightFactor`, `maxShareFactor`.
   - Neu `Routing.evaluate(segmentIds)` nicht nötig: Dauern der Referenz stehen schon in den Sections.
 - **`incidents`:** `ConsequenceChanged` (Event), `IncidentOverlap` (reine Funktion, auch von `ConsequenceMatcher` genutzt), `ActiveIncidents.onSegments(segmentIds, from, to)` (Lesen).
-- **`trips`:** `TripEditing.replaceWaypoints(…)` und `updateStop(…)` (vorhanden, `NewWaypoint` bekommt `origin`), Lesen von Stops, Waypoints und Sections über eine schmale Klasse `RouteSnapshot` in `trips.logic` statt Repositories.
+- **`trips`:** `TripEditing.replaceWaypoints(…)` und `updateStop(…)` (vorhanden, `NewWaypoint` bekommt `origin`), Lesen von Stops, Waypoints und Sections über `RouteSnapshots.of(appUserId, routeId)` → Record `RouteSnapshot` in `trips.logic` statt Repositories (fremde oder unbekannte Route: `TripItemNotFoundException`).
 
 ### Abhängigkeiten
 
