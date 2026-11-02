@@ -33,19 +33,19 @@
 ## Einrichtung der PayPal-App (Sandbox)
 
 1. developer.paypal.com → Apps & Credentials → Sandbox → App öffnen, Client ID und Secret als Env-Variablen setzen.
-2. Features: **Log in with PayPal** aktivieren, Return URL `${NFV_FRONTEND_URL}/paypal/connected` eintragen (muss exakt `connect-redirect-uri` entsprechen), lokal also `https://localtest.me:5443/paypal/connected`, siehe unten. Unter „Advanced options“ → „Information requested from customers“ **E-Mail**, **PayPal account ID (payer ID)** und **Account verification status** anhaken und speichern. Fehlen sie, lehnt PayPal den Userinfo-Abruf nach der Bestätigung mit `400 invalid_request` „Unable to fetch details to serve the request“ ab (Frontend: 502 `PAYPAL_ERROR`); das Backend loggt dann angefragte und gewährte Scopes.
+2. Features: **Log in with PayPal** aktivieren, Return URL `${NFV_FRONTEND_URL}/paypal/connected` eintragen (muss exakt `connect-redirect-uri` entsprechen), lokal also `https://<ngrok-host>/paypal/connected`, siehe unten. Unter „Advanced options“ → „Information requested from customers“ **E-Mail**, **PayPal account ID (payer ID)** und **Account verification status** anhaken und speichern. Fehlen sie, lehnt PayPal den Userinfo-Abruf nach der Bestätigung mit `400 invalid_request` „Unable to fetch details to serve the request“ ab (Frontend: 502 `PAYPAL_ERROR`); das Backend loggt dann angefragte und gewährte Scopes.
 3. Features: **Payouts** aktivieren.
 4. Testen mit Sandbox-Personal-Accounts (Zahler und Provider).
 
 ## Lokal ohne localhost (Sandbox)
 
-- PayPal akzeptiert `localhost` nicht als Return URL. Ein Tunnel (ngrok) ist trotzdem unnötig: PayPal ruft die URL nie selbst auf, nur der Browser wird dorthin umgeleitet.
-- Stattdessen einen Hostnamen nehmen, der öffentlich auf `127.0.0.1` auflöst, z. B. `localtest.me` (Alternative `127.0.0.1.nip.io`).
-- **Nur mit HTTPS:** Außer `localhost` gilt eine `http`-Seite im Browser nicht als sicherer Kontext, dann fehlt `crypto.subtle` und der Login (PKCE) scheitert.
-- **Docker Compose:** `LOCAL_FRONTEND_URL=https://localtest.me:5443` in der `.env`, App unter `https://localtest.me:5443` öffnen und die Zertifikatswarnung einmal bestätigen. Der Service `local-cert` erzeugt beim ersten Start ein selbstsigniertes Zertifikat (Volume `local-cert`), nginx liefert HTTPS über `frontend/nginx.local-tls.conf` auf Port 5443 aus. Das Backend akzeptiert nur diesen Origin (CORS, OIDC-Redirect-URI), deshalb leitet nginx `http://localhost:5173` dann auf `LOCAL_FRONTEND_URL` um (`CANONICAL_FRONTEND_URL`, `frontend/nginx.conf`).
-- Das Backend leitet aus `NFV_FRONTEND_URL` Login-Redirect-URIs, CORS und alle PayPal-URLs ab. Es bleibt `http://localhost:8080`; Browser erlauben Aufrufe an `http://localhost` auch von HTTPS-Seiten.
-- Login-Session (sessionStorage) und PayPal-Rückkehr müssen im selben Origin landen, also nicht zwischen localhost und localtest.me wechseln.
-- `npm run dev` unterstützt das noch nicht: Vite lässt den Host über `server.allowedHosts` zu (`NFV_FRONTEND_URL` setzen), bräuchte aber zusätzlich ein Zertifikat (z. B. `@vitejs/plugin-basic-ssl`).
+- PayPal akzeptiert `localhost` nicht als Return URL, deshalb das Frontend über einen ngrok-Tunnel aufrufen.
+- **Docker Compose:** `ngrok http 5173` starten, die HTTPS-URL als `LOCAL_FRONTEND_URL` in die `.env` eintragen, Stack neu starten und die App unter der ngrok-URL öffnen. Die Return URL in der PayPal-App auf `https://<ngrok-host>/paypal/connected` setzen; ohne festen ngrok-Host ändert sich beides bei jedem Tunnelstart.
+- ngrok terminiert TLS, nginx erkennt das Schema des Browsers über `X-Forwarded-Proto` (`frontend/nginx.conf`).
+- Das Backend akzeptiert nur diesen Origin (CORS, OIDC-Redirect-URI), deshalb leitet nginx `http://localhost:5173` dann auf `LOCAL_FRONTEND_URL` um (`CANONICAL_FRONTEND_URL`, `frontend/nginx.conf`).
+- Das Backend leitet aus `NFV_FRONTEND_URL` Login-Redirect-URIs, CORS und alle PayPal-URLs ab. Es bleibt `http://localhost:8080`; Browser erlauben Aufrufe an `http://localhost` auch von HTTPS-Seiten. Der Tunnel taugt deshalb nur für den Browser auf diesem Rechner.
+- Login-Session (sessionStorage) und PayPal-Rückkehr müssen im selben Origin landen, also nicht zwischen localhost und der ngrok-URL wechseln.
+- `npm run dev`: `ngrok http 5173` auf den Vite-Server, `NFV_FRONTEND_URL` setzen (`server.allowedHosts`).
 
 ## Offen
 

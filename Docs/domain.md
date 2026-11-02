@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`.
 
 ## Bounded Contexts
 
@@ -64,7 +64,7 @@
   - `manageUrl` (Link zur Buchung beim Anbieter, nur http(s)), `price` + `currency` (ISO 4217), `cancellationDeadline` (kostenlos stornierbar bis), `notes`.
   - `change(…)` ersetzt alles, was der Nutzer bearbeiten kann; `source` und `status` bleiben.
 - **Zeitzone der Unterkunft:** Check-in (`startsAt`), Check-out (`endsAt`) und Stornofrist sind Ortszeit der Unterkunft, nicht die des Geräts. Das Frontend schickt sie ohne Offset (`LocalDateTime`), das Backend bestimmt die Zone aus den Koordinaten (timeshape, OSM-Zeitzonengrenzen, offline) und speichert `OffsetDateTime` mit dem dort gültigen Offset (Sommerzeit). Ohne Koordinaten gilt die Zone, die das Frontend mitschickt (`fallbackTimeZone`, Zone des Geräts), sonst UTC. Offsets in `_tz`-Spalten wie bei Stops. Angezeigt wird die Uhrzeit, wie sie am Ort gilt.
-- `Booking` 1–0..1 `AccommodationDetails` (Tabelle `booking_accommodation`, `booking_id` eindeutig, `@OneToOne` innerhalb des Moduls, wird mit der Buchung gelöscht): Name, Adresse, Land (ISO 3166-1 alpha-2), Koordinaten (nur zusammen), `timeZone` (IANA, Pflicht), Telefon, E-Mail, Website, `placeRef` (Herkunft des Orts, z. B. `osm:node/123`), Hausregeln `checkInFrom`/`checkInUntil`/`checkOutUntil` (`LocalTime`), Gäste, Zimmer (1–99). Eigene Tabelle, damit Transport und Aktivitäten später eigene Details bekommen und `booking` der gemeinsame Kern bleibt.
+- `Booking` 1–0..1 `AccommodationDetails` (Tabelle `booking_accommodation`, `booking_id` eindeutig, `@OneToOne` innerhalb des Moduls, wird mit der Buchung gelöscht): Name, Adresse, Land (ISO 3166-1 alpha-2), Koordinaten (nur zusammen, daraus abgeleitet die PostGIS-Spalte `location`), `timeZone` (IANA, Pflicht), Telefon, E-Mail, Website, `placeRef` (Herkunft des Orts, z. B. `osm:node/123`), Hausregeln `checkInFrom`/`checkInUntil`/`checkOutUntil` (`LocalTime`), Gäste, Zimmer (1–99). Eigene Tabelle, damit Transport und Aktivitäten später eigene Details bekommen und `booking` der gemeinsame Kern bleibt.
 - **Nicht gespeichert:** die PIN der Buchung (Zugangsgeheimnis, wird nicht gebraucht) und das Originaldokument der Bestätigung (Datenschutz).
 - **Preis:** informativ, in der Währung, in der gebucht wurde (`NUMERIC(12, 2)` + Währung), die App rechnet nicht damit. Bewusste Ausnahme von [money.md](money.md) (Basiswährung, `Money`).
 - **Eigentum:** über den Stop (`TripLogic.stop(appUserId, stopId)`), fremde oder unbekannte Stops und Buchungen sind 404.
