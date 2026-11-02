@@ -69,8 +69,11 @@ class BookingApiTest {
         otherUser = login("bookings-other-" + UUID.randomUUID());
         tripId = id(mockMvc.perform(post("/api/v1/trips").with(user).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(TRIP)).andExpect(status().isCreated()));
-        stopId = id(mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}")).andExpect(status().isCreated()));
+        // adding a stop answers with the trip detail, the new stop is the only one
+        String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
     }
 
     @Test
