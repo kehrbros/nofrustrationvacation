@@ -23,6 +23,9 @@
     "description" : "Top up platform credit via PayPal",
     "name" : "Top-ups"
   }, {
+    "description" : "Bookings at the stops of the authenticated user's trips, first accommodations",
+    "name" : "Bookings"
+  }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
   }, {
@@ -66,6 +69,45 @@
           }
         },
         "tags" : [ "protected-resource-metadata-controller" ]
+      }
+    },
+    "/api/v1/accommodation-bookings/{bookingId}" : {
+      "put" : {
+        "description" : "Source and status stay.",
+        "operationId" : "changeAccommodationBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccommodationBookingInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Replace an accommodation booking",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/accounting/balances" : {
@@ -402,6 +444,85 @@
         "tags" : [ "Top-ups" ]
       }
     },
+    "/api/v1/bookings/accommodation-drafts" : {
+      "post" : {
+        "description" : "Pasted or shared text and/or a screenshot (JPEG, PNG, WebP, GIF) or PDF up to 5 MB. The content is sent to the language model (OpenAI) and not stored. 503 ASSISTANT_UNAVAILABLE if the assistant is not configured or fails, 429 ASSISTANT_RATE_LIMITED.",
+        "operationId" : "extractAccommodation",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  },
+                  "text" : {
+                    "type" : [ "string", "null" ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccommodationDraftDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Read an accommodation booking from a confirmation",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/assistant" : {
+      "get" : {
+        "description" : "Whether confirmations can be read automatically.",
+        "operationId" : "assistantStatus",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AssistantStatusDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Assistant status",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/{bookingId}" : {
+      "delete" : {
+        "operationId" : "deleteBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Delete a booking",
+        "tags" : [ "Bookings" ]
+      }
+    },
     "/api/v1/incidents/trip-counts" : {
       "get" : {
         "description" : "Only trips with at least one incident.",
@@ -443,6 +564,44 @@
         },
         "summary" : "Provider onboarding checklist",
         "tags" : [ "Onboarding" ]
+      }
+    },
+    "/api/v1/stops/{stopId}/accommodation-bookings" : {
+      "post" : {
+        "operationId" : "createAccommodationBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccommodationBookingInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Add an accommodation booking to a stop",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/trips" : {
@@ -521,6 +680,38 @@
         },
         "summary" : "Trip with stops and routes",
         "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/bookings" : {
+      "get" : {
+        "description" : "All bookings at the stops of the trip, ascending by start.",
+        "operationId" : "listBookings",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/BookingDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Bookings of a trip",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/trips/{tripId}/cover-image" : {
@@ -721,6 +912,243 @@
   },
   "components" : {
     "schemas" : {
+      "AccommodationBookingInputDto" : {
+        "type" : "object",
+        "description" : "Accommodation booking to create or replace. Check-in, check-out and cancellation deadline are local times at the accommodation without offset; the backend determines the time zone from the coordinates and uses fallbackTimeZone (the user's IANA zone) only without coordinates.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date-time",
+            "example" : "2027-07-12T15:00:00"
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date-time",
+            "example" : "2027-07-15T10:00:00"
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "fallbackTimeZone" : {
+            "type" : [ "string", "null" ],
+            "example" : "Europe/Berlin"
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : [ "string", "null" ]
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "placeRef" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ],
+            "description" : "Booking number, never the PIN"
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : [ "string", "null" ],
+            "description" : "How the booking was entered, default MANUAL",
+            "enum" : [ "MANUAL", "SEARCH", "DOCUMENT", "SHARE", "EMAIL" ]
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AccommodationDraftDto" : {
+        "type" : "object",
+        "description" : "Accommodation booking read from a confirmation, not stored. found=false: no booking in the input. Times are local at the accommodation, uncertainFields should be checked by the user.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "checkInDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInTime" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "checkOutTime" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "found" : {
+            "type" : "boolean"
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : [ "string", "null" ]
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ]
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "uncertainFields" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AccommodationDto" : {
+        "type" : "object",
+        "description" : "Place and house rules of an accommodation, times local at the place",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "placeRef" : {
+            "type" : [ "string", "null" ]
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "timeZone" : {
+            "type" : "string",
+            "description" : "IANA time zone of the place, e.g. Europe/Rome"
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
       "AppUserDto" : {
         "type" : "object",
         "properties" : {
@@ -736,6 +1164,15 @@
           }
         }
       },
+      "AssistantStatusDto" : {
+        "type" : "object",
+        "description" : "Whether confirmations can be read automatically (assistant configured)",
+        "properties" : {
+          "extractionAvailable" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "BalancesDto" : {
         "type" : "object",
         "properties" : {
@@ -747,6 +1184,73 @@
           }
         },
         "required" : [ "credit", "earnings" ]
+      },
+      "BookingDto" : {
+        "type" : "object",
+        "description" : "Booking at a stop. Points in time carry the offset of the place (for accommodations: of the accommodation), show them in that local time.",
+        "properties" : {
+          "accommodation" : {
+            "$ref" : "#/components/schemas/AccommodationDto",
+            "description" : "Details for accommodations, absent for other types"
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "endsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Check-out for accommodations"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "notes" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ]
+          },
+          "source" : {
+            "type" : "string",
+            "enum" : [ "MANUAL", "SEARCH", "DOCUMENT", "SHARE", "EMAIL" ]
+          },
+          "startsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Check-in for accommodations"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "CONFIRMED", "CANCELLED" ]
+          },
+          "stopId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "ACCOMMODATION", "TRANSPORT", "ACTIVITY", "OTHER" ]
+          }
+        }
       },
       "CreateStopDto" : {
         "type" : "object",

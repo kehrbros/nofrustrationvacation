@@ -1,9 +1,12 @@
-import { ArrowLeftOutlined, PlusOutlined } from '@ant-design/icons';
+import { ArrowLeftOutlined, HomeOutlined, PlusOutlined } from '@ant-design/icons';
 import { Alert, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
+import { fetchTripBookings } from '../bookings/bookingsApi';
+import type { Booking } from '../bookings/model';
+import { stayLabel } from '../bookings/text';
 import ProfileButton from '../profile/ProfileButton';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
 import type { TripIncident } from '../trips/model';
@@ -22,13 +25,19 @@ export default function TripPage() {
   const id = Number(tripId);
   const navigate = useNavigate();
   const { data, error, reload } = useAsync(
-    () => Promise.all([fetchTrip(id), fetchTripIncidents(id)]),
+    // bookings are optional for the page: without them the trip still shows
+    () => Promise.all([fetchTrip(id), fetchTripIncidents(id), fetchTripBookings(id).catch(() => [] as Booking[])]),
     [id],
   );
   const [expanded, setExpanded] = useState(false);
-  const [trip, incidents] = data ?? [undefined, [] as TripIncident[]];
+  const [trip, incidents, bookings] = data ?? [undefined, [] as TripIncident[], [] as Booking[]];
 
   const stopById = useMemo(() => new Map((trip?.stops ?? []).map((stop) => [stop.id, stop])), [trip]);
+  const bookingsByStop = useMemo(() => {
+    const byStop = new Map<number, Booking[]>();
+    bookings.forEach((booking) => byStop.set(booking.stopId, [...(byStop.get(booking.stopId) ?? []), booking]));
+    return byStop;
+  }, [bookings]);
   const incidentsByRoute = useMemo(() => {
     const byRoute = new Map<number, TripIncident[]>();
     incidents.forEach((incident) => byRoute.set(incident.routeId, [...(byRoute.get(incident.routeId) ?? []), incident]));
@@ -54,7 +63,7 @@ export default function TripPage() {
     return <Spin fullscreen />;
   }
 
-  const context: TripContext = { trip, incidents, incidentsByRoute, stopById, reload, close };
+  const context: TripContext = { trip, incidents, incidentsByRoute, stopById, bookings, bookingsByStop, reload, close };
   const stopCount = trip.stops.length;
   // routes in the order of the trip, affected ones first while collapsed
   const routes = [...trip.routes].sort(
@@ -132,6 +141,7 @@ export default function TripPage() {
                       </span>
                     </span>
                   </div>
+                  <StopBookings bookings={bookingsByStop.get(stop.id) ?? []} stopId={stop.id} />
                   {next && <RouteRow context={context} routeId={next.id} />}
                 </li>
               );
@@ -141,6 +151,26 @@ export default function TripPage() {
       </section>
 
       <Outlet context={context} />
+    </div>
+  );
+}
+
+/** Bookings below a stop in the list, each opens its dialog; "+ Buchung" adds one to the stop. */
+function StopBookings({ bookings, stopId }: { bookings: Booking[]; stopId: number }) {
+  return (
+    <div className="va-stop-bookings">
+      {bookings.map((booking) => (
+        <Link key={booking.id} to={`buchungen/${booking.id}`} className="va-booking-row" aria-label={`Buchung ${booking.title} ansehen`}>
+          <span className="va-booking-icon" aria-hidden="true"><HomeOutlined /></span>
+          <span className="va-column va-grow">
+            <span className="va-strong">{booking.title}</span>
+            <span className="va-small va-muted">{stayLabel(booking)}{booking.provider && ` · ${booking.provider}`}</span>
+          </span>
+        </Link>
+      ))}
+      <Link to={`stops/${stopId}/buchung`} className="va-text-button va-add-booking">
+        + Buchung
+      </Link>
     </div>
   );
 }

@@ -72,6 +72,11 @@ public class TripLogic {
         return routeRepository.findByTripId(tripId);
     }
 
+    /** A stop of one of the user's trips, e.g. to attach a booking. Empty for unknown and foreign stops. */
+    public Optional<Stop> stop(long appUserId, long stopId) {
+        return stopRepository.findById(stopId).filter(stop -> stop.getTrip().getAppUserId() == appUserId);
+    }
+
     /** Route id → trip id for all routes of the user's trips. */
     public Map<Long, Long> tripIdsByRouteId(long appUserId) {
         return routeRepository.findRouteAndTripIdsOfUser(appUserId).stream()

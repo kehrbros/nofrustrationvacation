@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Buchungen von Unterkünften `V25__booking_accommodation.sql`.
 
 ## Bounded Contexts
 
@@ -10,12 +10,12 @@
 |---|---|
 | `com.vacantagent.trips` | `Trip`, `TripCoverImage`, `Stop`, `Route`, `RouteSection`, `Waypoint`  |
 | `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
-| `com.vacantagent.bookings` | `Booking` |
+| `com.vacantagent.bookings` | `Booking`, `AccommodationDetails` |
 | `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.vacantagent.incidents` | `Incident`, `Consequence` |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, ``Booking`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
@@ -43,6 +43,19 @@
 ## Bookings
 
 - `Stop` 1–* `Booking` (`stopId`): Typ (`ACCOMMODATION`, `TRANSPORT`, `ACTIVITY`, `OTHER`), Titel, Anbieter, Buchungsnummer, Zeitraum.
+- Umgesetzt sind bisher nur Unterkünfte (`ACCOMMODATION`). Konzept mit allen Eingabewegen: https://claude.ai/artifact/Nc2uQiZfZdib9xT8SN8nTr
+- `Booking` zusätzlich:
+  - `status`: `CONFIRMED` (Standard), `CANCELLED` (`cancel()`, noch ohne API).
+  - `source`: wie die Buchung in die App kam, `MANUAL`, `DOCUMENT` (Bestätigung eingefügt oder hochgeladen), `SHARE` (an die App geteilt), später `SEARCH` (Sprach-/Namenssuche) und `EMAIL` (Weiterleitung).
+  - `manageUrl` (Link zur Buchung beim Anbieter, nur http(s)), `price` + `currency` (ISO 4217), `cancellationDeadline` (kostenlos stornierbar bis), `notes`.
+  - `change(…)` ersetzt alles, was der Nutzer bearbeiten kann; `source` und `status` bleiben.
+- **Zeitzone der Unterkunft:** Check-in (`startsAt`), Check-out (`endsAt`) und Stornofrist sind Ortszeit der Unterkunft, nicht die des Geräts. Das Frontend schickt sie ohne Offset (`LocalDateTime`), das Backend bestimmt die Zone aus den Koordinaten (timeshape, OSM-Zeitzonengrenzen, offline) und speichert `OffsetDateTime` mit dem dort gültigen Offset (Sommerzeit). Ohne Koordinaten gilt die Zone, die das Frontend mitschickt (`fallbackTimeZone`, Zone des Geräts), sonst UTC. Offsets in `_tz`-Spalten wie bei Stops. Angezeigt wird die Uhrzeit, wie sie am Ort gilt.
+- `Booking` 1–0..1 `AccommodationDetails` (Tabelle `booking_accommodation`, `booking_id` eindeutig, `@OneToOne` innerhalb des Moduls, wird mit der Buchung gelöscht): Name, Adresse, Land (ISO 3166-1 alpha-2), Koordinaten (nur zusammen), `timeZone` (IANA, Pflicht), Telefon, E-Mail, Website, `placeRef` (Herkunft des Orts, z. B. `osm:node/123`), Hausregeln `checkInFrom`/`checkInUntil`/`checkOutUntil` (`LocalTime`), Gäste, Zimmer (1–99). Eigene Tabelle, damit Transport und Aktivitäten später eigene Details bekommen und `booking` der gemeinsame Kern bleibt.
+- **Nicht gespeichert:** die PIN der Buchung (Zugangsgeheimnis, wird nicht gebraucht) und das Originaldokument der Bestätigung (Datenschutz).
+- **Preis:** informativ, in der Währung, in der gebucht wurde (`NUMERIC(12, 2)` + Währung), die App rechnet nicht damit. Bewusste Ausnahme von [money.md](money.md) (Basiswährung, `Money`).
+- **Eigentum:** über den Stop (`TripLogic.stop(appUserId, stopId)`), fremde oder unbekannte Stops und Buchungen sind 404.
+- **Bestätigung auslesen** (`AccommodationExtractor`): eingefügter Text und/oder Screenshot/PDF (bis 5 MB) gehen über das Modul `assistant` an OpenAI und kommen als nicht gespeicherter Entwurf zurück (`AccommodationDraft`, Felder plus `uncertainFields`). Die Anweisung verbietet PIN, Zahlungs- und Gästedaten. Werte im falschen Format werden verworfen und als unsicher markiert, Links nur mit `https://`. Erst die Bestätigung des Nutzers speichert.
+- **Neuer Stop aus einer Buchung:** Im Formular „Stop hinzufügen“ füllt eine dort erfasste Unterkunft Ort, Ankunft (Check-in) und Abfahrt (Check-out), soweit noch leer, und wird nach dem Stop gespeichert. Die Zeiten des Stops folgen weiter der Systemzeitzone.
 
 ## Input
 
@@ -74,7 +87,7 @@
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.
-- **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung) und Herkunft der Daten (manuell, Import).
+- **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung, Unterkunft nicht erreichbar), Transport und Aktivitäten, Sprach-/Namenssuche mit KI (Stufe 3), E-Mail-Weiterleitung (Stufe 4), Stornieren per API, Zeiten eines aus der Buchung angelegten Stops in der Zone der Unterkunft.
 - **Benachrichtigung:** wer wann worüber informiert wird, Schwellen (z. B. erst ab 15 min Verzögerung).
 - **Trips teilen:** derzeit gehört ein Trip genau einem Nutzer.
 - **Stops einfügen und umsortieren:** derzeit nur Anhängen am Ende (`Stop.moveTo` existiert, API fehlt).

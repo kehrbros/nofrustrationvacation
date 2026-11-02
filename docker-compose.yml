@@ -31,6 +31,8 @@ services:
         target: VACANTAGENT_IDP_SIGNING_KEY
       - source: postgres_password
         target: POSTGRES_PASSWORD
+      - source: openai_api_key
+        target: OPENAI_API_KEY
     ports:
       - target: 8080
         published: ${BACKEND_PORT:-8080}
@@ -131,3 +133,6 @@ secrets:
   postgres_password:
     external: true
     name: vacantagent_postgres_password
+  openai_api_key:
+    external: true
+    name: vacantagent_openai_api_key

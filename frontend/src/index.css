@@ -805,3 +805,249 @@ a {
     font-size: 40px;
   }
 }
+
+/* ---------- bookings (accommodations): add sheet, form, list rows, detail ---------- */
+.va-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.va-wrap {
+  flex-wrap: wrap;
+}
+.va-text-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.va-back {
+  margin: -8px 0 4px;
+  text-decoration: none;
+}
+.va-chip-off {
+  border: 1.5px dashed var(--line);
+  color: var(--muted);
+  font-weight: 600;
+}
+.va-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.va-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  min-height: 72px;
+  border: 2px solid var(--ink);
+  border-radius: 14px;
+  padding: 14px;
+  background: #ffffff;
+  font: inherit;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.va-choice > .anticon,
+.va-choice-logo {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 2px solid var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 800;
+  background: #ffffff;
+}
+.va-choice-main {
+  background: var(--accent-soft);
+  box-shadow: 0 4px 0 var(--ink);
+}
+.va-choice-main > .anticon {
+  background: var(--accent);
+}
+.va-choice-off {
+  border-style: dashed;
+  border-color: var(--line);
+  color: var(--muted);
+  cursor: default;
+}
+.va-choice-off > .anticon {
+  border-color: var(--line);
+}
+.va-ai-mark {
+  color: #b38600;
+  font-weight: 800;
+}
+.va-form-section {
+  margin: 8px 0 -4px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.va-field textarea {
+  min-height: 120px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font: inherit;
+  font-size: 16px;
+  resize: vertical;
+  box-sizing: border-box;
+  width: 100%;
+}
+.va-field-check input,
+.va-field-check textarea {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: #fffdf3;
+}
+.va-form-section .va-small {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.va-check-hint {
+  color: #8a6800;
+  font-weight: 600;
+}
+.va-details {
+  border-top: 2px solid var(--line);
+  padding-top: 12px;
+}
+.va-details summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+.va-details[open] summary {
+  margin-bottom: 8px;
+}
+.va-steps-list {
+  margin: 0;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.va-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 14px;
+}
+.va-divider::before,
+.va-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 2px solid var(--line);
+}
+.va-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 52px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 0 14px;
+}
+.va-file-pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-sizing: border-box;
+  cursor: pointer;
+}
+.va-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.va-booking-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 2px solid var(--ink);
+  background: var(--accent-soft);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.va-sheet-title-row .va-booking-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  font-size: 20px;
+}
+.va-stop-bookings {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-left: 40px;
+}
+.va-booking-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 6px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--ink);
+  background: #ffffff;
+}
+.va-booking-draft {
+  background: var(--accent-soft);
+}
+.va-add-booking {
+  align-self: flex-start;
+  min-height: 36px;
+  font-size: 14px;
+}
+.va-mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  min-height: 0;
+}
+.va-pre {
+  white-space: pre-wrap;
+}
+.va-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+a.va-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  box-sizing: border-box;
+}

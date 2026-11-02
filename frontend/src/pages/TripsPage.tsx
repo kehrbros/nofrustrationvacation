@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
 import ProfileButton from '../profile/ProfileButton';
+import SharedBookingNote from '../bookings/SharedBookingNote';
 import { InstallBanner } from '../pwa/InstallApp';
 import CoverImage from '../trips/CoverImage';
 import { groupTrips } from '../trips/grouping';
@@ -88,6 +89,7 @@ export default function TripsPage() {
         <ProfileButton />
       </header>
 
+      <SharedBookingNote />
       <InstallBanner />
 
       {error !== undefined && <Alert type="error" showIcon message="Die Reisen konnten nicht geladen werden." />}

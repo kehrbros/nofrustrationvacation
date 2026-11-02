@@ -11,6 +11,11 @@
 - **Operationen:** `plus`, `minus`, `times`, `dividedBy` (intern `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Nie `double`.
 - **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, nur an der API und im Modul `currency`.
 
+## Ausnahme: Preise von Buchungen
+
+- `Booking.price` + `currency` (Modul `bookings`) ist der Preis, wie er in der Bestätigung steht (z. B. 412,50 EUR), in beliebiger Währung, `NUMERIC(12, 2)`. Er ist nur Information für den Nutzer, die App rechnet und rechnet nicht um. Eine Umrechnung in die Basiswährung würde den gebuchten Betrag verfälschen.
+- `MoneyArchitectureTest` und `MoneyPersistenceTest` nehmen `Booking.price` bzw. die Tabellen `booking`, `booking_aud` ausdrücklich aus.
+
 ## Persistenz
 
 - **Mapping:** `common.data.MoneyConverter` (`@Converter(autoApply = true)`, analog `DurationConverter`). Eine Spalte pro Betrag, keine Währungsspalte. Entity-Feld: `@Column(precision = 19, scale = Money.SCALE) private Money ...;`

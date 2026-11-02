@@ -48,6 +48,8 @@ services:
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
       VACANTAGENT_IDP_SIGNING_KEY: ${VACANTAGENT_IDP_SIGNING_KEY:-}
+      # Empty: booking confirmations are not read automatically, manual input only
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
       - "8080:8080"
     depends_on:
@@ -76,6 +78,10 @@ services:
       context: ./frontend
       args:
         VITE_OIDC_AUTHORITY: http://localhost:8080
+    environment:
+      # Requests under another origin (e.g. http://localhost:5173 with LOCAL_FRONTEND_URL set) are redirected there,
+      # the backend accepts only this origin for CORS and the OIDC redirect URI, see frontend/nginx.conf
+      CANONICAL_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
     ports:
       - "5173:80"
       # HTTPS, for a frontend host other than localhost (LOCAL_FRONTEND_URL)

@@ -3,6 +3,7 @@ package com.vacantagent.currency;
 import com.tngtech.archunit.core.domain.JavaClasses;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
+import com.vacantagent.bookings.entities.Booking;
 import com.vacantagent.common.money.CurrencyAmount;
 import com.vacantagent.currency.dto.MoneyDto;
 import jakarta.persistence.Entity;
@@ -35,6 +36,8 @@ class MoneyArchitectureTest {
     void entitiesUseMoneyInsteadOfBigDecimal() {
         fields().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
                 .and().areDeclaredInClassesThat().resideOutsideOfPackage(CURRENCY_MODULE)
+                // price of a booking: informative, in the currency it was booked in, never calculated with
+                .and().areNotDeclaredIn(Booking.class)
                 .should().notHaveRawType(BigDecimal.class)
                 .because("monetary values are persisted as Money, see Docs/money.md")
                 .check(classes);
