@@ -1,6 +1,7 @@
 package com.vacantagent.trips.api;
 
 import com.vacantagent.trips.logic.InvalidTripInputException;
+import com.vacantagent.trips.logic.TripItemNotFoundException;
 import com.vacantagent.trips.logic.TripNotFoundException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -24,6 +25,11 @@ public class TripExceptionHandler {
     @ExceptionHandler(TripNotFoundException.class)
     public ResponseEntity<ProblemDetail> handleNotFound(TripNotFoundException exception) {
         return problem(HttpStatus.NOT_FOUND, "TRIP_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(TripItemNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleItemNotFound(TripItemNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, exception.code(), exception.getMessage());
     }
 
     @ExceptionHandler(InvalidTripInputException.class)

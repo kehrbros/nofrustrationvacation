@@ -1,29 +1,42 @@
 package com.vacantagent.trips.logic;
 
 import com.vacantagent.trips.data.RouteRepository;
+import com.vacantagent.trips.data.RouteSectionRepository;
 import com.vacantagent.trips.data.StopRepository;
 import com.vacantagent.trips.data.TripCoverImageRepository;
 import com.vacantagent.trips.data.TripRepository;
+import com.vacantagent.trips.data.WaypointRepository;
 import com.vacantagent.trips.entities.CoverImageSource;
 import com.vacantagent.trips.entities.Route;
 import com.vacantagent.trips.entities.Stop;
 import com.vacantagent.trips.entities.Trip;
 import com.vacantagent.trips.entities.TripCoverImage;
+import com.vacantagent.trips.entities.Waypoint;
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** Trips, stops and title photos of a user. Every method checks that the trip belongs to the user. */
+/**
+ * Trips, stops, waypoints and title photos of a user. Every method checks that the trip belongs to the user. Changes
+ * of stops and waypoints return the routes to plan; planning runs after the commit, see {@link TripEditing}.
+ */
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -35,7 +48,10 @@ public class TripLogic {
     private final TripRepository tripRepository;
     private final StopRepository stopRepository;
     private final RouteRepository routeRepository;
+    private final RouteSectionRepository routeSectionRepository;
+    private final WaypointRepository waypointRepository;
     private final TripCoverImageRepository coverImageRepository;
+    private final RouteLogic routeLogic;
     private final Clock clock;
 
     /** All trips of the user, ascending by start. Grouping into current, upcoming and past is up to the client. */
@@ -77,6 +93,18 @@ public class TripLogic {
         return stopRepository.findById(stopId).filter(stop -> stop.getTrip().getAppUserId() == appUserId);
     }
 
+    /** The route of the trip, {@link TripItemNotFoundException} if it belongs to another trip. */
+    public Route route(long appUserId, long tripId, long routeId) {
+        get(appUserId, tripId);
+        return routeRepository.findById(routeId).filter(route -> route.getTrip().getId() == tripId)
+                .orElseThrow(() -> new TripItemNotFoundException("route", routeId));
+    }
+
+    public List<Waypoint> waypoints(long appUserId, long tripId, long routeId) {
+        route(appUserId, tripId, routeId);
+        return waypointRepository.findByRouteIdOrderByPosition(routeId);
+    }
+
     /** Route id → trip id for all routes of the user's trips. */
     public Map<Long, Long> tripIdsByRouteId(long appUserId) {
         return routeRepository.findRouteAndTripIdsOfUser(appUserId).stream()
@@ -86,40 +114,142 @@ public class TripLogic {
     @Transactional
     public Trip create(long appUserId, String name, OffsetDateTime startAt, OffsetDateTime endAt) {
         String trimmed = requireName(name);
-        if (startAt == null || endAt == null) {
-            throw new InvalidTripInputException("start and end of the trip are required");
-        }
-        if (endAt.isBefore(startAt)) {
-            throw new InvalidTripInputException("trip ends before it starts");
-        }
+        requirePeriod(startAt, endAt);
         return tripRepository.save(new Trip(appUserId, trimmed, startAt, endAt, OffsetDateTime.now(clock)));
     }
 
+    /** Name and period, nothing to plan: passage times depend on the departures at the stops only. */
+    @Transactional
+    public Trip update(long appUserId, long tripId, String name, OffsetDateTime startAt, OffsetDateTime endAt) {
+        Trip trip = get(appUserId, tripId);
+        String trimmed = requireName(name);
+        requirePeriod(startAt, endAt);
+        trip.rename(trimmed);
+        trip.reschedule(startAt, endAt);
+        return trip;
+    }
+
+    /** Deletes the trip with its routes, waypoints and stops; title photo and consequences by the database. */
+    @Transactional
+    public void delete(long appUserId, long tripId) {
+        Trip trip = get(appUserId, tripId);
+        deleteRoutes(routeRepository.findByTripId(tripId));
+        stopRepository.deleteAll(stopRepository.findByTripIdOrderByPosition(tripId));
+        tripRepository.delete(trip);
+    }
+
+    /** Inserts the stop at the position ({@code null}: at the end) and connects it to its neighbours by routes. */
+    @Transactional
+    public TripChange addStop(long appUserId, long tripId, NewStop newStop, @Nullable Integer position) {
+        Trip trip = get(appUserId, tripId);
+        String name = validate(newStop);
+        List<Stop> stops = new ArrayList<>(stopRepository.findByTripIdOrderByPosition(tripId));
+        int index = position == null ? stops.size() : position;
+        if (index < 0 || index > stops.size()) {
+            throw new InvalidTripInputException("position must be 0 to " + stops.size());
+        }
+        stops.add(index, stopRepository.save(new Stop(trip, index, name, newStop.latitude(), newStop.longitude(),
+                newStop.arrivalAt(), newStop.departureAt())));
+        return new TripChange(tripId, syncRoutes(trip, stops));
+    }
+
     /**
-     * Appends the stop to the trip. From the second stop on, a route from the previous stop is created, still without
-     * sections (planning needs a routing service, see Docs/architecture.md).
+     * Changes the stop. New coordinates discard the sections of the routes to and from it, a new departure those of
+     * the route from it. The arrival does not affect planning.
      */
     @Transactional
-    public Stop addStop(long appUserId, long tripId, NewStop newStop) {
+    public TripChange updateStop(long appUserId, long tripId, long stopId, NewStop changed) {
+        get(appUserId, tripId);
+        Stop stop = stopRepository.findById(stopId).filter(s -> s.getTrip().getId() == tripId)
+                .orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
+        String name = validate(changed);
+        boolean relocated = !Objects.equals(stop.getLatitude(), changed.latitude())
+                || !Objects.equals(stop.getLongitude(), changed.longitude());
+        boolean departs = !sameInstant(stop.getDepartureAt(), changed.departureAt());
+        stop.rename(name);
+        stop.relocate(changed.latitude(), changed.longitude());
+        stop.reschedule(changed.arrivalAt(), changed.departureAt());
+        Set<Long> affected = new LinkedHashSet<>();
+        for (Route route : routeRepository.findByTripId(tripId)) {
+            boolean from = route.getFromStop().getId() == stopId;
+            boolean to = route.getToStop().getId() == stopId;
+            if (relocated && (from || to) || departs && from) {
+                affected.add(route.getId());
+            }
+        }
+        affected.forEach(routeLogic::discardSections);
+        return new TripChange(tripId, affected);
+    }
+
+    /** Moves the stop to the position (0 to number of stops - 1), the stops in between shift by one. */
+    @Transactional
+    public TripChange moveStop(long appUserId, long tripId, long stopId, int position) {
         Trip trip = get(appUserId, tripId);
-        String name = requireName(newStop.name());
-        if ((newStop.latitude() == null) != (newStop.longitude() == null)) {
-            throw new InvalidTripInputException("latitude and longitude only together");
+        List<Stop> stops = new ArrayList<>(stopRepository.findByTripIdOrderByPosition(tripId));
+        Stop stop = find(stops, stopId);
+        if (position < 0 || position >= stops.size()) {
+            throw new InvalidTripInputException("position must be 0 to " + (stops.size() - 1));
         }
-        if (newStop.latitude() != null && (Math.abs(newStop.latitude()) > 90 || Math.abs(newStop.longitude()) > 180)) {
-            throw new InvalidTripInputException("coordinates out of range");
+        stops.remove(stop);
+        stops.add(position, stop);
+        return new TripChange(tripId, syncRoutes(trip, stops));
+    }
+
+    /** Deletes the stop with the routes to and from it; its neighbours get a new route. */
+    @Transactional
+    public TripChange removeStop(long appUserId, long tripId, long stopId) {
+        Trip trip = get(appUserId, tripId);
+        List<Stop> stops = new ArrayList<>(stopRepository.findByTripIdOrderByPosition(tripId));
+        Stop stop = find(stops, stopId);
+        stops.remove(stop);
+        Set<Long> created = syncRoutes(trip, stops);
+        stopRepository.delete(stop);
+        return new TripChange(tripId, created);
+    }
+
+    /**
+     * Replaces the waypoints of the route by the ordered list: with id changed, without id created, missing ones
+     * deleted. Discards the sections of the route.
+     */
+    @Transactional
+    public TripChange replaceWaypoints(long appUserId, long tripId, long routeId, List<NewWaypoint> waypoints) {
+        Route route = route(appUserId, tripId, routeId);
+        Map<Long, Waypoint> existing = waypointRepository.findByRouteIdOrderByPosition(routeId).stream()
+                .collect(Collectors.toMap(Waypoint::getId, Function.identity()));
+        Set<Long> listed = new HashSet<>();
+        for (NewWaypoint waypoint : waypoints) {
+            validate(waypoint);
+            if (waypoint.id() != null) {
+                if (!existing.containsKey(waypoint.id())) {
+                    throw new TripItemNotFoundException("waypoint", waypoint.id());
+                }
+                if (!listed.add(waypoint.id())) {
+                    throw new InvalidTripInputException("waypoint " + waypoint.id() + " listed twice");
+                }
+            }
         }
-        if (newStop.arrivalAt() != null && newStop.departureAt() != null
-                && newStop.departureAt().isBefore(newStop.arrivalAt())) {
-            throw new InvalidTripInputException("departure before arrival");
+        waypointRepository.deleteAll(existing.values().stream().filter(w -> !listed.contains(w.getId())).toList());
+        // positions are unique per route and Hibernate deletes last: park the kept ones on free positions first
+        int parked = -1;
+        for (long id : listed) {
+            existing.get(id).moveTo(parked--);
         }
-        List<Stop> existing = stopRepository.findByTripIdOrderByPosition(tripId);
-        Stop stop = stopRepository.save(new Stop(trip, existing.size(), name, newStop.latitude(), newStop.longitude(),
-                newStop.arrivalAt(), newStop.departureAt()));
-        if (!existing.isEmpty()) {
-            routeRepository.save(new Route(trip, existing.getLast(), stop));
+        waypointRepository.flush();
+        for (int i = 0; i < waypoints.size(); i++) {
+            NewWaypoint waypoint = waypoints.get(i);
+            String name = strip(waypoint.name());
+            String roadHint = strip(waypoint.roadHint());
+            if (waypoint.id() == null) {
+                waypointRepository.save(new Waypoint(route, i, waypoint.latitude(), waypoint.longitude(), name,
+                        roadHint));
+            } else {
+                Waypoint kept = existing.get(waypoint.id());
+                kept.change(waypoint.latitude(), waypoint.longitude(), name, roadHint);
+                kept.moveTo(i);
+            }
         }
-        return stop;
+        routeLogic.discardSections(routeId);
+        return new TripChange(tripId, Set.of(routeId));
     }
 
     public Optional<TripCoverImage> coverImage(long appUserId, long tripId) {
@@ -146,6 +276,81 @@ public class TripLogic {
         return coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.UPLOADED, contentType, content, now));
     }
 
+    /**
+     * Renumbers the stops in the given order and connects neighbours by routes: routes of unchanged pairs stay (with
+     * their waypoints and sections), the others are deleted. Returns the ids of the new routes.
+     */
+    private Set<Long> syncRoutes(Trip trip, List<Stop> stops) {
+        for (int i = 0; i < stops.size(); i++) {
+            stops.get(i).moveTo(i);
+        }
+        Map<List<Long>, Route> stale = new HashMap<>();
+        routeRepository.findByTripId(trip.getId()).forEach(route ->
+                stale.put(List.of(route.getFromStop().getId(), route.getToStop().getId()), route));
+        Set<Long> created = new LinkedHashSet<>();
+        for (int i = 1; i < stops.size(); i++) {
+            Stop from = stops.get(i - 1);
+            Stop to = stops.get(i);
+            if (stale.remove(List.of(from.getId(), to.getId())) == null) {
+                created.add(routeRepository.save(new Route(trip, from, to)).getId());
+            }
+        }
+        deleteRoutes(stale.values());
+        return created;
+    }
+
+    /** Sections in bulk (not historized, consequences cascade), waypoints and routes per entity for Envers. */
+    private void deleteRoutes(Collection<Route> routes) {
+        for (Route route : routes) {
+            routeSectionRepository.deleteByRouteId(route.getId());
+            waypointRepository.deleteAll(waypointRepository.findByRouteIdOrderByPosition(route.getId()));
+            routeRepository.delete(route);
+        }
+    }
+
+    private static Stop find(List<Stop> stops, long stopId) {
+        return stops.stream().filter(stop -> stop.getId() == stopId).findFirst()
+                .orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
+    }
+
+    /** Checks the stop, returns its stripped name. */
+    private static String validate(NewStop stop) {
+        String name = requireName(stop.name());
+        if ((stop.latitude() == null) != (stop.longitude() == null)) {
+            throw new InvalidTripInputException("latitude and longitude only together");
+        }
+        if (stop.latitude() != null) {
+            requireCoordinates(stop.latitude(), stop.longitude());
+        }
+        if (stop.arrivalAt() != null && stop.departureAt() != null && stop.departureAt().isBefore(stop.arrivalAt())) {
+            throw new InvalidTripInputException("departure before arrival");
+        }
+        return name;
+    }
+
+    private static void validate(NewWaypoint waypoint) {
+        requireCoordinates(waypoint.latitude(), waypoint.longitude());
+        if (waypoint.name() != null && waypoint.name().strip().length() > 255
+                || waypoint.roadHint() != null && waypoint.roadHint().strip().length() > 255) {
+            throw new InvalidTripInputException("name and road hint have at most 255 characters");
+        }
+    }
+
+    private static void requireCoordinates(double latitude, double longitude) {
+        if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+            throw new InvalidTripInputException("coordinates out of range");
+        }
+    }
+
+    private static void requirePeriod(OffsetDateTime startAt, OffsetDateTime endAt) {
+        if (startAt == null || endAt == null) {
+            throw new InvalidTripInputException("start and end of the trip are required");
+        }
+        if (endAt.isBefore(startAt)) {
+            throw new InvalidTripInputException("trip ends before it starts");
+        }
+    }
+
     private static String requireName(String name) {
         if (name == null || name.isBlank()) {
             throw new InvalidTripInputException("name is required");
@@ -154,5 +359,14 @@ public class TripLogic {
             throw new InvalidTripInputException("name has at most 255 characters");
         }
         return name.strip();
+    }
+
+    private static @Nullable String strip(@Nullable String text) {
+        return text == null || text.isBlank() ? null : text.strip();
+    }
+
+    /** Same point in time, the offset does not matter for planning. */
+    private static boolean sameInstant(@Nullable OffsetDateTime a, @Nullable OffsetDateTime b) {
+        return a == null ? b == null : b != null && a.isEqual(b);
     }
 }

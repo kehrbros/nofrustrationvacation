@@ -7,6 +7,7 @@ import com.vacantagent.network.data.ExtractVersionRepository;
 import com.vacantagent.network.data.RoadSegmentRepository;
 import com.vacantagent.network.entities.ExtractVersion;
 import com.vacantagent.network.entities.RoadSegment;
+import com.vacantagent.trips.data.RouteSectionRepository;
 import com.vacantagent.trips.logic.PlannedSection;
 import com.vacantagent.trips.logic.RouteLogic;
 import com.vacantagent.user.entities.AppUser;
@@ -32,24 +33,35 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.is;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Trips API: period with offset, list phases, stops with routes, title photo, incidents per trip. */
+/**
+ * Trips API: period with offset, list phases, stops with routes (insert, move, remove), waypoints, plan status, title
+ * photo, incidents per trip. Routing itself is covered by RoutePlanningTest; the stops here are outside the test
+ * network, so planning ends in NO_ROUTE or ROUTING_UNAVAILABLE.
+ */
 @SpringBootTest
 @AutoConfigureMockMvc
 class TripApiTest {
@@ -67,6 +79,8 @@ class TripApiTest {
     private ExtractVersionRepository extractVersionRepository;
     @Autowired
     private RoadSegmentRepository roadSegmentRepository;
+    @Autowired
+    private RouteSectionRepository routeSectionRepository;
     @Autowired
     private TransactionTemplate transactionTemplate;
 
@@ -151,6 +165,165 @@ class TripApiTest {
                 .andExpect(status().isBadRequest());
     }
 
+    /** Inserting, moving and removing stops keeps routes of unchanged neighbours and creates the missing ones. */
+    @Test
+    void stopsAreInsertedMovedAndRemovedWithRoutes() throws Exception {
+        long tripId = createTrip(user, "Toskana", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
+        long a = addStop(tripId, "{\"name\":\"A\"}");
+        long b = addStop(tripId, "{\"name\":\"B\"}");
+        long c = addStop(tripId, "{\"name\":\"C\"}");
+        long bc = routes(tripId).get(List.of(b, c));
+
+        long d = addStop(tripId, "{\"name\":\"D\",\"position\":1}");
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.stops[*].name", contains("A", "D", "B", "C")))
+                .andExpect(jsonPath("$.stops[*].position", contains(0, 1, 2, 3)))
+                .andExpect(jsonPath("$.routes[*].planOutcome", contains(
+                        "MISSING_COORDINATES", "MISSING_COORDINATES", "MISSING_COORDINATES")));
+        assertThat(routes(tripId)).containsOnlyKeys(List.of(a, d), List.of(d, b), List.of(b, c))
+                .containsEntry(List.of(b, c), bc);
+        long ad = routes(tripId).get(List.of(a, d));
+
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}/position", tripId, c).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"position\":0}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[*].name", contains("C", "A", "D", "B")));
+        assertThat(routes(tripId)).containsOnlyKeys(List.of(c, a), List.of(a, d), List.of(d, b))
+                .containsEntry(List.of(a, d), ad);
+
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, d).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops[*].name", contains("C", "A", "B")))
+                .andExpect(jsonPath("$.stops[*].position", contains(0, 1, 2)));
+        assertThat(routes(tripId)).containsOnlyKeys(List.of(c, a), List.of(a, b));
+
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}/position", tripId, c).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"position\":3}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"E\",\"position\":5}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    /** New coordinates discard the sections (and their consequences), a new arrival does not. */
+    @Test
+    void changedCoordinatesDiscardTheSections() throws Exception {
+        OffsetDateTime departure = NOW.plusDays(2);
+        long tripId = createTrip(user, "Toskana", iso(departure), iso(departure.plusDays(5)));
+        addStop(tripId, "{\"name\":\"Innsbruck\",\"latitude\":47.26,\"longitude\":11.39,\"departureAt\":\""
+                + iso(departure) + "\"}");
+        long verona = addStop(tripId, "{\"name\":\"Verona\",\"latitude\":45.44,\"longitude\":10.99}");
+        long routeId = routes(tripId).values().iterator().next();
+        long segmentId = segment(departure.minusDays(1));
+        routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, departure, departure.plusHours(1))));
+
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, verona).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Verona\",\"latitude\":45.44,"
+                                + "\"longitude\":10.99,\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routes[0].planOutcome").value("PLANNED"));
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).hasSize(1);
+
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, verona).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Verona\",\"latitude\":45.40,"
+                                + "\"longitude\":10.95,\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routes[0].plannedAt").doesNotExist())
+                .andExpect(jsonPath("$.routes[0].planOutcome").value(anyOf(is("NO_ROUTE"), is("ROUTING_UNAVAILABLE"))));
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).isEmpty();
+    }
+
+    @Test
+    void waypointsAreReplacedInOrder() throws Exception {
+        long tripId = createTrip(user, "Toskana", iso(NOW), iso(NOW.plusDays(3)));
+        addStop(tripId, "{\"name\":\"Innsbruck\"}");
+        addStop(tripId, "{\"name\":\"Verona\"}");
+        long routeId = routes(tripId).values().iterator().next();
+
+        String body = mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
+                        .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"latitude\":47.0,\"longitude\":11.5,\"name\":\"Brenner\"},"
+                                + "{\"latitude\":46.5,\"longitude\":11.35,\"name\":\"Bozen\",\"roadHint\":\"A22\"}]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waypoints[*].name", contains("Brenner", "Bozen")))
+                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_COORDINATES"))
+                .andReturn().getResponse().getContentAsString();
+        long brenner = ((Number) JsonPath.read(body, "$.waypoints[0].id")).longValue();
+        long bozen = ((Number) JsonPath.read(body, "$.waypoints[1].id")).longValue();
+
+        mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
+                        .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"id\":" + bozen + ",\"latitude\":46.5,\"longitude\":11.35,\"name\":\"Bolzano\"},"
+                                + "{\"latitude\":46.07,\"longitude\":11.12,\"name\":\"Trient\"}]"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.waypoints[*].name", contains("Bolzano", "Trient")))
+                .andExpect(jsonPath("$.waypoints[0].id").value(bozen))
+                .andExpect(jsonPath("$.waypoints[0].roadHint").doesNotExist());
+
+        mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
+                        .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"id\":" + brenner + ",\"latitude\":47.0,\"longitude\":11.5}]"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("WAYPOINT_NOT_FOUND"));
+        mockMvc.perform(get("/api/v1/trips/{id}/routes/{routeId}", tripId, routeId).with(otherUser))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
+        long otherTrip = createTrip(user, "Anders", iso(NOW), iso(NOW.plusDays(3)));
+        mockMvc.perform(get("/api/v1/trips/{id}/routes/{routeId}", otherTrip, routeId).with(user))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("ROUTE_NOT_FOUND"));
+        mockMvc.perform(post("/api/v1/trips/{id}/routes/{routeId}/plan", tripId, routeId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_COORDINATES"));
+    }
+
+    @Test
+    void tripIsUpdatedAndDeletedWithEverythingOnIt() throws Exception {
+        OffsetDateTime departure = NOW.plusDays(2);
+        long tripId = createTrip(user, "Toskana", iso(departure), iso(departure.plusDays(5)));
+        long innsbruck = addStop(tripId, "{\"name\":\"Innsbruck\",\"departureAt\":\"" + iso(departure) + "\"}");
+        addStop(tripId, "{\"name\":\"Verona\"}");
+        long routeId = routes(tripId).values().iterator().next();
+        mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
+                        .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"latitude\":47.0,\"longitude\":11.5}]"))
+                .andExpect(status().isOk());
+        routeLogic.replaceSections(routeId, List.of(new PlannedSection(segment(departure.minusDays(1)),
+                departure, departure.plusHours(1))));
+
+        mockMvc.perform(put("/api/v1/trips/{id}", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(tripJson("Italien", "2027-08-01T00:00:00+02:00", "2027-08-10T23:59:00+02:00")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("Italien"))
+                .andExpect(jsonPath("$.startAt").value("2027-08-01T00:00:00+02:00"));
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, innsbruck).with(otherUser).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Innsbruck\"}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(otherUser).with(csrf()))
+                .andExpect(status().isNotFound());
+
+        mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user)).andExpect(status().isNotFound());
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).isEmpty();
+    }
+
+    @Test
+    void stopsOfAnotherTripAreNotFound() throws Exception {
+        long tripId = createTrip(user, "Toskana", iso(NOW), iso(NOW.plusDays(3)));
+        long otherTrip = createTrip(user, "Anders", iso(NOW), iso(NOW.plusDays(3)));
+        long stop = addStop(otherTrip, "{\"name\":\"Rom\"}");
+
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, stop).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("STOP_NOT_FOUND"));
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, stop).with(user).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("STOP_NOT_FOUND"));
+    }
+
     @Test
     void titlePhotoIsUploadedAndServed() throws Exception {
         long tripId = createTrip(user, "Toskana", iso(NOW), iso(NOW.plusDays(3)));
@@ -182,13 +355,7 @@ class TripApiTest {
                 .andReturn().getResponse().getContentAsString();
         long routeId = ((Number) JsonPath.read(detail, "$.routes[0].id")).longValue();
 
-        ExtractVersion version = extractVersionRepository.save(new ExtractVersion("test", departure.minusDays(1)));
-        LineString geometry = new GeometryFactory(new PrecisionModel(), 4326).createLineString(new Coordinate[]{
-                new Coordinate(11.4, 47.2), new Coordinate(11.5, 47.0)});
-        long segmentId = roadSegmentRepository.save(new RoadSegment("test",
-                ThreadLocalRandom.current().nextLong(1, Integer.MAX_VALUE),
-                472_000_000, 114_000_000, 470_000_000, 115_000_000, 0,
-                "A13", "Brenner", "MOTORWAY", false, false, 25_000, geometry, version)).getId();
+        long segmentId = segment(departure.minusDays(1));
         routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, departure, departure.plusHours(1))));
         transactionTemplate.executeWithoutResult(_ -> incidentLogic.create(IncidentType.CLOSURE, "Vollsperrung A22",
                 departure.minusHours(1), departure.plusHours(4), null, Set.of(segmentId)));
@@ -213,12 +380,38 @@ class TripApiTest {
         return ((Number) JsonPath.read(body, "$.id")).longValue();
     }
 
+    /** Adds the stop, returns its id (the highest of the trip, the response is the whole trip). */
     private long addStop(long tripId, String json) throws Exception {
         String body = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content(json))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
-        return ((Number) JsonPath.read(body, "$.id")).longValue();
+        List<Number> ids = JsonPath.read(body, "$.stops[*].id");
+        return ids.stream().mapToLong(Number::longValue).max().orElseThrow();
+    }
+
+    /** Routes of the trip as {@code fromStopId → toStopId → routeId}, in the order of the stops. */
+    private Map<List<Long>, Long> routes(long tripId) throws Exception {
+        String body = mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<Map<String, Object>> routes = JsonPath.read(body, "$.routes");
+        Map<List<Long>, Long> byStops = new HashMap<>();
+        for (Map<String, Object> route : routes) {
+            byStops.put(List.of(((Number) route.get("fromStopId")).longValue(),
+                    ((Number) route.get("toStopId")).longValue()), ((Number) route.get("id")).longValue());
+        }
+        return byStops;
+    }
+
+    private long segment(OffsetDateTime since) {
+        ExtractVersion version = extractVersionRepository.save(new ExtractVersion("test", since));
+        LineString geometry = new GeometryFactory(new PrecisionModel(), 4326).createLineString(new Coordinate[]{
+                new Coordinate(11.4, 47.2), new Coordinate(11.5, 47.0)});
+        return roadSegmentRepository.save(new RoadSegment("test",
+                ThreadLocalRandom.current().nextLong(1, Integer.MAX_VALUE),
+                472_000_000, 114_000_000, 470_000_000, 115_000_000, 0,
+                "A13", "Brenner", "MOTORWAY", false, false, 25_000, geometry, version)).getId();
     }
 
     private static String tripJson(String name, String startAt, String endAt) {

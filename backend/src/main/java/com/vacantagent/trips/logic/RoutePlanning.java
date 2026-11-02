@@ -10,6 +10,7 @@ import com.vacantagent.network.logic.Routing;
 import com.vacantagent.network.logic.RoutingUnavailableException;
 import com.vacantagent.trips.data.RouteRepository;
 import com.vacantagent.trips.data.WaypointRepository;
+import com.vacantagent.trips.entities.PlanOutcome;
 import com.vacantagent.trips.entities.Route;
 import com.vacantagent.trips.entities.Stop;
 import jakarta.annotation.Nullable;
@@ -37,23 +38,32 @@ public class RoutePlanning {
 
     /**
      * Replaces the sections of the route and publishes {@code RouteChanged}, see {@link RouteLogic#replaceSections}.
-     * Routing runs outside of the transaction.
+     * Otherwise the sections stay as they are and the outcome is recorded on the route
+     * ({@link RouteLogic#planFailed}), {@code ROUTING_UNAVAILABLE} included: plan again later. Routing runs outside
+     * of the transaction.
      *
-     * @throws RoutingUnavailableException no road network loaded yet, try again later
+     * @throws EntityNotFoundException the route does not exist (any more)
      */
     public PlanResult plan(long routeId) {
         Request request = transactions.execute(status -> request(routeId));
         if (request.problem() != null) {
-            return request.problem();
+            return failed(routeId, request.problem());
         }
         RouteResult result;
         try {
             result = routing.route(request.points(), RouteOptions.none());
         } catch (NoRouteException e) {
-            return new PlanResult(PlanResult.Outcome.NO_ROUTE, e.getMessage());
+            return failed(routeId, new PlanResult(PlanOutcome.NO_ROUTE, e.getMessage()));
+        } catch (RoutingUnavailableException e) {
+            return failed(routeId, new PlanResult(PlanOutcome.ROUTING_UNAVAILABLE, e.getMessage()));
         }
         routeLogic.replaceSections(routeId, sections(result, request.departure()));
-        return new PlanResult(PlanResult.Outcome.PLANNED, null);
+        return new PlanResult(PlanOutcome.PLANNED, null);
+    }
+
+    private PlanResult failed(long routeId, PlanResult result) {
+        routeLogic.planFailed(routeId, result.outcome(), result.reason());
+        return result;
     }
 
     /** Stops and waypoints of the route as routing points, read in one transaction. */
@@ -68,11 +78,11 @@ public class RoutePlanning {
         Stop to = route.getToStop();
         if (from.getLatitude() == null || from.getLongitude() == null
                 || to.getLatitude() == null || to.getLongitude() == null) {
-            return new Request(List.of(), null, new PlanResult(PlanResult.Outcome.MISSING_COORDINATES,
+            return new Request(List.of(), null, new PlanResult(PlanOutcome.MISSING_COORDINATES,
                     "stop without coordinates"));
         }
         if (from.getDepartureAt() == null) {
-            return new Request(List.of(), null, new PlanResult(PlanResult.Outcome.MISSING_DEPARTURE,
+            return new Request(List.of(), null, new PlanResult(PlanOutcome.MISSING_DEPARTURE,
                     "no departure at " + from.getName()));
         }
         List<RoutePoint> points = new ArrayList<>();

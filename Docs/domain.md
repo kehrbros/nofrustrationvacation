@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Buchungen von Unterkünften `V25__booking_accommodation.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`.
 
 ## Bounded Contexts
 
@@ -25,16 +25,30 @@
 - `Trip.phaseAt(zeitpunkt)` liefert `UPCOMING`, `CURRENT` oder `PAST` (Vergleich der Zeitpunkte, Offset egal) und steuert die Reiseliste: aktuelle Reise oben, darunter Tabs „Anstehende“ (inkl. weiterer aktueller Reisen) und „Vergangene“, jeweils aufsteigend nach `startAt`.
 - Auch Ankunft und Abfahrt eines `Stop` behalten ihren Offset.
 - Bestehende Trips ohne Zeitraum erhielten bei der Migration `createdAt` (UTC) als Start und Ende.
-- Ein neuer Stop wird ans Ende der Reise gehängt; ab dem zweiten Stop entsteht automatisch eine `Route` vom vorigen Stop (noch ohne Sections, bis ein Routing-Dienst plant).
+- **Stops ändern** (`TripLogic`): einfügen (an einer Position oder am Ende), ändern, verschieben, löschen. Danach werden die Stops neu durchnummeriert und die Routen abgeglichen: Routen zwischen Nachbarn, die Nachbarn bleiben, bleiben bestehen (mit Waypoints und Sections), fehlende werden angelegt, übrige mit ihren Waypoints gelöscht (Waypoints wandern nicht auf die neue Route).
+- Ein Trip wird mit Routen, Waypoints und Stops gelöscht, Titelfoto und Consequences löscht die Datenbank mit.
 - `Trip` 1–0..1 `TripCoverImage` (Titelfoto, `tripId` eindeutig): Herkunft `GENERATED` (im Backend erzeugt, z. B. per Bildmodell) oder `UPLOADED` (vom Nutzer), `contentType`, Bilddaten (`content`, `BYTEA`, lazy geladen), `createdAt`. Eigene Tabelle, damit Reiselisten die Bilddaten nicht laden; wird mit dem Trip gelöscht (`ON DELETE CASCADE`). `replace(…)` tauscht das Bild, z. B. Upload statt generiertem Bild.
 - `Route`: eine Instanz pro Trip, verbindet genau 2 Stops (`fromStop`, `toStop`, eindeutig je Paar). Fährt ein anderer Trip denselben Weg, hat er eine eigene Route.
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
 - `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`.
 - **`Waypoint`:** Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet (`position`, eindeutig je Route), ohne Aufenthalt. Koordinate Pflicht, optional Name und Straßenhinweis (z. B. `SH 73`). Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert, die Referenz auf die Route nicht (Route ist nicht historisiert).
+- Waypoints einer Route werden als geordnete Liste ersetzt: mit Id geändert, ohne Id angelegt, fehlende gelöscht.
 - **Planen:** `RoutePlanning.plan(routeId)` holt Stops und Waypoints, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus der Abfahrt am Start-Stop plus den Dauern der Segmente davor und übergibt `PlannedSection`s an `RouteLogic.replaceSections`. Routing läuft außerhalb der Transaktion.
-  - Ergebnis `PlanResult`: `PLANNED`, `MISSING_COORDINATES` (ein Stop ohne Koordinaten), `MISSING_DEPARTURE` (Start-Stop ohne Abfahrt, keine Zeit geraten), `NO_ROUTE` (mit Grund). Außer bei `PLANNED` bleiben die Sections unverändert.
-  - `RoutingUnavailableException` (Streckennetz noch nicht geladen) wird weitergereicht, später erneut versuchen.
+  - Ergebnis `PlanResult` mit `PlanOutcome`: `PLANNED`, `MISSING_COORDINATES` (ein Stop ohne Koordinaten), `MISSING_DEPARTURE` (Start-Stop ohne Abfahrt, keine Zeit geraten), `NO_ROUTE` (mit Grund), `ROUTING_UNAVAILABLE` (Streckennetz noch nicht geladen, später erneut planen). Außer bei `PLANNED` bleiben die Sections unverändert.
+  - Das Ergebnis steht an der Route (`planOutcome`, `planReason`), damit der Nutzer es auch später sieht (z. B. „Abfahrt fehlt“).
   - Die Ankunft am Ziel-Stop bleibt, was der Nutzer eingetragen hat. Abgleich mit der geplanten Ankunft ist offen.
+- **Wann geplant wird** (`TripEditing`, für REST und MCP): erst wird die Änderung committet, dann werden die betroffenen Routen geplant. Die Änderung bleibt auch, wenn die Planung scheitert.
+
+  | Änderung | geplante Routen |
+  |---|---|
+  | Stop einfügen, verschieben, löschen | neu angelegte Routen |
+  | Koordinaten eines Stops | Routen zum und vom Stop |
+  | Abfahrt eines Stops (anderer Zeitpunkt, nicht nur Offset) | Route vom Stop |
+  | Ankunft oder Name eines Stops, Name oder Zeitraum des Trips | keine |
+  | Waypoints einer Route | diese Route |
+  | erneut planen (z. B. nach `ROUTING_UNAVAILABLE`) | diese Route |
+
+- **Sections verwerfen:** Ändern sich Stops oder Waypoints einer Route, entfernt `RouteLogic.discardSections` deren Sections (mit den Consequences) sofort in der Transaktion der Änderung, `plannedAt` und Planungsstatus werden leer. Scheitert die Planung danach, passen keine Incidents mehr auf den alten Weg. Die Regel „außer bei `PLANNED` bleiben die Sections unverändert“ gilt damit nur für erneutes Planen ohne Änderung.
 - **Anteile:** `RouteSection` und `PlannedSection` haben `fromFraction`/`toFraction`, welcher Teil des Segments befahren wird (nur am ersten und letzten Abschnitt nicht 0–1). Verhindert Fehlalarme an langen Segmenten, sobald auch `incident_segment` Anteile hat.
 
 ## Streckennetz
@@ -83,12 +97,12 @@
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
 - **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
-- **Neuplanung:** wer `plan` aufruft, fehlt noch: keine API für Trips, Stops und Waypoints. Später bei Änderungen an Abfahrt, Stops oder Waypoints und nach `NetworkRefreshed`. Umfahrung bei `BLOCKED` über `recommendations`.
+- **Neuplanung:** nach `NetworkRefreshed` (betroffene Routen neu planen) und Routen mit `ROUTING_UNAVAILABLE` automatisch erneut planen fehlen noch. Umfahrung bei `BLOCKED` über `recommendations`.
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.
 - **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung, Unterkunft nicht erreichbar), Transport und Aktivitäten, Sprach-/Namenssuche mit KI (Stufe 3), E-Mail-Weiterleitung (Stufe 4), Stornieren per API, Zeiten eines aus der Buchung angelegten Stops in der Zone der Unterkunft.
 - **Benachrichtigung:** wer wann worüber informiert wird, Schwellen (z. B. erst ab 15 min Verzögerung).
 - **Trips teilen:** derzeit gehört ein Trip genau einem Nutzer.
-- **Stops einfügen und umsortieren:** derzeit nur Anhängen am Ende (`Stop.moveTo` existiert, API fehlt).
+- **Stops mit Buchungen löschen:** `fk_booking_stop` hat kein `ON DELETE CASCADE`, Löschen eines Stops oder Trips mit Buchungen scheitert (Buchungen und Löschen von Stops/Trips sind beide per API möglich). Zu entscheiden: Buchungen mitlöschen oder Löschen ablehnen.
 - **Zeitraum und Stops:** ob Ankunft/Abfahrt der Stops innerhalb des Reisezeitraums liegen müssen, ist noch nicht geprüft.

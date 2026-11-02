@@ -22,7 +22,7 @@ flowchart LR
 
 - **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
 - **OpenAI:** liest Buchungsbestätigungen aus (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
-- **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools gibt es derzeit keine.
+- **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools für Trips, Stops und Waypoints, siehe [API](#api).
 - **Verkehrsdatenquellen:** liefern Ereignisse in das Modul `input`, entweder abgerufen (`TRAFFIC_FEED`) oder gepusht (`WEBHOOK`). Noch keine Quelle angebunden.
 - **Routing:** kein externer Dienst, GraphHopper läuft eingebettet im Modul `network` (geplant), Kartendaten von Geofabrik, siehe [network.md](network.md).
 - **Benachrichtigung:** Kanal noch offen.
@@ -83,7 +83,7 @@ flowchart LR
 1. **Ereignis kommt an** (offen): Quelle → `input` speichert ein `Event` unverändert (`payload`), doppelte Zustellung über `externalId` erkannt.
 2. **Ereignis verarbeiten** (offen): Straße und Ort → Segmente, neuer oder bestehender `Incident` über `IncidentLogic.create`/`change`, `Event.processed(incidentId)`.
 3. **Zuordnung:** `ConsequenceMatcher.matchIncident` findet über die Segmente die Routen, deren erwartete Durchfahrt die Gültigkeit überschneidet, und legt `Consequence`s an, aktualisiert oder entfernt sie.
-4. **Route planen:** `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
+4. **Route planen:** REST oder MCP → `TripEditing` → Änderung in `TripLogic` (verwirft Sections betroffener Routen, committet) → je betroffene Route `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
 5. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
 6. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
 
@@ -102,11 +102,16 @@ flowchart LR
 ## API
 
 - REST unter `/api/v1`, Vertrag in `frontend/openapi.json` (generiert, Client per `npm run generate:api`).
-- `GET/POST /trips`, `GET /trips/{id}` (mit Stops und Routen), `POST /trips/{id}/stops`, `GET/PUT /trips/{id}/cover-image` (JPEG, PNG, WebP bis 5 MB, Multipart).
+- `GET/POST /trips`, `GET/PUT/DELETE /trips/{id}` (mit Stops und Routen), `GET/PUT /trips/{id}/cover-image` (JPEG, PNG, WebP bis 5 MB, Multipart).
+- Stops (`TripController`), Antwort jeweils der ganze Trip, da sich Routen mit ändern: `POST /trips/{id}/stops` (optional `position`, sonst ans Ende), `PUT /trips/{id}/stops/{stopId}`, `PUT /trips/{id}/stops/{stopId}/position`, `DELETE /trips/{id}/stops/{stopId}`.
+- Routen (`RouteController`), Antwort Route mit Waypoints: `GET /trips/{id}/routes/{routeId}`, `PUT /trips/{id}/routes/{routeId}/waypoints` (ganze geordnete Liste), `POST /trips/{id}/routes/{routeId}/plan` (erneut planen).
+- Ändernde Aufrufe planen betroffene Routen sofort (`TripEditing`, siehe [domain.md](domain.md#trips)). Ergebnis an jeder Route als `planOutcome`/`planReason`.
 - `GET /trips/{id}/incidents` (aktuelle Hinweise je Route), `GET /incidents/trip-counts` (Zähler für die Reiseliste).
-- Fremde oder unbekannte Trips: 404 mit `code` `TRIP_NOT_FOUND`, ungültige Eingaben: 400 mit `INVALID_TRIP_INPUT` (`TripExceptionHandler`, nur für `trips` und `incidents`).
+- Fremde oder unbekannte Trips: 404 mit `code` `TRIP_NOT_FOUND`, Stops, Routen, Waypoints, die nicht zum Trip gehören: 404 mit `STOP_NOT_FOUND`, `ROUTE_NOT_FOUND`, `WAYPOINT_NOT_FOUND`, ungültige Eingaben: 400 mit `INVALID_TRIP_INPUT` (`TripExceptionHandler`, nur für `trips` und `incidents`).
 - Buchungen (`BookingController`): `GET /trips/{id}/bookings`, `POST /stops/{stopId}/accommodation-bookings`, `PUT /accommodation-bookings/{id}`, `DELETE /bookings/{id}`, `GET /bookings/assistant` (Auslesen verfügbar?), `POST /bookings/accommodation-drafts` (Multipart `text` und/oder `file`, liefert einen nicht gespeicherten Entwurf).
 - Fehler der Buchungen (`BookingExceptionHandler`): 404 `STOP_NOT_FOUND`/`BOOKING_NOT_FOUND`/`TRIP_NOT_FOUND`, 400 `INVALID_BOOKING_INPUT`, 503 `ASSISTANT_UNAVAILABLE` (kein Key, Modell fehlgeschlagen), 429 `ASSISTANT_RATE_LIMITED`.
+- **MCP-Tools** (`trips.api.TripTools`, gleiche Logik und DTOs wie REST): `list_trips`, `get_trip`, `get_route` (Scope `mcp:read`, `vacantagent.mcp.read-tools`), `create_trip`, `update_trip`, `add_stop`, `update_stop`, `move_stop`, `remove_stop`, `set_waypoints`, `plan_route` (zusätzlich `mcp:write`). Trips löschen bewusst nicht per MCP. Für Buchungen gibt es noch keine MCP-Tools.
+  - Der Nutzer kommt aus dem `SecurityContext`: Spring AI führt Tools bei Servlet-Servern im Request-Thread aus (`immediateExecution`).
 
 ## Frontend
 
@@ -156,7 +161,7 @@ flowchart LR
 - **Ereignisquellen:** konkrete Feeds und Webhooks, Abruf-Scheduler, Webhook-Endpunkt mit Signaturprüfung, Verarbeitung Event → Incident inkl. Ortsbestimmung.
 - **Benachrichtigung:** Kanal (Web-Push, E-Mail, MCP), Auslöser (neue oder geänderte Consequence), Duplikate vermeiden.
 - **Skalierung der Zuordnung:** derzeit synchron in der Transaktion. Bei vielen Routen oder Events asynchron nach dem Commit (`@TransactionalEventListener`, Queue).
-- **API und Frontend:** Trips, Stops, Titelfoto und Hinweise sind umgesetzt. Buchungen von Unterkünften sind umgesetzt (Eingabe, Auslesen von Bestätigungen, Teilen an die App). Offen sind Bearbeiten und Löschen von Trips und Stops, Stops einfügen/umsortieren, weitere Buchungstypen, MCP-Tools und die Profil-Einträge (Profil, Benachrichtigungen, Einstellungen, KI-Assistenten, im Menü als „folgt“).
+- **API und Frontend:** Trips, Stops, Waypoints, Titelfoto, Hinweise und MCP-Tools sind im Backend umgesetzt. Buchungen von Unterkünften sind umgesetzt (Eingabe, Auslesen von Bestätigungen, Teilen an die App). Im Frontend fehlen Bearbeiten und Löschen von Trips und Stops, Stops einfügen/umsortieren, Waypoints und die Anzeige des Planungsstatus. Offen sind außerdem weitere Buchungstypen, MCP-Tools für Buchungen und die Profil-Einträge (Profil, Benachrichtigungen, Einstellungen, KI-Assistenten, im Menü als „folgt“).
 - **Routenvorschläge:** Der Routen-Dialog zeigt Beispieldaten (aus der Luftlinie), „Route übernehmen“ und „Zwischenziel hinzufügen“ sind deaktiviert, bis der Routing-Dienst steht.
 - **PWA weiter ausbauen:** Reisedaten offline verfügbar machen (derzeit nur die App-Hülle und zuletzt gesehene Kacheln), Web-Push für Hinweise, App-Name und Icon im Zuge des Brandings.
 - **Karte und Ortssuche:** OpenFreeMap und die öffentliche Photon-Instanz sind nur für maßvolle Nutzung gedacht; für den Betrieb eigene Instanz oder Proxy im Backend prüfen. Das Karten-Bundle ist groß (~1 MB, lazy geladen).

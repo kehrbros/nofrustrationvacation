@@ -2,15 +2,15 @@ package com.vacantagent.trips.api;
 
 import com.vacantagent.trips.dto.CreateStopDto;
 import com.vacantagent.trips.dto.CreateTripDto;
-import com.vacantagent.trips.dto.RouteDto;
-import com.vacantagent.trips.dto.StopDto;
+import com.vacantagent.trips.dto.MoveStopDto;
 import com.vacantagent.trips.dto.TripDetailDto;
 import com.vacantagent.trips.dto.TripSummaryDto;
-import com.vacantagent.trips.entities.Route;
-import com.vacantagent.trips.entities.Stop;
+import com.vacantagent.trips.dto.UpdateStopDto;
+import com.vacantagent.trips.dto.UpdateTripDto;
 import com.vacantagent.trips.entities.Trip;
 import com.vacantagent.trips.logic.InvalidTripInputException;
 import com.vacantagent.trips.logic.NewStop;
+import com.vacantagent.trips.logic.TripEditing;
 import com.vacantagent.trips.logic.TripLogic;
 import com.vacantagent.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +21,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,8 +34,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.time.Clock;
-import java.time.OffsetDateTime;
 import java.util.List;
 
 @Tag(name = "Trips", description = "Trips, stops and title photos of the authenticated user")
@@ -43,16 +42,13 @@ import java.util.List;
 @RequiredArgsConstructor
 public class TripController {
     private final TripLogic tripLogic;
-    private final Clock clock;
+    private final TripEditing tripEditing;
+    private final TripDtos tripDtos;
 
     @Operation(summary = "All trips", description = "Ascending by start, with the phase relative to now.")
     @GetMapping
     public List<TripSummaryDto> listTrips(@AuthenticationPrincipal CurrentUser user) {
-        return tripLogic.list(user.appUserId()).stream()
-                .map(overview -> new TripSummaryDto(overview.trip().getId(), overview.trip().getName(),
-                        overview.trip().getStartAt(), overview.trip().getEndAt(), overview.phase(), overview.stopCount(),
-                        overview.nextStop() == null ? null : overview.nextStop().getName(), overview.hasCoverImage()))
-                .toList();
+        return tripDtos.list(user.appUserId());
     }
 
     @Operation(summary = "Create a trip")
@@ -60,24 +56,65 @@ public class TripController {
     @ResponseStatus(HttpStatus.CREATED)
     public TripDetailDto createTrip(@AuthenticationPrincipal CurrentUser user, @RequestBody CreateTripDto trip) {
         Trip created = tripLogic.create(user.appUserId(), trip.name(), trip.startAt(), trip.endAt());
-        return toDetail(created, false, List.of(), List.of());
+        return tripDtos.detail(user.appUserId(), created.getId());
     }
 
     @Operation(summary = "Trip with stops and routes")
     @GetMapping("/{tripId}")
     public TripDetailDto getTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
-        Trip trip = tripLogic.get(user.appUserId(), tripId);
-        return toDetail(trip, tripLogic.coverImage(user.appUserId(), tripId).isPresent(),
-                tripLogic.stops(user.appUserId(), tripId), tripLogic.routes(user.appUserId(), tripId));
+        return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Append a stop", description = "From the second stop on, a route from the previous stop is created.")
+    @Operation(summary = "Change name and period of a trip", description = "Routes are not planned again.")
+    @PutMapping("/{tripId}")
+    public TripDetailDto updateTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                    @RequestBody UpdateTripDto trip) {
+        tripLogic.update(user.appUserId(), tripId, trip.name(), trip.startAt(), trip.endAt());
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Delete a trip", description = "With its stops, routes, waypoints, title photo and incidents.")
+    @DeleteMapping("/{tripId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void deleteTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        tripLogic.delete(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Add a stop", description = "Inserted at the position or appended. Routes to its neighbours "
+            + "are created and planned, see planOutcome of the routes.")
     @PostMapping("/{tripId}/stops")
     @ResponseStatus(HttpStatus.CREATED)
-    public StopDto addStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
-                           @RequestBody CreateStopDto stop) {
-        return toDto(tripLogic.addStop(user.appUserId(), tripId,
-                new NewStop(stop.name(), stop.latitude(), stop.longitude(), stop.arrivalAt(), stop.departureAt())));
+    public TripDetailDto addStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                 @RequestBody CreateStopDto stop) {
+        tripEditing.addStop(user.appUserId(), tripId,
+                new NewStop(stop.name(), stop.latitude(), stop.longitude(), stop.arrivalAt(), stop.departureAt()),
+                stop.position());
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Change a stop", description = "New coordinates or departure plan the affected routes again.")
+    @PutMapping("/{tripId}/stops/{stopId}")
+    public TripDetailDto updateStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                    @PathVariable long stopId, @RequestBody UpdateStopDto stop) {
+        tripEditing.updateStop(user.appUserId(), tripId, stopId,
+                new NewStop(stop.name(), stop.latitude(), stop.longitude(), stop.arrivalAt(), stop.departureAt()));
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Move a stop", description = "Routes between new neighbours are created and planned.")
+    @PutMapping("/{tripId}/stops/{stopId}/position")
+    public TripDetailDto moveStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                  @PathVariable long stopId, @RequestBody MoveStopDto move) {
+        tripEditing.moveStop(user.appUserId(), tripId, stopId, move.position());
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Delete a stop", description = "Its neighbours get a new route, which is planned.")
+    @DeleteMapping("/{tripId}/stops/{stopId}")
+    public TripDetailDto removeStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                    @PathVariable long stopId) {
+        tripEditing.removeStop(user.appUserId(), tripId, stopId);
+        return tripDtos.detail(user.appUserId(), tripId);
     }
 
     @Operation(summary = "Title photo", description = "Image bytes, 404 if the trip has none.")
@@ -101,17 +138,5 @@ public class TripController {
         }
         tripLogic.uploadCoverImage(user.appUserId(), tripId,
                 String.valueOf(file.getContentType()), file.getBytes());
-    }
-
-    private TripDetailDto toDetail(Trip trip, boolean hasCoverImage, List<Stop> stops, List<Route> routes) {
-        return new TripDetailDto(trip.getId(), trip.getName(), trip.getStartAt(), trip.getEndAt(),
-                trip.phaseAt(OffsetDateTime.now(clock)), hasCoverImage, stops.stream().map(TripController::toDto).toList(),
-                routes.stream().map(route -> new RouteDto(route.getId(), route.getFromStop().getId(),
-                        route.getToStop().getId(), route.getPlannedAt())).toList());
-    }
-
-    private static StopDto toDto(Stop stop) {
-        return new StopDto(stop.getId(), stop.getPosition(), stop.getName(), stop.getLatitude(), stop.getLongitude(),
-                stop.getArrivalAt(), stop.getDepartureAt());
     }
 }

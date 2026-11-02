@@ -63,7 +63,7 @@ class McpAuthorizationFlowTest {
     private static final String WEB_REDIRECT = "https://client.example/oauth/callback";
     private static final String NATIVE_CLIENT = "https://cli.example/oauth/metadata.json";
     private static final String UNLISTED_CLIENT = "https://evil.example/oauth/metadata.json";
-    /** Tool names only matter to the scope check, the server has no tools yet. */
+    /** Tool names only matter to the scope check, the server does not know these tools. */
     private static final String READ_TOOL = "read_tool";
     private static final String WRITE_TOOL = "write_tool";
     private static final String CODE_VERIFIER ="a-code-verifier-that-is-long-enough-for-pkce-0123456789";

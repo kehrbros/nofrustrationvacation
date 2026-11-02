@@ -41,7 +41,7 @@
 - `Routing.route(List<RoutePoint>, RouteOptions)`: `RoutePoint` mit `STOP`/`VIA` und optionalem Straßenhinweis. Stops nur als erster und letzter Punkt, dazwischen Via-Punkte (`RoutePlanning` plant je Stop-Paar), sonst `IllegalArgumentException`.
   - `RouteOptions`: derzeit nur `blockedSegmentIds`. Verlangsamte Segmente und Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit `recommendations` und den Trip-Vorlieben.
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
-  - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph, später 503).
+  - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
 - `SegmentQueries`: Details zu Segmenten (`ref`, Name, Geometrie, ausgemustert) für API und Benachrichtigungen.
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
