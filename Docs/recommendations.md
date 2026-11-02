@@ -119,7 +119,7 @@ flowchart LR
   2. Bei `DEPARTURE_SHIFT`: `TripEditing.updateStop(…)` mit neuer Abfahrt am Start-Stop (plant die Route vom Stop).
   3. Sonst `TripEditing.replaceWaypoints(appUserId, tripId, routeId, points)`: Waypoints als geordnete Liste ersetzen (mit `origin` `SUGGESTION`; bei `FOLLOW` sind die Nutzer-Waypoints mit ihrer Id enthalten und bleiben, bei `IGNORE` entfallen sie, das Frontend weist vorher darauf hin). `TripEditing` committet, verwirft die alten Sections (`discardSections`) und plant die Route.
   4. `RoutePlanning.plan` → `RouteChanged` → `ConsequenceMatcher` legt Consequences für den neuen Weg an, die alte ist mit den verworfenen Sections schon weg.
-  5. Set `APPLIED`, `RouteOption.appliedAt`. Antwort: `PlanResult` der Route. Scheitert die Planung (`ROUTING_UNAVAILABLE`, `NO_ROUTE`), bleiben die Waypoints trotzdem (Regel von `TripEditing`), die Route zeigt den Status.
+  5. Set `APPLIED` (auch aus `STALE`: das eigene `RouteChanged` aus Schritt 3 hat es gerade veraltet), `RouteOption.appliedAt`. Antwort: `PlanResult` der Route. Bestehende Waypoints (`FOLLOW`) behalten Koordinate, Name und `origin` des Nutzers. Scheitert die Planung (`ROUTING_UNAVAILABLE`, `NO_ROUTE`), bleiben die Waypoints trotzdem (Regel von `TripEditing`), die Route zeigt den Status.
 
 ## Auslöser und Lebenszyklus
 
@@ -134,7 +134,7 @@ flowchart LR
 
 ## Schnittstellen
 
-- `recommendations.logic` nach außen: `Suggestions.forPlanning(routeId, count, includeWaypoints, departure?)`, `Suggestions.forConsequence(consequenceId, count)`, `Suggestions.get(setId)`, `SuggestionApplication.apply(optionId)`. Ergebnis `SuggestionResult` (Set, Vorschläge, `reference`, ggf. Problem wie `MISSING_DEPARTURE`).
+- `recommendations.logic` nach außen: `Suggestions.forPlanning(appUserId, routeId, count, includeWaypoints, departure?)`, `Suggestions.get(appUserId, setId)`, `SuggestionApplication.apply(appUserId, setId, optionId)` → `Applied(tripId, routeId, PlanResult)`, später `Suggestions.forConsequence(consequenceId, count)`. Ergebnis `SuggestionResult` (Set, Vorschläge, `reference`, ggf. Problem wie `MISSING_DEPARTURE`).
 - **`network`** (Erweiterung von `RouteOptions`, ersetzt den Satz „derzeit nur `blockedSegmentIds`“ in [network.md](network.md#schnittstellen-networklogic)):
   - `RouteOptions(blockedSegmentIds, delayedSegments: Map<Long, Duration>)`.
   - `BlockedEdgesWeighting` wird `ScenarioWeighting`: gesperrt → unendlich, Verzögerung → Gewicht + Sekunden (≥ 0). Gewichte steigen nur, die LM-Schätzung bleibt gültig. Gilt für normales Routing und `alternative_route` gleich.
@@ -150,11 +150,13 @@ flowchart LR
 
 ## API
 
-- `POST /api/v1/routes/{routeId}/suggestions` (`count`, `includeWaypoints` Standard `false`, optional `departureAt` für Was-wäre-wenn ohne Speichern am Stop): Planung, liefert bestehendes `CURRENT`-Set bei gleichem `basisHash`.
-- `GET /api/v1/suggestion-sets/{id}`: Set mit Vorschlägen (Geometrie als Koordinatenliste), `reference`, `status`.
-- `POST /api/v1/suggestion-sets/{setId}/options/{optionId}/apply`: übernehmen, liefert die neu geplante Route.
-- `GET /trips/{id}/incidents` bekommt je Hinweis `suggestionSetId` (falls vorhanden).
-- Fremde Route oder Set: `404` `TRIP_NOT_FOUND`, veraltetes Set: `409` `SUGGESTION_STALE`, kein Graph: `503`.
+- `SuggestionController`, umgesetzt:
+- `POST /api/v1/routes/{routeId}/suggestions` (Body optional: `count`, `includeWaypoints` Standard `false`, `departureAt` für Was-wäre-wenn ohne Speichern am Stop): Planung, liefert bestehendes `CURRENT`-Set bei gleichem `basisHash`. Fehlende Abfahrt oder Koordinaten, `NO_ROUTE`: `200` ohne `id`, mit `problem`.
+- `GET /api/v1/suggestion-sets/{id}`: Set mit Vorschlägen, `reference` (geplante Route zum Vergleich, Incidents von jetzt), `status` (`EXPIRED` nach `expiresAt`, ohne Job berechnet).
+  - Je Vorschlag: Rang, `kind`, `labels`, `via`, Abfahrt, Ankunft, Distanz, Dauer/Warten/Verzögerung in Sekunden, `sharedRatio`, `geometry` und `viaPoints` als Koordinatenlisten, `conflicts`, `appliedAt`.
+- `POST /api/v1/suggestion-sets/{setId}/options/{optionId}/apply`: übernehmen. Antwort `tripId`, `routeId`, `planOutcome`, `planReason` statt der Route selbst (`trips.api` ist paketprivat, die Route liest das Frontend über `GET /trips/{tripId}/routes/{routeId}`).
+- Offen: `GET /trips/{id}/incidents` bekommt je Hinweis `suggestionSetId` (falls vorhanden).
+- Fehler (`RecommendationExceptionHandler`): fremde oder unbekannte Route, Set oder Option `404` `TRIP_NOT_FOUND`, veraltetes Set (`STALE`, `APPLIED`, abgelaufen) `409` `SUGGESTION_STALE`, `count` außerhalb 1–5 `400` `INVALID_SUGGESTION_INPUT`, kein Graph `503` `ROUTING_UNAVAILABLE`.
 - Später MCP-Tool `suggest_routes` auf derselben Logik.
 
 ## Frontend
