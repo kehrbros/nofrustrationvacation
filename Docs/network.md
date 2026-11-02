@@ -62,17 +62,17 @@
 ## Konfiguration
 
   ```properties
-  vacantagent.network.import-on-start=true
-  vacantagent.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
-  vacantagent.network.regions.nz.graph-dir=./data/graphs/nz
+  nfv.network.import-on-start=true
+  nfv.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
+  nfv.network.regions.nz.graph-dir=./data/graphs/nz
   # MMAP: Graph außerhalb des Heaps, RAM_STORE in Tests
-  vacantagent.network.regions.nz.data-access=MMAP
-  vacantagent.network.regions.nz.driving-side=LEFT
-  vacantagent.network.regions.nz.ferries=true
+  nfv.network.regions.nz.data-access=MMAP
+  nfv.network.regions.nz.driving-side=LEFT
+  nfv.network.regions.nz.ferries=true
   # Geplant
-  vacantagent.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
-  vacantagent.network.regions.nz.refresh-cron=0 0 3 * * SUN
-  vacantagent.network.regions.nz.min-segment-ratio=0.95
+  nfv.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
+  nfv.network.regions.nz.refresh-cron=0 0 3 * * SUN
+  nfv.network.regions.nz.min-segment-ratio=0.95
   ```
 
 - Noch keine Region in `application.properties`, bis der Download kommt.

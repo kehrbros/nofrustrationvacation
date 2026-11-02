@@ -1,6 +1,6 @@
 # Abrechnung
 
-- **Modul `com.vacantagent.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus VacantAgent, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Die Frontend-Seiten dazu (Guthaben, Einnahmen, Auszahlungskonto) sind entfernt. Nutzt `com.vacantagent.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
+- **Modul `com.nfv.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus Nfv, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Die Frontend-Seiten dazu (Guthaben, Einnahmen, Auszahlungskonto) sind entfernt. Nutzt `com.nfv.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
 
 ## Konten und Buchungen
 
@@ -42,12 +42,12 @@
 ## Konfiguration
 
 ```properties
-vacantagent.accounting.min-top-up=5.00
-vacantagent.accounting.max-top-up=1000.00
-vacantagent.accounting.min-payout=10.00
-vacantagent.accounting.link-state-ttl=15m
-vacantagent.accounting.status-check-enabled=true   # in Tests false
-vacantagent.accounting.status-check-interval=5m
+nfv.accounting.min-top-up=5.00
+nfv.accounting.max-top-up=1000.00
+nfv.accounting.min-payout=10.00
+nfv.accounting.link-state-ttl=15m
+nfv.accounting.status-check-enabled=true   # in Tests false
+nfv.accounting.status-check-interval=5m
 ```
 
 ## Tests

@@ -2,9 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Same variable as the backend (vacantagent.frontend-url). Set it to serve the dev server under another host than
+// Same variable as the backend (nfv.frontend-url). Set it to serve the dev server under another host than
 // localhost, e.g. http://localtest.me:5173 for the PayPal sandbox, see Docs/paypal.md.
-const frontendUrl = process.env.VACANTAGENT_FRONTEND_URL;
+const frontendUrl = process.env.NFV_FRONTEND_URL;
 
 export default defineConfig({
   plugins: [

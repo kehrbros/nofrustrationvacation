@@ -1,4 +1,4 @@
-# Local run of VacantAgent with PostgreSQL. All images are built from the Dockerfiles in this repo, no access to
+# Local run of Nfv with PostgreSQL. All images are built from the Dockerfiles in this repo, no access to
 # the container registry and no local Java, Maven or Node needed, see Docs/deployment.md.
 #
 #   docker compose -f docker-compose.local.yml up --build
@@ -11,43 +11,43 @@
 # Secrets come from the git-ignored .env (copy .env.example): database password required, PayPal and encryption
 # key optional.
 
-name: vacantagent-local
+name: nfv-local
 
 services:
   postgres:
     image: postgis/postgis:17-3.5-alpine
     environment:
-      POSTGRES_DB: vacantagent
-      POSTGRES_USER: vacantagent
-      # From .env, the stack uses the Docker secret vacantagent_postgres_password instead
+      POSTGRES_DB: nfv
+      POSTGRES_USER: nfv
+      # From .env, the stack uses the Docker secret nfv_postgres_password instead
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}
     ports:
       - "${LOCAL_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vacantagent -d vacantagent"]
+      test: ["CMD-SHELL", "pg_isready -U nfv -d nfv"]
       interval: 5s
       timeout: 5s
       retries: 10
 
   backend:
-    image: vacantagent-backend:local
+    image: nfv-backend:local
     build:
       context: ./backend
       dockerfile: Dockerfile.local
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_DB: vacantagent
-      POSTGRES_USER: vacantagent
+      POSTGRES_DB: nfv
+      POSTGRES_USER: nfv
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}
-      VACANTAGENT_BACKEND_URL: http://localhost:8080
-      VACANTAGENT_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
+      NFV_BACKEND_URL: http://localhost:8080
+      NFV_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
       PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
       # Empty: the app starts, PayPal features answer 503
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
       PAYPAL_CLIENT_SECRET: ${PAYPAL_CLIENT_SECRET:-}
-      VACANTAGENT_IDP_SIGNING_KEY: ${VACANTAGENT_IDP_SIGNING_KEY:-}
+      NFV_IDP_SIGNING_KEY: ${NFV_IDP_SIGNING_KEY:-}
       # Empty: booking confirmations are not read automatically, manual input only
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     ports:
@@ -73,7 +73,7 @@ services:
       - local-cert:/certs
 
   frontend:
-    image: vacantagent-frontend:local
+    image: nfv-frontend:local
     build:
       context: ./frontend
       args:

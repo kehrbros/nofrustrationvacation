@@ -1,7 +1,7 @@
 # Architecture
 
 - **Ziel der App:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung). Fachliches Modell siehe [domain.md](domain.md).
-- **Herkunft:** Das Repository war die App VacantAgent (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
+- **Herkunft:** Das Repository war die App Nfv (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
 - **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md). Streckennetz und Routing mit eingebettetem GraphHopper und PostGIS (geplant), siehe [network.md](network.md).
 
 ## System Context
@@ -29,7 +29,7 @@ flowchart LR
 
 ## Building Blocks
 
-Jedes Modul ist ein Paket unter `com.vacantagent`.
+Jedes Modul ist ein Paket unter `com.nfv`.
 
 | Modul | Aufgabe | Status |
 |---|---|---|
@@ -110,7 +110,7 @@ flowchart LR
 - Fremde oder unbekannte Trips: 404 mit `code` `TRIP_NOT_FOUND`, Stops, Routen, Waypoints, die nicht zum Trip gehören: 404 mit `STOP_NOT_FOUND`, `ROUTE_NOT_FOUND`, `WAYPOINT_NOT_FOUND`, ungültige Eingaben: 400 mit `INVALID_TRIP_INPUT` (`TripExceptionHandler`, nur für `trips` und `incidents`).
 - Buchungen (`BookingController`): `GET /trips/{id}/bookings`, `POST /stops/{stopId}/accommodation-bookings`, `PUT /accommodation-bookings/{id}`, `DELETE /bookings/{id}`, `GET /bookings/assistant` (Auslesen verfügbar?), `POST /bookings/accommodation-drafts` (Multipart `text` und/oder `file`, liefert einen nicht gespeicherten Entwurf).
 - Fehler der Buchungen (`BookingExceptionHandler`): 404 `STOP_NOT_FOUND`/`BOOKING_NOT_FOUND`/`TRIP_NOT_FOUND`, 400 `INVALID_BOOKING_INPUT`, 503 `ASSISTANT_UNAVAILABLE` (kein Key, Modell fehlgeschlagen), 429 `ASSISTANT_RATE_LIMITED`.
-- **MCP-Tools** (`trips.api.TripTools`, gleiche Logik und DTOs wie REST): `list_trips`, `get_trip`, `get_route` (Scope `mcp:read`, `vacantagent.mcp.read-tools`), `create_trip`, `update_trip`, `add_stop`, `update_stop`, `move_stop`, `remove_stop`, `set_waypoints`, `plan_route` (zusätzlich `mcp:write`). Trips löschen bewusst nicht per MCP. Für Buchungen gibt es noch keine MCP-Tools.
+- **MCP-Tools** (`trips.api.TripTools`, gleiche Logik und DTOs wie REST): `list_trips`, `get_trip`, `get_route` (Scope `mcp:read`, `nfv.mcp.read-tools`), `create_trip`, `update_trip`, `add_stop`, `update_stop`, `move_stop`, `remove_stop`, `set_waypoints`, `plan_route` (zusätzlich `mcp:write`). Trips löschen bewusst nicht per MCP. Für Buchungen gibt es noch keine MCP-Tools.
   - Der Nutzer kommt aus dem `SecurityContext`: Spring AI führt Tools bei Servlet-Servern im Request-Thread aus (`immediateExecution`).
 
 ## Frontend
@@ -134,9 +134,9 @@ flowchart LR
 
 - **Modul `assistant`:** Zugriff auf das Sprachmodell, kennt keine Fachmodule. `StructuredExtraction.extract(…)` schickt Anweisung, JSON-Schema und Eingaben (Text, Bild, PDF) an die OpenAI Responses API (Structured Outputs, `strict`) und liefert das JSON zurück. Schema und Anweisung bringt der Aufrufer mit (z. B. `bookings.logic.AccommodationExtractor`).
 - **HTTP direkt per `RestClient`**, ohne Spring-AI-Modell-Starter: volle Kontrolle über `store: false`, PDF-Eingabe und Schema, kein Pflicht-Key beim Start.
-- **Konfiguration** (`vacantagent.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30).
+- **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30).
 - **Ohne Key** startet die App normal, `GET /bookings/assistant` meldet `extractionAvailable: false`, das Frontend bietet dann nur die manuelle Eingabe an.
-- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`vacantagent.assistant.api-key=` in den Test-Properties, `StructuredExtraction` gemockt).
+- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`nfv.assistant.api-key=` in den Test-Properties, `StructuredExtraction` gemockt).
 
 ## Security
 
@@ -152,7 +152,7 @@ flowchart LR
 
 ## Altbestand
 
-- Aus VacantAgent stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding`. Die Frontend-Seiten dazu (Rollen Consumer, Provider, Betreiber, Onboarding, Guthaben, Einnahmen, PayPal-Verknüpfung) sind entfernt; die PayPal-Return-URLs (`vacantagent.frontend-url`) zeigen daher ins Leere.
+- Aus Nfv stammen noch Code und Doku für Abrechnung ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)), das Backend-Modul `onboarding`. Die Frontend-Seiten dazu (Rollen Consumer, Provider, Betreiber, Onboarding, Guthaben, Einnahmen, PayPal-Verknüpfung) sind entfernt; die PayPal-Return-URLs (`nfv.frontend-url`) zeigen daher ins Leere.
 - Ob davon etwas für die Reise-App gebraucht wird (z. B. bezahlte Benachrichtigungen), ist offen. Bis dahin bleibt der Code unverändert.
 
 ## Offene Punkte
@@ -169,4 +169,4 @@ flowchart LR
 - **Assistant:** Kosten beobachten (Modellwahl, Bildgröße), Hinweis in der Datenschutzerklärung, Rate-Limit bei mehreren Replicas in die Datenbank, Sprachsuche (Transkription, Such-Agent mit OSM/Websuche) und E-Mail-Weiterleitung als nächste Stufen.
 - **Zeitzonen-Daten:** timeshape `2024a` (neuere Versionen brauchen protobuf 4, GraphHopper/osmosis bringt protobuf 3; `protobuf-java` ist auf 3.25 angehoben). Die Grenzen belegen nach dem ersten Gebrauch ca. 200 MB Heap (per `SoftReference`, bei Speichermangel freigegeben).
 - **ArchUnit-Regeln** für die neuen Module (nur Id-Referenzen, keine Zyklen).
-- **Altbestand:** entscheiden, ob Abrechnung, PayPal und Onboarding bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.vacantagent`).
+- **Altbestand:** entscheiden, ob Abrechnung, PayPal und Onboarding bleiben oder entfernt werden; App-Name und Branding (README, Icon, Paketname `com.nfv`).

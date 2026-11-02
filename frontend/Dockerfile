@@ -6,7 +6,7 @@ RUN npm ci
 COPY . .
 # Vite inlines these at build time, see src/vite-env.d.ts
 ARG VITE_OIDC_AUTHORITY=http://localhost:8080
-ARG VITE_OIDC_CLIENT_ID=vacantagent-frontend
+ARG VITE_OIDC_CLIENT_ID=nfv-frontend
 ARG VITE_API_BASE_URL=
 RUN npm run generate:api && npm run build
 

@@ -8,11 +8,11 @@
 
 | Modul | Entitäten |
 |---|---|
-| `com.vacantagent.trips` | `Trip`, `TripCoverImage`, `Stop`, `Route`, `RouteSection`, `Waypoint`  |
-| `com.vacantagent.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
-| `com.vacantagent.bookings` | `Booking`, `AccommodationDetails` |
-| `com.vacantagent.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
-| `com.vacantagent.incidents` | `Incident`, `Consequence` |
+| `com.nfv.trips` | `Trip`, `TripCoverImage`, `Stop`, `Route`, `RouteSection`, `Waypoint`  |
+| `com.nfv.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
+| `com.nfv.bookings` | `Booking`, `AccommodationDetails` |
+| `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
+| `com.nfv.incidents` | `Incident`, `Consequence` |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
 - **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).

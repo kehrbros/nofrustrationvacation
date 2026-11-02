@@ -3,7 +3,7 @@
 ## Konzept
 
 - **OAuth2/OIDC mit zwei getrennten Rollen** im selben Backend-Prozess:
-  - **Identity Provider (IdP):** Paket `com.vacantagent.auth`. Accounts, Login, Registrierung, Ausstellen signierter JWTs (Spring Authorization Server).
+  - **Identity Provider (IdP):** Paket `com.nfv.auth`. Accounts, Login, Registrierung, Ausstellen signierter JWTs (Spring Authorization Server).
   - **Resource Server:** alles unter `/api/**` und der MCP-Endpunkt `/mcp`. Validiert JWTs des konfigurierten Issuers und mappt sie auf den `AppUser`.
 - **Schnittstelle zwischen beiden sind nur Standards:** OIDC Discovery, JWKS, JWT-Claims. Keine Java-Aufrufe, keine gemeinsamen Entities oder Tabellen.
 - **`AppUser`** ist die Anwendungsseite des Accounts. Verbindendes Merkmal zum Token ist der **Username** (beim eigenen IdP im Claim `sub`).
@@ -13,7 +13,7 @@
 - Der eigene IdP ist eine Übergangslösung. Er soll später durch einen externen IdP (z. B. Keycloak) ersetzt werden, **ohne Änderungen an Fachmodulen**.
 - Das geht nur, wenn das Fachbackend nichts über den IdP weiß außer Issuer-URL und Claim-Namen – also genau das, was auch Keycloak liefert.
 - Der IdP kennt umgekehrt keine Fachdaten (`AppUser`, Guthaben, …). Was die Anwendung über einen Nutzer braucht, entsteht auf der Resource-Server-Seite.
-- Abgesichert durch `AuthModuleIsolationTest` (ArchUnit): `auth` importiert nichts aus anderen `com.vacantagent`-Paketen und wird von keinem importiert.
+- Abgesichert durch `AuthModuleIsolationTest` (ArchUnit): `auth` importiert nichts aus anderen `com.nfv`-Paketen und wird von keinem importiert.
 
 ## Bausteine
 
@@ -30,32 +30,32 @@
 | `user/security/AppUserJwtAuthenticationConverter` | JWT → `AppUser` (anlegen falls nötig) → `AppUserAuthentication` mit Principal `CurrentUser(appUserId, username)` |
 | `user/logic/AppUserProvisioning` | race-sicheres Find-or-Create |
 | `common/data/UsernameRevisionListener` | schreibt den Username in `revinfo.username` (Envers) |
-| `auth/logic/TestAccountInitializer` | legt beim Start `test`/`test` an, wenn noch kein `AuthAccount` existiert (`vacantagent.auth.test-account.enabled`) |
+| `auth/logic/TestAccountInitializer` | legt beim Start `test`/`test` an, wenn noch kein `AuthAccount` existiert (`nfv.auth.test-account.enabled`) |
 
-- Signaturschlüssel: `vacantagent.auth.signing-key` (PEM, PKCS#8 RSA, Secret `VACANTAGENT_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
+- Signaturschlüssel: `nfv.auth.signing-key` (PEM, PKCS#8 RSA, Secret `NFV_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
 - Autorisierungen (Codes, Access und Refresh Tokens) und Consents liegen in der Datenbank (`JdbcOAuth2AuthorizationService`).
-- Client `vacantagent-frontend`: öffentlich, Authorization Code + PKCE, Redirect `http://localhost:5173/auth/callback`, kein Consent-Screen.
+- Client `nfv-frontend`: öffentlich, Authorization Code + PKCE, Redirect `http://localhost:5173/auth/callback`, kein Consent-Screen.
 - MCP-Clients: nicht vorregistriert, sondern über ihre `client_id`-URL, siehe unten.
 
 ## Konfiguration
 
 ```properties
 spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8080
-vacantagent.security.username-claim=sub      # Keycloak: preferred_username
-vacantagent.security.roles-claim=roles       # Keycloak: realm_access.roles
+nfv.security.username-claim=sub      # Keycloak: preferred_username
+nfv.security.roles-claim=roles       # Keycloak: realm_access.roles
 spring.security.oauth2.authorizationserver.*  # nur eigener IdP
-vacantagent.auth.cors.allowed-origins=…       # nur eigener IdP
-vacantagent.auth.test-account.enabled=true    # nur eigener IdP, in Produktion false
-vacantagent.auth.signing-key=…                # nur eigener IdP, PEM
-vacantagent.auth.allowed-resources=…          # nur eigener IdP, Default ${vacantagent.mcp.resource-uri}
-vacantagent.auth.cimd.*                       # nur eigener IdP, MCP-Clients, siehe unten
-vacantagent.mcp.resource-uri=${vacantagent.backend-url}/mcp
-vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools brauchen mcp:write
+nfv.auth.cors.allowed-origins=…       # nur eigener IdP
+nfv.auth.test-account.enabled=true    # nur eigener IdP, in Produktion false
+nfv.auth.signing-key=…                # nur eigener IdP, PEM
+nfv.auth.allowed-resources=…          # nur eigener IdP, Default ${nfv.mcp.resource-uri}
+nfv.auth.cimd.*                       # nur eigener IdP, MCP-Clients, siehe unten
+nfv.mcp.resource-uri=${nfv.backend-url}/mcp
+nfv.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools brauchen mcp:write
 ```
 
 ## Frontend
 
-- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:8080`, `vacantagent-frontend`).
+- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:8080`, `nfv-frontend`).
 - `RequireAuth` schützt das Dashboard: nicht angemeldet → `signinRedirect` → Login-Seite des IdP.
 - `/auth/callback` (`AuthCallback`): Code-Tausch durch den `AuthProvider`, danach Weiterleitung auf die Dashboard-Startseite `/`.
 - Tokens im `sessionStorage`. Kein Refresh Token (öffentlicher Client): bei Ablauf des Access Tokens oder einer 401 der API wird der Nutzer entfernt und der Login neu gestartet; solange die IdP-Session besteht, ohne erneute Passworteingabe.
@@ -73,7 +73,7 @@ vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen
 
 ### Login (Authorization Code + PKCE)
 
-1. Frontend → `GET /oauth2/authorize?response_type=code&client_id=vacantagent-frontend&code_challenge=…`.
+1. Frontend → `GET /oauth2/authorize?response_type=code&client_id=nfv-frontend&code_challenge=…`.
 2. Login per Formular. Danach setzt der IdP die gespeicherte Anfrage fort und leitet mit `code` zurück zum Frontend.
 3. Frontend → `POST /oauth2/token` mit `code` + `code_verifier` → Access Token (JWT, `sub` = Username, `roles`, `email`) und ID Token.
 
@@ -101,7 +101,7 @@ vacantagent.mcp.read-tools=…                  # noch keine Tools; alle anderen
 
 ## MCP-Clients (CIMD)
 
-MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Sie werden nicht vorab registriert: Die `client_id` ist die HTTPS-URL eines **Client ID Metadata Documents** (CIMD), das der IdP abruft und prüft. Konzept und Entscheidungen: [CIMD-Konzept: MCP-Authentifizierung für VacantAgent](https://claude.ai/artifact/Nhx7NcpAaE12WVo4KcW9TG).
+MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Sie werden nicht vorab registriert: Die `client_id` ist die HTTPS-URL eines **Client ID Metadata Documents** (CIMD), das der IdP abruft und prüft. Konzept und Entscheidungen: [CIMD-Konzept: MCP-Authentifizierung für Nfv](https://claude.ai/artifact/Nhx7NcpAaE12WVo4KcW9TG).
 
 ### Ablauf
 
@@ -119,12 +119,12 @@ MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization S
 
 | Regel | Umsetzung |
 |---|---|
-| Nur bekannte Clients | `vacantagent.auth.cimd.allowed-client-ids`: Claude (Web/Desktop/Mobile), Claude Code, ChatGPT (Präfix), VS Code. Nicht gelistete URLs werden nie abgerufen. |
+| Nur bekannte Clients | `nfv.auth.cimd.allowed-client-ids`: Claude (Web/Desktop/Mobile), Claude Code, ChatGPT (Präfix), VS Code. Nicht gelistete URLs werden nie abgerufen. |
 | `client_id`-URL | `https`, Port 443, mit Pfad, ohne Query, Fragment, User-Info und Dot-Segmente (`ClientMetadataValidator.validateClientId`) |
 | Dokument | `client_id` gleich URL, `client_name` (bereinigt, max. 100 Zeichen), `token_endpoint_auth_method` `none`, nur Code-Flow, 1–20 Redirect-URIs: `https`, Loopback (`http://127.0.0.1`, `[::1]`, `localhost`) oder privates Schema der eigenen Domain (`ai.claude:/…` für `claude.ai`) |
 | SSRF-Schutz | `HttpsClientMetadataSource`: alle aufgelösten Adressen müssen öffentlich sein (`AddressPolicy`), Verbindung genau zur geprüften IP (kein DNS-Rebinding), TLS mit Hostname-Prüfung, keine Redirects, kein Proxy, 3 s, 5 KB, max. 10 Abrufe pro Host und Minute |
 | Cache | `auth_cimd_client`, TTL aus `Cache-Control: max-age`, begrenzt auf 5 min – 24 h, ohne Angabe 1 h. Ist der Host nicht erreichbar, gilt das alte Dokument noch 24 h. |
-| Lokale Apps nur lesend | Redirect-URI nicht `https` (Loopback, privates Schema) → nur `vacantagent.auth.cimd.native-scopes` (`mcp:read`). Grund: Jedes Programm auf dem Rechner kann einen Loopback-Port öffnen und sich als der Client ausgeben, PKCE schützt davor nicht. Clients ohne `https`-Redirect bekommen ausschließlich `mcp:read`. |
+| Lokale Apps nur lesend | Redirect-URI nicht `https` (Loopback, privates Schema) → nur `nfv.auth.cimd.native-scopes` (`mcp:read`). Grund: Jedes Programm auf dem Rechner kann einen Loopback-Port öffnen und sich als der Client ausgeben, PKCE schützt davor nicht. Clients ohne `https`-Redirect bekommen ausschließlich `mcp:read`. |
 | Audience | Token-Request mit anderem `resource` → `invalid_target`. Tokens mit `aud` = MCP-URI lehnt `/api/**` ab, Tokens ohne diese `aud` lehnt `/mcp` ab. |
 | Refresh | `PublicClientRefreshAuthenticationConverter`/`-Provider` authentifizieren öffentliche Clients nur mit `client_id`, `PublicClientRefreshTokenGenerator` gibt ihnen Refresh Tokens. Rotation: ein benutztes Refresh Token ist ungültig. |
 
@@ -136,8 +136,8 @@ MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization S
 ### Lokal testen
 
 - Automatisiert: `McpAuthorizationFlowTest` spielt den kompletten Ablauf mit einem Stub für die Metadata Documents durch (Discovery, Consent, Token, Scopes pro Tool, Refresh, Loopback, Revoke). Unit-Tests: `ClientMetadataValidatorTest`, `RedirectUrisTest`, `AddressPolicyTest`, `CimdClientResolverTest`.
-- Manuell mit Claude Code (Loopback, also nur lesend): Backend starten, `claude mcp add --transport http vacantagent http://localhost:8080/mcp`, in Claude Code `/mcp` → Authentifizieren. Dafür `vacantagent.backend-url` unverändert lassen (`http://localhost:8080`).
-- Manuell mit Claude Web/ChatGPT: Die Clients erreichen nur öffentliche HTTPS-URLs, also einen Tunnel nutzen (z. B. `cloudflared tunnel --url http://localhost:8080`) und `VACANTAGENT_BACKEND_URL` auf die Tunnel-URL setzen, dann in Claude unter „Connectors“ `https://<tunnel>/mcp` hinzufügen.
+- Manuell mit Claude Code (Loopback, also nur lesend): Backend starten, `claude mcp add --transport http nfv http://localhost:8080/mcp`, in Claude Code `/mcp` → Authentifizieren. Dafür `nfv.backend-url` unverändert lassen (`http://localhost:8080`).
+- Manuell mit Claude Web/ChatGPT: Die Clients erreichen nur öffentliche HTTPS-URLs, also einen Tunnel nutzen (z. B. `cloudflared tunnel --url http://localhost:8080`) und `NFV_BACKEND_URL` auf die Tunnel-URL setzen, dann in Claude unter „Connectors“ `https://<tunnel>/mcp` hinzufügen.
 - MCP Inspector (`npx @modelcontextprotocol/inspector`) ist nicht auf der Allowlist und wird abgewiesen.
 
 ## Wechsel zu Keycloak
@@ -145,8 +145,8 @@ MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization S
 1. Realm + öffentlichen Client (PKCE) anlegen, Self-Registration aktivieren, **„Edit username“ deaktivieren** (das Mapping hängt am Username).
 2. Accounts migrieren (bcrypt-Hashes sind importierbar), Usernames unverändert übernehmen.
 3. `issuer-uri`, `username-claim=preferred_username`, `roles-claim=realm_access.roles` setzen.
-4. MCP: Keycloak muss CIMD unterstützen und `aud` auf `vacantagent.mcp.resource-uri` setzen (Audience-Mapper), die Scopes `mcp:read`/`mcp:write` anlegen. `ProtectedResourceMetadataController` meldet dann den Keycloak-Issuer.
-5. Entfernen: Paket `com.vacantagent.auth`, `templates/auth`, die Properties `spring.security.oauth2.authorizationserver.*` und `vacantagent.auth.*`, die Abhängigkeiten `spring-boot-starter-security-oauth2-authorization-server` und `spring-boot-starter-thymeleaf`.
+4. MCP: Keycloak muss CIMD unterstützen und `aud` auf `nfv.mcp.resource-uri` setzen (Audience-Mapper), die Scopes `mcp:read`/`mcp:write` anlegen. `ProtectedResourceMetadataController` meldet dann den Keycloak-Issuer.
+5. Entfernen: Paket `com.nfv.auth`, `templates/auth`, die Properties `spring.security.oauth2.authorizationserver.*` und `nfv.auth.*`, die Abhängigkeiten `spring-boot-starter-security-oauth2-authorization-server` und `spring-boot-starter-thymeleaf`.
 6. Migrationen `V3__auth_account.sql` und `V17__oauth2_authorization.sql` im Repo lassen (Flyway-Historie) und die Tabellen mit einer neuen Migration droppen.
 7. Frontend: nur `authority` (Issuer) und `client_id` der OIDC-Konfiguration ändern.
 
