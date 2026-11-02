@@ -23,6 +23,9 @@
     "description" : "Routes between the stops of a trip and their waypoints",
     "name" : "Routes"
   }, {
+    "description" : "Route suggestions when planning, see Docs/recommendations.md",
+    "name" : "Suggestions"
+  }, {
     "description" : "Top up platform credit via PayPal",
     "name" : "Top-ups"
   }, {
@@ -569,6 +572,44 @@
         "tags" : [ "Onboarding" ]
       }
     },
+    "/api/v1/routes/{routeId}/suggestions" : {
+      "post" : {
+        "description" : "Reuses the current set if nothing changed since. Without departure or coordinates there is no set, see problem.",
+        "operationId" : "suggest",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/SuggestionRequestDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SuggestionSetDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Suggestions for a route",
+        "tags" : [ "Suggestions" ]
+      }
+    },
     "/api/v1/stops/{stopId}/accommodation-bookings" : {
       "post" : {
         "operationId" : "createAccommodationBooking",
@@ -605,6 +646,72 @@
         },
         "summary" : "Add an accommodation booking to a stop",
         "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/suggestion-sets/{setId}" : {
+      "get" : {
+        "description" : "With the planned route as of now for comparison.",
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "setId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/SuggestionSetDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "A set of suggestions",
+        "tags" : [ "Suggestions" ]
+      }
+    },
+    "/api/v1/suggestion-sets/{setId}/options/{optionId}/apply" : {
+      "post" : {
+        "description" : "Its via points replace the waypoints of the route, which is planned again. 409 SUGGESTION_STALE if the route changed since.",
+        "operationId" : "apply",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "setId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "optionId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AppliedSuggestionDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Apply a suggestion",
+        "tags" : [ "Suggestions" ]
       }
     },
     "/api/v1/trips" : {
@@ -1498,6 +1605,28 @@
           }
         }
       },
+      "AppliedSuggestionDto" : {
+        "type" : "object",
+        "description" : "Suggestion applied: waypoints replaced and the route planned again, read it via GET /trips/{tripId}/routes/{routeId}",
+        "properties" : {
+          "planOutcome" : {
+            "type" : [ "string", "null" ],
+            "description" : "Outcome of planning, the waypoints stay even if it failed",
+            "enum" : [ "PLANNED", "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE", "ROUTING_UNAVAILABLE" ]
+          },
+          "planReason" : {
+            "type" : [ "string", "null" ]
+          },
+          "routeId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "AssistantStatusDto" : {
         "type" : "object",
         "description" : "Whether confirmations can be read automatically (assistant configured)",
@@ -1586,6 +1715,25 @@
           }
         }
       },
+      "ConflictDto" : {
+        "type" : "object",
+        "description" : "Incident passed during its validity",
+        "properties" : {
+          "delaySeconds" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Expected delay in seconds, null if unknown"
+          },
+          "impact" : {
+            "type" : "string",
+            "enum" : [ "BLOCKED", "DELAYED" ]
+          },
+          "incidentId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "CreateStopDto" : {
         "type" : "object",
         "description" : "Stop added to the trip, points in time with the offset of the place or the user",
@@ -1630,6 +1778,20 @@
           "startAt" : {
             "type" : "string",
             "format" : "date-time"
+          }
+        }
+      },
+      "GeoPointDto" : {
+        "type" : "object",
+        "description" : "Point in WGS84",
+        "properties" : {
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
           }
         }
       },
@@ -1811,6 +1973,43 @@
         },
         "required" : [ "complete", "payoutAccountLinked", "registered" ]
       },
+      "ReferenceRouteDto" : {
+        "type" : "null",
+        "description" : "The planned route evaluated like the suggestions, e.g. \"as planned (+45 min)\"",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Arrival including delays"
+          },
+          "blocked" : {
+            "type" : "boolean",
+            "description" : "Passes a closure during its validity"
+          },
+          "conflicts" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ConflictDto"
+            }
+          },
+          "delaySeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "departureAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "distanceMeters" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "durationSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "RouteDetailDto" : {
         "type" : "object",
         "description" : "Route with its waypoints in order",
@@ -1858,6 +2057,91 @@
           }
         }
       },
+      "RouteOptionDto" : {
+        "type" : "object",
+        "description" : "One route suggestion, rank 1 is the best",
+        "properties" : {
+          "appliedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "arrivalAt" : {
+            "type" : "string",
+            "format" : "date-time",
+            "description" : "Arrival at the end stop including waiting and delays"
+          },
+          "conflicts" : {
+            "type" : "array",
+            "description" : "Incidents still passed on this way",
+            "items" : {
+              "$ref" : "#/components/schemas/ConflictDto"
+            }
+          },
+          "delaySeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "departureAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "distanceMeters" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "durationSeconds" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Driving time in seconds, without waiting and delays"
+          },
+          "geometry" : {
+            "type" : "array",
+            "description" : "Line for the map",
+            "items" : {
+              "$ref" : "#/components/schemas/GeoPointDto"
+            }
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "ALTERNATIVES", "KEEP_ROUTE", "DEPARTURE_SHIFT" ]
+          },
+          "labels" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string",
+              "enum" : [ "FASTEST", "SHORTEST", "CURRENT", "AVOIDS_INCIDENT", "HAS_INCIDENT", "LATER_DEPARTURE", "EARLIER_DEPARTURE", "FERRY" ]
+            }
+          },
+          "rank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "sharedRatio" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "Part of the distance shared with the planned route (0 to 1), null if not planned"
+          },
+          "via" : {
+            "type" : [ "string", "null" ],
+            "description" : "Main road of the part that differs from the fastest way, e.g. SH 2"
+          },
+          "viaPoints" : {
+            "type" : "array",
+            "description" : "Points that become waypoints when applied",
+            "items" : {
+              "$ref" : "#/components/schemas/GeoPointDto"
+            }
+          },
+          "waitingSeconds" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "StopDto" : {
         "type" : "object",
         "properties" : {
@@ -1887,6 +2171,72 @@
           "position" : {
             "type" : "integer",
             "format" : "int32"
+          }
+        }
+      },
+      "SuggestionRequestDto" : {
+        "type" : "null",
+        "description" : "Request for route suggestions when planning",
+        "properties" : {
+          "count" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Suggestions wanted, 1 to 5, default 3"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Departure to try instead of the one at the start stop, not stored at the stop"
+          },
+          "includeWaypoints" : {
+            "type" : [ "boolean", "null" ],
+            "description" : "true: through the waypoints of the route, default false: only between the stops, applying a suggestion then removes the waypoints"
+          }
+        }
+      },
+      "SuggestionSetDto" : {
+        "type" : "object",
+        "description" : "Route suggestions of a route, or why there are none (problem)",
+        "properties" : {
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "expiresAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "null if there is a problem"
+          },
+          "options" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/RouteOptionDto"
+            }
+          },
+          "problem" : {
+            "type" : [ "string", "null" ],
+            "description" : "MISSING_COORDINATES, MISSING_DEPARTURE or NO_ROUTE, null if there are suggestions",
+            "enum" : [ "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE" ]
+          },
+          "reference" : {
+            "$ref" : "#/components/schemas/ReferenceRouteDto",
+            "description" : "The planned route for comparison, null if not planned"
+          },
+          "routeId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "status" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "CURRENT", "STALE", "APPLIED", "EXPIRED" ]
+          },
+          "waypointMode" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "IGNORE", "FOLLOW" ]
           }
         }
       },
@@ -2143,6 +2493,11 @@
           },
           "name" : {
             "type" : [ "string", "null" ]
+          },
+          "origin" : {
+            "type" : "string",
+            "description" : "USER: chosen by the user, SUGGESTION: created by applying a route suggestion",
+            "enum" : [ "USER", "SUGGESTION" ]
           },
           "position" : {
             "type" : "integer",

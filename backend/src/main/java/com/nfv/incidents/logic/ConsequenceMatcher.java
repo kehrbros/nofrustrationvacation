@@ -3,9 +3,7 @@ package com.nfv.incidents.logic;
 import com.nfv.incidents.data.ConsequenceRepository;
 import com.nfv.incidents.data.IncidentRepository;
 import com.nfv.incidents.entities.Consequence;
-import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.entities.Incident;
-import com.nfv.incidents.entities.IncidentType;
 import com.nfv.trips.data.RouteSectionRepository;
 import com.nfv.trips.entities.RouteSection;
 import lombok.RequiredArgsConstructor;
@@ -87,10 +85,10 @@ public class ConsequenceMatcher {
             Incident incident = match.incident();
             Consequence consequence = remaining.remove(key.apply(match));
             if (consequence == null) {
-                consequence = new Consequence(incident, match.routeId(), match.section().getId(), impactOf(incident),
+                consequence = new Consequence(incident, match.routeId(), match.section().getId(), incident.impact(),
                         incident.getExpectedDelay(), now);
             } else {
-                consequence.update(match.section().getId(), impactOf(incident), incident.getExpectedDelay(), now);
+                consequence.update(match.section().getId(), incident.impact(), incident.getExpectedDelay(), now);
             }
             result.add(consequence);
         }
@@ -102,10 +100,6 @@ public class ConsequenceMatcher {
         return sections.stream().collect(Collectors.toMap(s -> s.getRoute().getId(), Function.identity(),
                 (a, b) -> a.getPosition() <= b.getPosition() ? a : b,
                 LinkedHashMap::new));
-    }
-
-    private static Impact impactOf(Incident incident) {
-        return incident.getType() == IncidentType.CLOSURE ? Impact.BLOCKED : Impact.DELAYED;
     }
 
     private record Match(Incident incident, long routeId, RouteSection section) {

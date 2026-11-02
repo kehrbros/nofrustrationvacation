@@ -4,6 +4,8 @@ import com.nfv.common.data.AbstractEntity;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -31,18 +33,23 @@ public class Waypoint extends AbstractEntity {
     private @Nullable String name;
     /** Road the point should snap to, e.g. {@code SH 73}. */
     private @Nullable String roadHint;
+    /** Set on creation, stays when the waypoint is changed. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private WaypointOrigin origin;
 
     protected Waypoint() {
     }
 
     public Waypoint(Route route, int position, double latitude, double longitude, @Nullable String name,
-                    @Nullable String roadHint) {
+                    @Nullable String roadHint, WaypointOrigin origin) {
         this.route = route;
         this.position = position;
         this.latitude = latitude;
         this.longitude = longitude;
         this.name = name;
         this.roadHint = roadHint;
+        this.origin = origin;
     }
 
     public void moveTo(int position) {

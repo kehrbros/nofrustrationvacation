@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`, Streckenvorschläge und `waypoint.origin` `V29__recommendations.sql`.
 
 ## Bounded Contexts
 
@@ -13,9 +13,10 @@
 | `com.nfv.bookings` | `Booking`, `AccommodationDetails` |
 | `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.nfv.incidents` | `Incident`, `Consequence` |
+| `com.nfv.recommendations` | `SuggestionSet`, `RouteOption` (mit `RouteOptionPoint`, `RouteOptionConflict`) |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` und `SuggestionSet`/`RouteOption` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
@@ -32,6 +33,7 @@
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
 - `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`.
 - **`Waypoint`:** Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet (`position`, eindeutig je Route), ohne Aufenthalt. Koordinate Pflicht, optional Name und Straßenhinweis (z. B. `SH 73`). Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert, die Referenz auf die Route nicht (Route ist nicht historisiert).
+  - `origin`: `USER` (vom Nutzer) oder `SUGGESTION` (beim Übernehmen eines Streckenvorschlags erzeugt), beim Anlegen gesetzt und danach unverändert, auch wenn der Nutzer den Waypoint ändert. REST und MCP legen immer `USER` an.
 - Waypoints einer Route werden als geordnete Liste ersetzt: mit Id geändert, ohne Id angelegt, fehlende gelöscht.
 - **Planen:** `RoutePlanning.plan(routeId)` holt Stops und Waypoints, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus der Abfahrt am Start-Stop plus den Dauern der Segmente davor und übergibt `PlannedSection`s an `RouteLogic.replaceSections`. Routing läuft außerhalb der Transaktion.
   - Ergebnis `PlanResult` mit `PlanOutcome`: `PLANNED`, `MISSING_COORDINATES` (ein Stop ohne Koordinaten), `MISSING_DEPARTURE` (Start-Stop ohne Abfahrt, keine Zeit geraten), `NO_ROUTE` (mit Grund), `ROUTING_UNAVAILABLE` (Streckennetz noch nicht geladen, später erneut planen). Außer bei `PLANNED` bleiben die Sections unverändert.
@@ -89,15 +91,20 @@
 
 1. **Incident neu oder geändert** (`IncidentLogic.create`/`change`): Segmente des Incidents → über den Index Segment → RouteSection (`ix_route_section_segment`) die Sections darauf, deren erwartete Durchfahrt die Gültigkeit überschneidet → je Route eine Consequence.
 2. **Route neu oder geändert** (`RouteChanged`, synchron in derselben Transaktion): Segmente der Route → aktive Incidents darauf (`validTo` leer oder nicht vorbei) → dieselbe Prüfung auf Überschneidung.
-- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`).
+- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`). Als reine Funktion `IncidentOverlap` in `incidents.logic`, auch für die Bewertung von Streckenvorschlägen. Andere Module lesen Incidents über `ActiveIncidents.onSegments` (Records, keine Entities).
 - Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht.
 - Tests: `ConsequenceMatchingTest`.
+
+## Streckenvorschläge
+
+- Für eine Route bis zu `n` Vorschläge, wie gefahren werden kann, bei der Planung und wenn ein Incident die Route trifft. Beide aus einem `Scenario` (Punkte, Abfahrt, Sperren/Verzögerungen, Referenzroute) mit derselben Logik, Details in [recommendations.md](recommendations.md).
+- Übernehmen speichert Via-Punkte als `Waypoint` (`origin` `SUGGESTION`) und plant die Route neu, keine Segmentliste.
 
 ## Offen
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
 - **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
-- **Neuplanung:** nach `NetworkRefreshed` (betroffene Routen neu planen) und Routen mit `ROUTING_UNAVAILABLE` automatisch erneut planen fehlen noch. Umfahrung bei `BLOCKED` über `recommendations`.
+- **Neuplanung:** nach `NetworkRefreshed` (betroffene Routen neu planen) und Routen mit `ROUTING_UNAVAILABLE` automatisch erneut planen fehlen noch. Umfahrung bei `BLOCKED` über `recommendations`, Entwurf in [recommendations.md](recommendations.md).
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
 - **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.

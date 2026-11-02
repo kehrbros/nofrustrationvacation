@@ -1,5 +1,6 @@
 package com.nfv.network.logic;
 
+import com.carrotsearch.hppc.IntDoubleHashMap;
 import com.carrotsearch.hppc.IntHashSet;
 import com.graphhopper.GraphHopper;
 import lombok.RequiredArgsConstructor;
@@ -11,9 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.Clock;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Writes the segments of a graph into {@code road_segment} (upsert on the business key) and its {@code edge_mapping},
@@ -88,17 +91,34 @@ class SegmentWriter {
     @Transactional(readOnly = true)
     public IntHashSet edgeKeys(long versionId, Collection<Long> segmentIds) {
         IntHashSet keys = new IntHashSet();
-        if (segmentIds.isEmpty()) {
-            return keys;
+        if (!segmentIds.isEmpty()) {
+            queryEdgeKeys(versionId, segmentIds, rs -> keys.add(rs.getInt(1)));
         }
+        return keys;
+    }
+
+    /**
+     * Extra seconds per edge key of the delayed segments in a version. A segment is one direction of an edge, several
+     * edge keys only for identical duplicate edges: a passage uses one of them, so each gets the full delay.
+     */
+    @Transactional(readOnly = true)
+    public IntDoubleHashMap edgeDelays(long versionId, Map<Long, Duration> delays) {
+        IntDoubleHashMap seconds = new IntDoubleHashMap();
+        if (!delays.isEmpty()) {
+            queryEdgeKeys(versionId, delays.keySet(),
+                    rs -> seconds.put(rs.getInt(1), delays.get(rs.getLong(2)).toMillis() / 1000.0));
+        }
+        return seconds;
+    }
+
+    private void queryEdgeKeys(long versionId, Collection<Long> segmentIds, RowCallbackHandler handler) {
         jdbc.query(connection -> {
-            PreparedStatement statement = connection.prepareStatement(
-                    "SELECT edge_key FROM edge_mapping WHERE extract_version_id = ? AND road_segment_id = ANY(?)");
+            PreparedStatement statement = connection.prepareStatement("SELECT edge_key, road_segment_id"
+                    + " FROM edge_mapping WHERE extract_version_id = ? AND road_segment_id = ANY(?)");
             statement.setLong(1, versionId);
             statement.setArray(2, connection.createArrayOf("bigint", segmentIds.toArray()));
             return statement;
-        }, (RowCallbackHandler) rs -> keys.add(rs.getInt(1)));
-        return keys;
+        }, handler);
     }
 
     /** Removes the mapping of a version that is no longer in use. */

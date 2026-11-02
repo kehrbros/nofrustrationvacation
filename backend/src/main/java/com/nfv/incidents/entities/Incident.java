@@ -1,6 +1,7 @@
 package com.nfv.incidents.entities;
 
 import com.nfv.common.data.AbstractEntity;
+import com.nfv.incidents.logic.IncidentOverlap;
 import jakarta.annotation.Nullable;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
@@ -69,6 +70,10 @@ public class Incident extends AbstractEntity {
 
     /** Whether a passage during {@code [start, end]} falls into the validity. */
     public boolean overlaps(OffsetDateTime start, OffsetDateTime end) {
-        return !end.isBefore(validFrom) && (validTo == null || !start.isAfter(validTo));
+        return IncidentOverlap.overlaps(validFrom, validTo, start, end);
+    }
+
+    public Impact impact() {
+        return IncidentOverlap.impactOf(type);
     }
 }

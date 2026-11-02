@@ -41,49 +41,93 @@ public class Routing {
      */
     public RouteResult route(List<RoutePoint> points, RouteOptions options) {
         validate(points);
-        String region = graphs.regionContaining(points.stream().map(RoutePoint::point).toList())
+        String region = region(points);
+        return graphs.withGraph(region, graph -> {
+            GHRequest request = request(graph, points, options);
+            routeRequest(region, request, points);
+            return result(region, graph, points, response(graph, request).getBest());
+        });
+    }
+
+    /**
+     * Fastest route and alternatives between two stops with GraphHopper {@code alternative_route}. GraphHopper 11.1
+     * supports neither curbsides nor pass_through there, see Docs/recommendations.md#generatoren.
+     *
+     * @return at least one route, the first is the fastest
+     * @throws NoRouteException            point outside every region, too far from a road or not connected
+     * @throws RoutingUnavailableException no region has a graph yet
+     */
+    public List<RouteResult> alternatives(RoutePoint from, RoutePoint to, RouteOptions options,
+                                          AlternativeOptions alternatives) {
+        List<RoutePoint> points = List.of(from, to);
+        validate(points);
+        String region = region(points);
+        return graphs.withGraph(region, graph -> {
+            GHRequest request = request(graph, points, options);
+            request.setAlgorithm(Parameters.Algorithms.ALT_ROUTE);
+            request.putHint(Parameters.Algorithms.AltRoute.MAX_PATHS, alternatives.maxPaths());
+            request.putHint(Parameters.Algorithms.AltRoute.MAX_WEIGHT, alternatives.maxWeightFactor());
+            request.putHint(Parameters.Algorithms.AltRoute.MAX_SHARE, alternatives.maxShareFactor());
+            return response(graph, request).getAll().stream()
+                    .map(path -> result(region, graph, points, path))
+                    .toList();
+        });
+    }
+
+    private String region(List<RoutePoint> points) {
+        return graphs.regionContaining(points.stream().map(RoutePoint::point).toList())
                 .orElseThrow(() -> graphs.anyReady()
                         ? new NoRouteException("points outside of all regions")
                         : new RoutingUnavailableException("no region ready yet"));
-        return graphs.withGraph(region, graph -> route(region, graph, points, options));
     }
 
-    private RouteResult route(String region, Graphs.LoadedGraph graph, List<RoutePoint> points,
-                              RouteOptions options) {
-        GHResponse response = graph.hopper().route(request(region, graph, points, options));
+    private static GHResponse response(Graphs.LoadedGraph graph, GHRequest request) {
+        GHResponse response = graph.hopper().route(request);
         if (response.hasErrors()) {
             throw error(response.getErrors().getFirst());
         }
-        ResponsePath path = response.getBest();
+        return response;
+    }
+
+    private static RouteResult result(String region, Graphs.LoadedGraph graph, List<RoutePoint> points,
+                                      ResponsePath path) {
         List<Interval> intervals = intervals(path);
         List<RoutedSegment> segments = segments(graph, path, intervals);
         return new RouteResult(region, graph.versionId(), path.getDistance(), Duration.ofMillis(path.getTime()),
                 line(path.getPoints()), segments, snappedPoints(points, path, intervals, graph));
     }
 
-    private GHRequest request(String region, Graphs.LoadedGraph graph, List<RoutePoint> points,
-                              RouteOptions options) {
-        String stopSide = properties.regions().get(region).drivingSide() == NetworkProperties.DrivingSide.LEFT
-                ? Parameters.Curbsides.CURBSIDE_LEFT : Parameters.Curbsides.CURBSIDE_RIGHT;
+    /** Request with points, details and the restrictions of the options, shared by route and alternatives. */
+    private GHRequest request(Graphs.LoadedGraph graph, List<RoutePoint> points, RouteOptions options) {
         GHRequest request = new GHRequest(points.stream()
                 .map(point -> new GHPoint(point.point().lat(), point.point().lon())).toList())
                 .setProfile(NetworkGraphHopper.PROFILE)
                 .setPathDetails(List.of(Parameters.Details.EDGE_KEY, Parameters.Details.DISTANCE,
                         Parameters.Details.TIME))
-                .setCurbsides(points.stream().map(point -> point.kind() == RoutePoint.Kind.STOP
-                        ? stopSide : Parameters.Curbsides.CURBSIDE_ANY).toList())
                 .setPointHints(points.stream().map(point -> point.roadHint() == null ? "" : point.roadHint())
                         .toList())
                 .setSnapPreventions(SNAP_PREVENTIONS);
-        // Keep to the curbside where possible, otherwise ignore it (one-way streets)
-        request.putHint("force_curbside", false);
-        // No u-turn at via points
-        request.putHint(Parameters.Routing.PASS_THROUGH, true);
         if (!options.blockedSegmentIds().isEmpty()) {
             request.putHint(NetworkGraphHopper.BLOCKED_EDGE_KEYS,
                     segmentWriter.edgeKeys(graph.versionId(), options.blockedSegmentIds()));
         }
+        if (!options.delayedSegments().isEmpty()) {
+            request.putHint(NetworkGraphHopper.DELAYED_EDGE_KEYS,
+                    segmentWriter.edgeDelays(graph.versionId(), options.delayedSegments()));
+        }
         return request;
+    }
+
+    /** Curbsides at stops and no u-turn at via points, only for {@link #route}. */
+    private void routeRequest(String region, GHRequest request, List<RoutePoint> points) {
+        String stopSide = properties.regions().get(region).drivingSide() == NetworkProperties.DrivingSide.LEFT
+                ? Parameters.Curbsides.CURBSIDE_LEFT : Parameters.Curbsides.CURBSIDE_RIGHT;
+        request.setCurbsides(points.stream().map(point -> point.kind() == RoutePoint.Kind.STOP
+                ? stopSide : Parameters.Curbsides.CURBSIDE_ANY).toList());
+        // Keep to the curbside where possible, otherwise ignore it (one-way streets)
+        request.putHint("force_curbside", false);
+        // No u-turn at via points
+        request.putHint(Parameters.Routing.PASS_THROUGH, true);
     }
 
     /** One driven edge: path point indices, edge key, distance and time summed from the path details. */

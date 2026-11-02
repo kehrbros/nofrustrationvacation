@@ -19,6 +19,7 @@ import com.nfv.trips.entities.RouteSection;
 import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.Waypoint;
+import com.nfv.trips.entities.WaypointOrigin;
 import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.NewWaypoint;
 import com.nfv.trips.logic.PlanResult;
@@ -118,7 +119,7 @@ class RoutePlanningTest {
         Duration direct = duration(routeId);
 
         inTransaction(() -> waypointRepository.save(new Waypoint(routeRepository.findById(routeId).orElseThrow(), 0,
-                KELBURN[0], KELBURN[1], "Kelburn", null)));
+                KELBURN[0], KELBURN[1], "Kelburn", null, WaypointOrigin.USER)));
         PlanResult result = routePlanning.plan(routeId);
 
         assertThat(result.outcome()).isEqualTo(PlanOutcome.PLANNED);

@@ -241,7 +241,7 @@ public class TripLogic {
             String roadHint = strip(waypoint.roadHint());
             if (waypoint.id() == null) {
                 waypointRepository.save(new Waypoint(route, i, waypoint.latitude(), waypoint.longitude(), name,
-                        roadHint));
+                        roadHint, waypoint.origin()));
             } else {
                 Waypoint kept = existing.get(waypoint.id());
                 kept.change(waypoint.latitude(), waypoint.longitude(), name, roadHint);

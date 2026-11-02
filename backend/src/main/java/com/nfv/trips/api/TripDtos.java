@@ -58,6 +58,6 @@ class TripDtos {
 
     static WaypointDto waypoint(Waypoint waypoint) {
         return new WaypointDto(waypoint.getId(), waypoint.getPosition(), waypoint.getLatitude(),
-                waypoint.getLongitude(), waypoint.getName(), waypoint.getRoadHint());
+                waypoint.getLongitude(), waypoint.getName(), waypoint.getRoadHint(), waypoint.getOrigin());
     }
 }
