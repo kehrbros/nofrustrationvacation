@@ -1,14 +1,21 @@
-import { EnvironmentOutlined } from '@ant-design/icons';
+import { CloseOutlined, EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState, type FormEvent } from 'react';
 
+import AddBookingSheet from '../bookings/AddBookingSheet';
+import { createAccommodationBooking } from '../bookings/bookingsApi';
+import { stopTimesFromForm, toInput, type AccommodationForm } from '../bookings/form';
+import type { BookingSource } from '../bookings/model';
 import Sheet from '../components/Sheet';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { useTripContext } from '../trips/tripContext';
 import { localDateTimeIso } from '../trips/time';
 import { addStop } from '../trips/tripsApi';
 
-/** "Stop hinzufügen": place search, arrival and departure; the stop is appended to the trip. */
+/**
+ * "Stop hinzufügen": place search, arrival and departure; the stop is appended to the trip. An accommodation booking
+ * entered here fills place and times if still empty and is saved with the stop.
+ */
 export default function StopSheet() {
   const { trip, reload, close } = useTripContext();
   const [query, setQuery] = useState('');
@@ -19,6 +26,8 @@ export default function StopSheet() {
   const [departure, setDeparture] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [addingBooking, setAddingBooking] = useState(false);
+  const [booking, setBooking] = useState<{ form: AccommodationForm; source: BookingSource } | null>(null);
   const previous = trip.stops.at(-1);
 
   useEffect(() => {
@@ -62,13 +71,24 @@ export default function StopSheet() {
     setSaving(true);
     setError(null);
     try {
-      await addStop(trip.id, {
+      const stop = await addStop(trip.id, {
         name,
         latitude: place?.latitude ?? null,
         longitude: place?.longitude ?? null,
         arrivalAt,
         departureAt,
       });
+      if (booking) {
+        try {
+          await createAccommodationBooking(stop.id, toInput(booking.form, booking.source));
+        } catch {
+          // the stop exists: show it, the booking can be added again from the stop list
+          reload();
+          setSaving(false);
+          setError('Der Stop ist gespeichert, die Buchung nicht. Füge sie in der Liste beim Stop erneut hinzu.');
+          return;
+        }
+      }
       reload();
       close();
     } catch {
@@ -142,11 +162,52 @@ export default function StopSheet() {
           </div>
         </div>
 
-        <span className="va-link-disabled" aria-disabled="true">
-          + Buchung hinzufügen (Unterkunft, Fähre, …) <span className="va-muted">(folgt)</span>
-        </span>
+        {booking ? (
+          <div className="va-booking-row va-booking-draft">
+            <span className="va-booking-icon" aria-hidden="true"><HomeOutlined /></span>
+            <span className="va-column va-grow">
+              <span className="va-strong">{booking.form.name}</span>
+              <span className="va-small va-muted">
+                {booking.form.checkInDate} bis {booking.form.checkOutDate} · wird mit dem Stop gespeichert
+              </span>
+            </span>
+            <button type="button" className="va-icon-button va-plain" aria-label="Buchung entfernen" onClick={() => setBooking(null)}>
+              <CloseOutlined />
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="va-text-button va-add-booking" onClick={() => setAddingBooking(true)}>
+            + Buchung hinzufügen (Unterkunft)
+          </button>
+        )}
         {error && <Alert type="error" showIcon message={error} />}
       </form>
+      {addingBooking && (
+        <AddBookingSheet
+          context="Neuer Stop"
+          submitLabel="Übernehmen"
+          onClose={() => setAddingBooking(false)}
+          onSubmit={async (form, source) => {
+            setBooking({ form, source });
+            // the stay fills what the user has not entered yet
+            if (!place && !query.trim()) {
+              if (form.latitude != null && form.longitude != null) {
+                setPlace({ name: form.name, detail: form.placeDetail, latitude: form.latitude, longitude: form.longitude });
+              } else {
+                setQuery(form.name);
+              }
+            }
+            const times = stopTimesFromForm(form);
+            if (!arrival) {
+              setArrival(times.arrival);
+            }
+            if (!departure) {
+              setDeparture(times.departure);
+            }
+            setAddingBooking(false);
+          }}
+        />
+      )}
     </Sheet>
   );
 }

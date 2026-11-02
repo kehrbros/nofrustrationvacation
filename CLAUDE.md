@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Reise-Incident-App: Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen. Das Repository stammt aus VacantAgent (Paketname `com.vacantagent`).
+Reise-Incident-App: Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen. Das Repository stammt aus Nfv (Paketname `com.nfv`).
 
 ## Verbindliche Vorgaben
 

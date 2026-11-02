@@ -1,7 +1,7 @@
-# Docker Swarm stack of VacantAgent (PostgreSQL, backend and frontend), see Docs/deployment.md.
+# Docker Swarm stack of Nfv (PostgreSQL, backend and frontend), see Docs/deployment.md.
 #
 #   docker compose build                                  # optional, builds the images locally
-#   docker stack deploy -c docker-compose.yml vacantagent
+#   docker stack deploy -c docker-compose.yml nfv
 #
 # The secrets are external and must be created with "docker secret create" before the first deployment.
 # "docker stack deploy" does not read .env files, variables come from the shell (see .env.example).
@@ -13,12 +13,12 @@ services:
       context: ./backend
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_DB: vacantagent
-      POSTGRES_USER: vacantagent
+      POSTGRES_DB: nfv
+      POSTGRES_USER: nfv
       PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
       # Public URLs as seen by the browser: issuer of the IdP, redirect URIs, CORS and PayPal return URLs
-      VACANTAGENT_BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
-      VACANTAGENT_FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      NFV_BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
+      NFV_FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
     # Mounted as files /run/secrets/<target>, Spring reads them via spring.config.import=configtree:/run/secrets/
     # and resolves the placeholders ${PAYPAL_CLIENT_ID} etc. in application.properties
@@ -28,15 +28,17 @@ services:
       - source: paypal_client_secret
         target: PAYPAL_CLIENT_SECRET
       - source: idp_signing_key
-        target: VACANTAGENT_IDP_SIGNING_KEY
+        target: NFV_IDP_SIGNING_KEY
       - source: postgres_password
         target: POSTGRES_PASSWORD
+      - source: openai_api_key
+        target: OPENAI_API_KEY
     ports:
       - target: 8080
         published: ${BACKEND_PORT:-8080}
         protocol: tcp
     networks:
-      - vacantagent
+      - nfv
     deploy:
       replicas: 1
       update_config:
@@ -53,17 +55,17 @@ services:
   postgres:
     image: postgis/postgis:17-3.5-alpine
     environment:
-      POSTGRES_DB: vacantagent
-      POSTGRES_USER: vacantagent
+      POSTGRES_DB: nfv
+      POSTGRES_USER: nfv
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
       - postgres_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
     networks:
-      - vacantagent
+      - nfv
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U vacantagent -d vacantagent"]
+      test: ["CMD-SHELL", "pg_isready -U nfv -d nfv"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -97,7 +99,7 @@ services:
         published: ${FRONTEND_PORT:-80}
         protocol: tcp
     networks:
-      - vacantagent
+      - nfv
     deploy:
       replicas: 2
       update_config:
@@ -112,7 +114,7 @@ services:
           memory: 128M
 
 networks:
-  vacantagent:
+  nfv:
     driver: overlay
 
 volumes:
@@ -121,13 +123,16 @@ volumes:
 secrets:
   paypal_client_id:
     external: true
-    name: vacantagent_paypal_client_id
+    name: nfv_paypal_client_id
   paypal_client_secret:
     external: true
-    name: vacantagent_paypal_client_secret
+    name: nfv_paypal_client_secret
   idp_signing_key:
     external: true
-    name: vacantagent_idp_signing_key
+    name: nfv_idp_signing_key
   postgres_password:
     external: true
-    name: vacantagent_postgres_password
+    name: nfv_postgres_password
+  openai_api_key:
+    external: true
+    name: nfv_openai_api_key

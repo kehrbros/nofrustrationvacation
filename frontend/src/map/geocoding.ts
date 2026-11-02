@@ -10,14 +10,28 @@ export interface Place {
   detail: string;
   latitude: number;
   longitude: number;
+  /** OpenStreetMap object, e.g. osm:node/123. */
+  osmRef?: string;
 }
 
 const PHOTON_URL = import.meta.env.VITE_GEOCODING_URL ?? 'https://photon.komoot.io/api/';
 
 interface PhotonFeature {
   geometry: { coordinates: [number, number] };
-  properties: { name?: string; city?: string; state?: string; country?: string; type?: string };
+  properties: {
+    name?: string;
+    street?: string;
+    housenumber?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    type?: string;
+    osm_type?: string;
+    osm_id?: number;
+  };
 }
+
+const OSM_TYPES: Record<string, string> = { N: 'node', W: 'way', R: 'relation' };
 
 export async function searchPlaces(query: string, signal?: AbortSignal): Promise<Place[]> {
   const url = new URL(PHOTON_URL, window.location.href);
@@ -32,13 +46,15 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
   return (body.features ?? [])
     .filter((feature) => feature.properties.name)
     .map((feature) => {
-      const { name, city, state, country } = feature.properties;
-      const detail = [city !== name ? city : undefined, state, country].filter(Boolean).join(', ');
+      const { name, street, housenumber, city, state, country, osm_type: osmType, osm_id: osmId } = feature.properties;
+      const address = street ? [street, housenumber].filter(Boolean).join(' ') : undefined;
+      const detail = [address, city !== name ? city : undefined, state, country].filter(Boolean).join(', ');
       return {
         name: name!,
         detail,
         longitude: feature.geometry.coordinates[0],
         latitude: feature.geometry.coordinates[1],
+        osmRef: osmType && osmId ? `osm:${OSM_TYPES[osmType] ?? osmType}/${osmId}` : undefined,
       };
     });
 }

@@ -42,7 +42,7 @@
   - `RouteOptions`: derzeit nur `blockedSegmentIds`. Geplant mit `recommendations`: `delayedSegments` (Zuschlag ≥ 0), siehe [recommendations.md](recommendations.md#schnittstellen). Gewichte steigen nur, LM bleibt gültig. Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
   - Geplant `Routing.alternatives`: Alternativen über GraphHopper `alternative_route` (mit LM möglich). In 11.1 nur zwei Punkte, ohne `pass_through` und `curbsides`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
-  - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph, später 503).
+  - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
 - `SegmentQueries`: Details zu Segmenten (`ref`, Name, Geometrie, ausgemustert) für API und Benachrichtigungen.
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
@@ -63,17 +63,17 @@
 ## Konfiguration
 
   ```properties
-  vacantagent.network.import-on-start=true
-  vacantagent.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
-  vacantagent.network.regions.nz.graph-dir=./data/graphs/nz
+  nfv.network.import-on-start=true
+  nfv.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
+  nfv.network.regions.nz.graph-dir=./data/graphs/nz
   # MMAP: Graph außerhalb des Heaps, RAM_STORE in Tests
-  vacantagent.network.regions.nz.data-access=MMAP
-  vacantagent.network.regions.nz.driving-side=LEFT
-  vacantagent.network.regions.nz.ferries=true
+  nfv.network.regions.nz.data-access=MMAP
+  nfv.network.regions.nz.driving-side=LEFT
+  nfv.network.regions.nz.ferries=true
   # Geplant
-  vacantagent.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
-  vacantagent.network.regions.nz.refresh-cron=0 0 3 * * SUN
-  vacantagent.network.regions.nz.min-segment-ratio=0.95
+  nfv.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
+  nfv.network.regions.nz.refresh-cron=0 0 3 * * SUN
+  nfv.network.regions.nz.min-segment-ratio=0.95
   ```
 
 - Noch keine Region in `application.properties`, bis der Download kommt.

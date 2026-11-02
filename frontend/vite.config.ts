@@ -2,9 +2,9 @@ import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
-// Same variable as the backend (vacantagent.frontend-url). Set it to serve the dev server under another host than
+// Same variable as the backend (nfv.frontend-url). Set it to serve the dev server under another host than
 // localhost, e.g. http://localtest.me:5173 for the PayPal sandbox, see Docs/paypal.md.
-const frontendUrl = process.env.VACANTAGENT_FRONTEND_URL;
+const frontendUrl = process.env.NFV_FRONTEND_URL;
 
 export default defineConfig({
   plugins: [
@@ -30,9 +30,23 @@ export default defineConfig({
           { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
           { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
+        // Android: share a booking confirmation to the installed app (src/bookings/shareTarget.ts)
+        share_target: {
+          action: '/teilen',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text: 'text',
+            url: 'url',
+            files: [{ name: 'files', accept: ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf'] }],
+          },
+        },
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // receives shared confirmations (POST /teilen), see public/share-target-sw.js
+        importScripts: ['share-target-sw.js'],
         // the map chunk is about 1 MB
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',

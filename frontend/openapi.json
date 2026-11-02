@@ -20,8 +20,14 @@
     "description" : "Steps before a user can act in a role",
     "name" : "Onboarding"
   }, {
+    "description" : "Routes between the stops of a trip and their waypoints",
+    "name" : "Routes"
+  }, {
     "description" : "Top up platform credit via PayPal",
     "name" : "Top-ups"
+  }, {
+    "description" : "Bookings at the stops of the authenticated user's trips, first accommodations",
+    "name" : "Bookings"
   }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
@@ -66,6 +72,45 @@
           }
         },
         "tags" : [ "protected-resource-metadata-controller" ]
+      }
+    },
+    "/api/v1/accommodation-bookings/{bookingId}" : {
+      "put" : {
+        "description" : "Source and status stay.",
+        "operationId" : "changeAccommodationBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccommodationBookingInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Replace an accommodation booking",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/accounting/balances" : {
@@ -402,6 +447,85 @@
         "tags" : [ "Top-ups" ]
       }
     },
+    "/api/v1/bookings/accommodation-drafts" : {
+      "post" : {
+        "description" : "Pasted or shared text and/or a screenshot (JPEG, PNG, WebP, GIF) or PDF up to 5 MB. The content is sent to the language model (OpenAI) and not stored. 503 ASSISTANT_UNAVAILABLE if the assistant is not configured or fails, 429 ASSISTANT_RATE_LIMITED.",
+        "operationId" : "extractAccommodation",
+        "requestBody" : {
+          "content" : {
+            "multipart/form-data" : {
+              "schema" : {
+                "type" : "object",
+                "properties" : {
+                  "file" : {
+                    "type" : "string",
+                    "format" : "binary"
+                  },
+                  "text" : {
+                    "type" : [ "string", "null" ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccommodationDraftDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Read an accommodation booking from a confirmation",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/assistant" : {
+      "get" : {
+        "description" : "Whether confirmations can be read automatically.",
+        "operationId" : "assistantStatus",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AssistantStatusDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Assistant status",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/{bookingId}" : {
+      "delete" : {
+        "operationId" : "deleteBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Delete a booking",
+        "tags" : [ "Bookings" ]
+      }
+    },
     "/api/v1/incidents/trip-counts" : {
       "get" : {
         "description" : "Only trips with at least one incident.",
@@ -443,6 +567,44 @@
         },
         "summary" : "Provider onboarding checklist",
         "tags" : [ "Onboarding" ]
+      }
+    },
+    "/api/v1/stops/{stopId}/accommodation-bookings" : {
+      "post" : {
+        "operationId" : "createAccommodationBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccommodationBookingInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Add an accommodation booking to a stop",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/trips" : {
@@ -496,6 +658,26 @@
       }
     },
     "/api/v1/trips/{tripId}" : {
+      "delete" : {
+        "description" : "With its stops, routes, waypoints, title photo and incidents.",
+        "operationId" : "deleteTrip",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Delete a trip",
+        "tags" : [ "Trips" ]
+      },
       "get" : {
         "operationId" : "getTrip",
         "parameters" : [ {
@@ -521,6 +703,75 @@
         },
         "summary" : "Trip with stops and routes",
         "tags" : [ "Trips" ]
+      },
+      "put" : {
+        "description" : "Routes are not planned again.",
+        "operationId" : "updateTrip",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateTripDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Change name and period of a trip",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/bookings" : {
+      "get" : {
+        "description" : "All bookings at the stops of the trip, ascending by start.",
+        "operationId" : "listBookings",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/BookingDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Bookings of a trip",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/trips/{tripId}/cover-image" : {
@@ -633,9 +884,132 @@
         "tags" : [ "Incidents" ]
       }
     },
+    "/api/v1/trips/{tripId}/routes/{routeId}" : {
+      "get" : {
+        "operationId" : "getRoute",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RouteDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Route with waypoints",
+        "tags" : [ "Routes" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/routes/{routeId}/plan" : {
+      "post" : {
+        "description" : "E.g. after ROUTING_UNAVAILABLE, see planOutcome.",
+        "operationId" : "plan",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RouteDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Plan the route again",
+        "tags" : [ "Routes" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/routes/{routeId}/waypoints" : {
+      "put" : {
+        "description" : "Ordered list: with id changed, without id created, missing ones deleted. The route is planned again.",
+        "operationId" : "replaceWaypoints",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "type" : "array",
+                "items" : {
+                  "$ref" : "#/components/schemas/WaypointInputDto"
+                }
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RouteDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Replace the waypoints",
+        "tags" : [ "Routes" ]
+      }
+    },
     "/api/v1/trips/{tripId}/stops" : {
       "post" : {
-        "description" : "From the second stop on, a route from the previous stop is created.",
+        "description" : "Inserted at the position or appended. Routes to its neighbours are created and planned, see planOutcome of the routes.",
         "operationId" : "addStop",
         "parameters" : [ {
           "in" : "path",
@@ -661,14 +1035,143 @@
             "content" : {
               "*/*" : {
                 "schema" : {
-                  "$ref" : "#/components/schemas/StopDto"
+                  "$ref" : "#/components/schemas/TripDetailDto"
                 }
               }
             },
             "description" : "Created"
           }
         },
-        "summary" : "Append a stop",
+        "summary" : "Add a stop",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/stops/{stopId}" : {
+      "delete" : {
+        "description" : "Its neighbours get a new route, which is planned.",
+        "operationId" : "removeStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Delete a stop",
+        "tags" : [ "Trips" ]
+      },
+      "put" : {
+        "description" : "New coordinates or departure plan the affected routes again.",
+        "operationId" : "updateStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/UpdateStopDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Change a stop",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/stops/{stopId}/position" : {
+      "put" : {
+        "description" : "Routes between new neighbours are created and planned.",
+        "operationId" : "moveStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/MoveStopDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Move a stop",
         "tags" : [ "Trips" ]
       }
     },
@@ -721,6 +1224,243 @@
   },
   "components" : {
     "schemas" : {
+      "AccommodationBookingInputDto" : {
+        "type" : "object",
+        "description" : "Accommodation booking to create or replace. Check-in, check-out and cancellation deadline are local times at the accommodation without offset; the backend determines the time zone from the coordinates and uses fallbackTimeZone (the user's IANA zone) only without coordinates.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date-time",
+            "example" : "2027-07-12T15:00:00"
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date-time",
+            "example" : "2027-07-15T10:00:00"
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "fallbackTimeZone" : {
+            "type" : [ "string", "null" ],
+            "example" : "Europe/Berlin"
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "notes" : {
+            "type" : [ "string", "null" ]
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "placeRef" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ],
+            "description" : "Booking number, never the PIN"
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "source" : {
+            "type" : [ "string", "null" ],
+            "description" : "How the booking was entered, default MANUAL",
+            "enum" : [ "MANUAL", "SEARCH", "DOCUMENT", "SHARE", "EMAIL" ]
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AccommodationDraftDto" : {
+        "type" : "object",
+        "description" : "Accommodation booking read from a confirmation, not stored. found=false: no booking in the input. Times are local at the accommodation, uncertainFields should be checked by the user.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "checkInDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInTime" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutDate" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "checkOutTime" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "found" : {
+            "type" : "boolean"
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "name" : {
+            "type" : [ "string", "null" ]
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ]
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "uncertainFields" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AccommodationDto" : {
+        "type" : "object",
+        "description" : "Place and house rules of an accommodation, times local at the place",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "placeRef" : {
+            "type" : [ "string", "null" ]
+          },
+          "rooms" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "timeZone" : {
+            "type" : "string",
+            "description" : "IANA time zone of the place, e.g. Europe/Rome"
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
       "AppUserDto" : {
         "type" : "object",
         "properties" : {
@@ -736,6 +1476,15 @@
           }
         }
       },
+      "AssistantStatusDto" : {
+        "type" : "object",
+        "description" : "Whether confirmations can be read automatically (assistant configured)",
+        "properties" : {
+          "extractionAvailable" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "BalancesDto" : {
         "type" : "object",
         "properties" : {
@@ -748,9 +1497,76 @@
         },
         "required" : [ "credit", "earnings" ]
       },
+      "BookingDto" : {
+        "type" : "object",
+        "description" : "Booking at a stop. Points in time carry the offset of the place (for accommodations: of the accommodation), show them in that local time.",
+        "properties" : {
+          "accommodation" : {
+            "$ref" : "#/components/schemas/AccommodationDto",
+            "description" : "Details for accommodations, absent for other types"
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "endsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Check-out for accommodations"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "notes" : {
+            "type" : [ "string", "null" ]
+          },
+          "price" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ]
+          },
+          "source" : {
+            "type" : "string",
+            "enum" : [ "MANUAL", "SEARCH", "DOCUMENT", "SHARE", "EMAIL" ]
+          },
+          "startsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Check-in for accommodations"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "CONFIRMED", "CANCELLED" ]
+          },
+          "stopId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "type" : {
+            "type" : "string",
+            "enum" : [ "ACCOMMODATION", "TRANSPORT", "ACTIVITY", "OTHER" ]
+          }
+        }
+      },
       "CreateStopDto" : {
         "type" : "object",
-        "description" : "Stop appended to the trip, points in time with the offset of the place or the user",
+        "description" : "Stop added to the trip, points in time with the offset of the place or the user",
         "properties" : {
           "arrivalAt" : {
             "type" : [ "string", "null" ],
@@ -770,6 +1586,11 @@
           },
           "name" : {
             "type" : "string"
+          },
+          "position" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Where to insert the stop, 0 to number of stops; null appends it"
           }
         }
       },
@@ -843,6 +1664,16 @@
           }
         },
         "required" : [ "amount", "currency" ]
+      },
+      "MoveStopDto" : {
+        "type" : "object",
+        "description" : "New position of a stop, 0 to number of stops - 1",
+        "properties" : {
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
       },
       "PayPalAuthorizationDto" : {
         "type" : "object",
@@ -958,6 +1789,21 @@
         },
         "required" : [ "complete", "payoutAccountLinked", "registered" ]
       },
+      "RouteDetailDto" : {
+        "type" : "object",
+        "description" : "Route with its waypoints in order",
+        "properties" : {
+          "route" : {
+            "$ref" : "#/components/schemas/RouteDto"
+          },
+          "waypoints" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/WaypointDto"
+            }
+          }
+        }
+      },
       "RouteDto" : {
         "type" : "object",
         "description" : "Way between two consecutive stops",
@@ -970,10 +1816,19 @@
             "type" : "integer",
             "format" : "int64"
           },
+          "planOutcome" : {
+            "type" : [ "string", "null" ],
+            "description" : "Outcome of the last planning, null until planned or after a change",
+            "enum" : [ "PLANNED", "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE", "ROUTING_UNAVAILABLE" ]
+          },
+          "planReason" : {
+            "type" : [ "string", "null" ],
+            "description" : "Why the last planning failed"
+          },
           "plannedAt" : {
             "type" : [ "string", "null" ],
             "format" : "date-time",
-            "description" : "When the way was last planned, null until a routing service planned it"
+            "description" : "When the way was last planned, null until planned or after a change of its stops or waypoints"
           },
           "toStopId" : {
             "type" : "integer",
@@ -1203,6 +2058,103 @@
           "stopCount" : {
             "type" : "integer",
             "format" : "int32"
+          }
+        }
+      },
+      "UpdateStopDto" : {
+        "type" : "object",
+        "description" : "All fields of a stop, replace the current ones",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "UpdateTripDto" : {
+        "type" : "object",
+        "description" : "Name and period of a trip. Points in time with the offset of the user's time zone",
+        "properties" : {
+          "endAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "startAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          }
+        }
+      },
+      "WaypointDto" : {
+        "type" : "object",
+        "description" : "Point the user wants to pass between the two stops of a route",
+        "properties" : {
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "name" : {
+            "type" : [ "string", "null" ]
+          },
+          "position" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "roadHint" : {
+            "type" : [ "string", "null" ],
+            "description" : "Road the point should snap to, e.g. SH 73"
+          }
+        }
+      },
+      "WaypointInputDto" : {
+        "type" : "object",
+        "description" : "Waypoint in the ordered list of a route",
+        "properties" : {
+          "id" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Id of an existing waypoint to change, null for a new one"
+          },
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "name" : {
+            "type" : [ "string", "null" ]
+          },
+          "roadHint" : {
+            "type" : [ "string", "null" ],
+            "description" : "Road the point should snap to, e.g. SH 73"
           }
         }
       }

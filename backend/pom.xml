@@ -1,7 +1,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
-    <groupId>com.vacantagent</groupId>
+    <groupId>com.nfv</groupId>
     <artifactId>backend</artifactId>
     <version>1.0.0</version>
     <packaging>jar</packaging>
@@ -18,6 +18,7 @@
         <springdoc.version>3.0.3</springdoc.version>
         <archunit.version>1.5.0</archunit.version>
         <graphhopper.version>11.1</graphhopper.version>
+        <timeshape.version>2024a.25</timeshape.version>
         <spring-ai.version>2.0.2</spring-ai.version>
         <!-- JDK 23+ no longer runs annotation processors (Lombok) from the classpath by default -->
         <maven.compiler.proc>full</maven.compiler.proc>
@@ -40,6 +41,14 @@
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>
                 <version>2.20.0</version>
+            </dependency>
+            <!-- GraphHopper (osmosis-osm-binary) brings protobuf-java 3.12, timeshape needs at least 3.25 (its generated
+                 code). Newer 3.x runtimes run older 3.x generated code. timeshape from 2025b on needs protobuf 4, keep
+                 it below until GraphHopper moves to protobuf 4. -->
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>3.25.6</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>
@@ -69,7 +78,7 @@
             <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
         </dependency>
 
-        <!-- Auth module (com.vacantagent.auth): own identity provider, removable when switching to Keycloak -->
+        <!-- Auth module (com.nfv.auth): own identity provider, removable when switching to Keycloak -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security-oauth2-authorization-server</artifactId>
@@ -110,6 +119,13 @@
             <groupId>com.graphhopper</groupId>
             <artifactId>graphhopper-core</artifactId>
             <version>${graphhopper.version}</version>
+        </dependency>
+        <!-- Time zone of a coordinate (check-in/-out of accommodations), offline from OpenStreetMap data, see
+             Docs/domain.md#bookings -->
+        <dependency>
+            <groupId>net.iakovlev</groupId>
+            <artifactId>timeshape</artifactId>
+            <version>${timeshape.version}</version>
         </dependency>
 
         <!-- MCP server for agents at /mcp, see Docs/authentication.md -->

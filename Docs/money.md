@@ -1,15 +1,20 @@
 # Geldbeträge und Währungen
 
-- **Grundsatz:** Logik, Persistenz und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.vacantagent.currency`.
+- **Grundsatz:** Logik, Persistenz und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.nfv.currency`.
 - **Basiswährung: USD**, fest in `Money.BASE_CURRENCY`. Nicht konfigurierbar: ein Wechsel erfordert eine Datenmigration.
 - **Warum nur eine Währung:** Vergleiche und Summen sind ohne Kurs eindeutig, die Envers-Historie bleibt kursunabhängig.
 
-## Typ `Money` (`com.vacantagent.common.money`)
+## Typ `Money` (`com.nfv.common.money`)
 
 - `record Money(BigDecimal amount)`, immer Basiswährung, daher ohne Währungsfeld. Für alle Geldbeträge in Entities, Logik und Repositories, nie rohe `BigDecimal`.
 - **Skala:** fest 8 Nachkommastellen (`Money.SCALE`), im Konstruktor per `HALF_EVEN` normiert, daher ist `equals` sicher.
 - **Operationen:** `plus`, `minus`, `times`, `dividedBy` (intern `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Nie `double`.
 - **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, nur an der API und im Modul `currency`.
+
+## Ausnahme: Preise von Buchungen
+
+- `Booking.price` + `currency` (Modul `bookings`) ist der Preis, wie er in der Bestätigung steht (z. B. 412,50 EUR), in beliebiger Währung, `NUMERIC(12, 2)`. Er ist nur Information für den Nutzer, die App rechnet und rechnet nicht um. Eine Umrechnung in die Basiswährung würde den gebuchten Betrag verfälschen.
+- `MoneyArchitectureTest` und `MoneyPersistenceTest` nehmen `Booking.price` bzw. die Tabellen `booking`, `booking_aud` ausdrücklich aus.
 
 ## Persistenz
 
@@ -20,14 +25,14 @@
   - `AppUser.accountBalance` (seit `V11__accounting.sql` ersetzt durch `accounting_account.balance`), zusätzlich neues Feld `AppUser.preferredCurrency`
 - **Buchungen mit Umrechnung** (Ein-/Auszahlung, siehe [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). In der API zu `common.money.OriginalAmount` (`@Embeddable`, Spalten `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) gemappt und mit der Buchung gespeichert, nie neu berechnet.
 
-## Wechselkurse (`com.vacantagent.currency`)
+## Wechselkurse (`com.nfv.currency`)
 
 - **Quelle:** `EcbExchangeRateProvider`, EZB-Referenzkurse (ohne API-Key, werktags ~16:00 MEZ, Basis EUR). Kurse zur Basiswährung als Kreuzkurs `EUR→X / EUR→USD`. Andere Quelle: weitere Implementierung von `ExchangeRateProvider`.
 - **Speicherung:** Tabelle `exchange_rate(currency, rate NUMERIC(19, 10), rate_date, fetched_at, source)`, eindeutig auf `(currency, rate_date)`. `rate` = Einheiten Fremdwährung je 1 USD. Nicht auditiert, die Tabelle ist selbst die Historie.
-- **Abruf:** `ExchangeRateUpdater` beim Start und per Cron (`vacantagent.money.exchange-rates.update-cron`, Mo–Fr 17:00 Europe/Berlin). Fehler werden nur geloggt, es gilt dann der letzte gespeicherte Kurs. Abschaltbar mit `vacantagent.money.exchange-rates.update-enabled=false` (in Tests gesetzt über `src/test/resources/config/application.properties`).
+- **Abruf:** `ExchangeRateUpdater` beim Start und per Cron (`nfv.money.exchange-rates.update-cron`, Mo–Fr 17:00 Europe/Berlin). Fehler werden nur geloggt, es gilt dann der letzte gespeicherte Kurs. Abschaltbar mit `nfv.money.exchange-rates.update-enabled=false` (in Tests gesetzt über `src/test/resources/config/application.properties`).
 - **Cache:** neuester Kurs je Währung im `CurrencyConversionService`, nach jedem Abruf geleert.
-- **Veraltete Kurse:** Anzeige nutzt immer den letzten Kurs (Wochenende/Feiertage). Buchungswirksame Umrechnung (`toBaseForBooking`) lehnt Kurse älter als `vacantagent.money.exchange-rates.max-age-days` (4) mit `ExchangeRateUnavailableException` ab.
-- **Unterstützte Währungen:** `vacantagent.money.currencies=USD,EUR,GBP,CHF`. Andere Währung → `UnsupportedCurrencyException` → HTTP 400 (`CurrencyExceptionHandler`).
+- **Veraltete Kurse:** Anzeige nutzt immer den letzten Kurs (Wochenende/Feiertage). Buchungswirksame Umrechnung (`toBaseForBooking`) lehnt Kurse älter als `nfv.money.exchange-rates.max-age-days` (4) mit `ExchangeRateUnavailableException` ab.
+- **Unterstützte Währungen:** `nfv.money.currencies=USD,EUR,GBP,CHF`. Andere Währung → `UnsupportedCurrencyException` → HTTP 400 (`CurrencyExceptionHandler`).
 
 ## Umrechnung an den Schnittstellen
 
