@@ -27,7 +27,7 @@
   | `nfv_paypal_client_id` | `/run/secrets/PAYPAL_CLIENT_ID` | `nfv.paypal.client-id` |
   | `nfv_paypal_client_secret` | `/run/secrets/PAYPAL_CLIENT_SECRET` | `nfv.paypal.client-secret` |
   | `nfv_idp_signing_key` | `/run/secrets/NFV_IDP_SIGNING_KEY` | `nfv.auth.signing-key` |
-  | `nfv_openai_api_key` | `/run/secrets/OPENAI_API_KEY` | `nfv.assistant.api-key` (Auslesen von Buchungsbestätigungen; leer: nur manuelle Eingabe) |
+  | `nfv_openai_api_key` | `/run/secrets/OPENAI_API_KEY` | `nfv.assistant.api-key` (Auslesen von Buchungsbestätigungen, Titelfotos; leer: nur manuelle Eingabe, Platzhalterbild) |
   | `nfv_postgres_password` | `/run/secrets/POSTGRES_PASSWORD` (Backend), `/run/secrets/postgres_password` (Postgres, `POSTGRES_PASSWORD_FILE`) | `spring.datasource.password` |
 
 - **Wie das Backend sie liest:** `spring.config.import=optional:configtree:/run/secrets/` in `application.properties`. Jede Datei wird zur Property mit dem Dateinamen als Schlüssel (abschließender Zeilenumbruch wird entfernt), die vorhandenen Platzhalter `${PAYPAL_CLIENT_ID:}` usw. lösen darauf auf. Ohne `/run/secrets` (lokal) greifen wie bisher Umgebungsvariablen bzw. `application-local.properties`, siehe [paypal.md](paypal.md).

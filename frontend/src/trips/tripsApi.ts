@@ -1,6 +1,7 @@
 import {
   addStop as addStopRequest,
   createTrip as createTripRequest,
+  generateCoverImage as generateCoverImageRequest,
   getCoverImage,
   getTrip,
   getTripIncidentCounts,
@@ -123,6 +124,11 @@ export async function addStop(tripId: number, stop: NewStop): Promise<TripDetail
 
 export async function uploadCoverImage(tripId: number, file: File): Promise<void> {
   await unwrap(uploadCoverImageRequest({ path: { tripId }, body: { file } }));
+}
+
+/** Lets the image model draw a title photo from name and stops; takes a while, keeps an uploaded photo. */
+export async function generateCoverImage(tripId: number): Promise<void> {
+  await unwrap(generateCoverImageRequest({ path: { tripId } }));
 }
 
 /** Title photo as blob (the request needs the access token, so no plain img src), null if the trip has none. */

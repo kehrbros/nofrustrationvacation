@@ -1,5 +1,7 @@
 package com.nfv.trips.api;
 
+import com.nfv.assistant.logic.AssistantRateLimitedException;
+import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
@@ -35,6 +37,16 @@ public class TripExceptionHandler {
     @ExceptionHandler(InvalidTripInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidTripInputException exception) {
         return problem(HttpStatus.BAD_REQUEST, "INVALID_TRIP_INPUT", exception.getMessage());
+    }
+
+    @ExceptionHandler(AssistantUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleAssistantUnavailable(AssistantUnavailableException exception) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "ASSISTANT_UNAVAILABLE", exception.getMessage());
+    }
+
+    @ExceptionHandler(AssistantRateLimitedException.class)
+    public ResponseEntity<ProblemDetail> handleAssistantRateLimited(AssistantRateLimitedException exception) {
+        return problem(HttpStatus.TOO_MANY_REQUESTS, "ASSISTANT_RATE_LIMITED", exception.getMessage());
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)

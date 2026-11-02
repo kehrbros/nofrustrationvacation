@@ -8,6 +8,7 @@ import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.UpdateStopDto;
 import com.nfv.trips.dto.UpdateTripDto;
 import com.nfv.trips.entities.Trip;
+import com.nfv.trips.logic.CoverImageGeneration;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.TripEditing;
@@ -44,6 +45,7 @@ public class TripController {
     private final TripLogic tripLogic;
     private final TripEditing tripEditing;
     private final TripDtos tripDtos;
+    private final CoverImageGeneration coverImageGeneration;
 
     @Operation(summary = "All trips", description = "Ascending by start, with the phase relative to now.")
     @GetMapping
@@ -138,5 +140,14 @@ public class TripController {
         }
         tripLogic.uploadCoverImage(user.appUserId(), tripId,
                 String.valueOf(file.getContentType()), file.getBytes());
+    }
+
+    @Operation(summary = "Generate a title photo",
+            description = "Drawn by the image model from name and stops (takes a while), replaces a generated photo, "
+                    + "keeps an uploaded one. 503 without assistant or if the model fails, 429 over the user's limit.")
+    @PostMapping("/{tripId}/cover-image/generation")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void generateCoverImage(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        coverImageGeneration.generate(user.appUserId(), tripId);
     }
 }

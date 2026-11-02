@@ -4,7 +4,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import { endOfDayIso, startOfDayIso } from '../trips/time';
-import { createTrip, uploadCoverImage } from '../trips/tripsApi';
+import { createTrip, generateCoverImage, uploadCoverImage } from '../trips/tripsApi';
 
 const MAX_COVER_BYTES = 5 * 1024 * 1024;
 
@@ -41,6 +41,9 @@ export default function NewTripPage() {
       const trip = await createTrip({ name: name.trim(), startAt, endAt });
       if (cover === 'upload' && file) {
         await uploadCoverImage(trip.id, file).catch(() => undefined);
+      } else if (cover === 'generate') {
+        // runs on while the trip opens; without assistant or on failure the placeholder stays
+        void generateCoverImage(trip.id).catch(() => undefined);
       }
       navigate(`/reisen/${trip.id}`, { replace: true });
     } catch {
@@ -80,7 +83,7 @@ export default function NewTripPage() {
             <input type="radio" name="cover" checked={cover === 'generate'} onChange={() => setCover('generate')} />
             <span>
               <span className="va-option-title">Automatisch erzeugen</span>
-              <span className="va-muted">Passend zu Name und Zielen, später änderbar</span>
+              <span className="va-muted">Per KI passend zum Namen der Reise, später änderbar</span>
             </span>
           </label>
           <label className={`va-option ${cover === 'upload' ? 'va-option-selected' : ''}`}>

@@ -276,6 +276,19 @@ public class TripLogic {
         return coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.UPLOADED, contentType, content, now));
     }
 
+    /** Sets a generated title photo; keeps a photo the user has uploaded meanwhile. */
+    @Transactional
+    public void setGeneratedCoverImage(long appUserId, long tripId, String contentType, byte[] content) {
+        get(appUserId, tripId);
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        Optional<TripCoverImage> existing = coverImageRepository.findByTripId(tripId);
+        if (existing.isEmpty()) {
+            coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, contentType, content, now));
+        } else if (existing.get().getSource() == CoverImageSource.GENERATED) {
+            existing.get().replace(CoverImageSource.GENERATED, contentType, content, now);
+        }
+    }
+
     /**
      * Renumbers the stops in the given order and connects neighbours by routes: routes of unchanged pairs stay (with
      * their waypoints and sections), the others are deleted. Returns the ids of the new routes.

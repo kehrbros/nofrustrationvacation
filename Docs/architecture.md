@@ -17,11 +17,11 @@ flowchart LR
     be -.->|Benachrichtigung, offen| notify[(Push / E-Mail)]
     be --> db[(PostgreSQL)]
     be -->|Kurse| ecb[(EZB)]
-    be -->|Bestätigungen auslesen| openai[(OpenAI)]
+    be -->|Bestätigungen auslesen, Titelfotos| openai[(OpenAI)]
 ```
 
 - **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
-- **OpenAI:** liest Buchungsbestätigungen aus (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
+- **OpenAI:** liest Buchungsbestätigungen aus und zeichnet Titelfotos (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
 - **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools für Trips, Stops und Waypoints, siehe [API](#api).
 - **Verkehrsdatenquellen:** liefern Ereignisse in das Modul `input`, entweder abgerufen (`TRAFFIC_FEED`) oder gepusht (`WEBHOOK`). Noch keine Quelle angebunden.
 - **Routing:** kein externer Dienst, GraphHopper läuft eingebettet im Modul `network` (geplant), Kartendaten von Geofabrik, siehe [network.md](network.md).
@@ -62,6 +62,7 @@ flowchart LR
     trips --> network
     bookings --> trips
     bookings --> assistant
+    trips --> assistant
     incidents --> network
     incidents -->|RouteSectionRepository| trips
     trips -.->|RouteChanged| incidents
@@ -105,7 +106,7 @@ flowchart LR
 ## API
 
 - REST unter `/api/v1`, Vertrag in `frontend/openapi.json` (generiert, Client per `npm run generate:api`).
-- `GET/POST /trips`, `GET/PUT/DELETE /trips/{id}` (mit Stops und Routen), `GET/PUT /trips/{id}/cover-image` (JPEG, PNG, WebP bis 5 MB, Multipart).
+- `GET/POST /trips`, `GET/PUT/DELETE /trips/{id}` (mit Stops und Routen), `GET/PUT /trips/{id}/cover-image` (JPEG, PNG, WebP bis 5 MB, Multipart), `POST /trips/{id}/cover-image/generation` (Titelfoto vom Bildmodell, synchron, dauert einige Sekunden; 503 `ASSISTANT_UNAVAILABLE`, 429 `ASSISTANT_RATE_LIMITED`).
 - Stops (`TripController`), Antwort jeweils der ganze Trip, da sich Routen mit ändern: `POST /trips/{id}/stops` (optional `position`, sonst ans Ende), `PUT /trips/{id}/stops/{stopId}`, `PUT /trips/{id}/stops/{stopId}/position`, `DELETE /trips/{id}/stops/{stopId}`.
 - Routen (`RouteController`), Antwort Route mit Waypoints: `GET /trips/{id}/routes/{routeId}`, `PUT /trips/{id}/routes/{routeId}/waypoints` (ganze geordnete Liste), `POST /trips/{id}/routes/{routeId}/plan` (erneut planen).
 - Ändernde Aufrufe planen betroffene Routen sofort (`TripEditing`, siehe [domain.md](domain.md#trips)). Ergebnis an jeder Route als `planOutcome`/`planReason`.
@@ -129,17 +130,19 @@ flowchart LR
   - Installieren per Button (`src/pwa/`): Chromium-Browser (Android, Desktop) feuern `beforeinstallprompt`, der Button „Installieren“ ruft dessen `prompt()` auf. Safari auf iOS hat das nicht, dort zeigt der Button die Anleitung „Teilen → Zum Home-Bildschirm“.
   - Der Button steht im Profilmenü und als Hinweis über der Reiseliste (dauerhaft ausblendbar). Er fehlt, wenn die App schon installiert ist oder als App läuft (`display-mode: standalone`) oder der Browser keine Installation anbietet.
   - Service Worker und Installation brauchen HTTPS (außer `localhost`).
-- **Buchungen** (`src/bookings/`): Sheet „Buchung hinzufügen“ (Typ-Chips, Wege „Bestätigung einfügen“, „Booking.com“ mit Anleitung, „Manuell“, „Per Sprache suchen“ als „folgt“), danach immer dasselbe Prüf-Formular (aus der Bestätigung gelesene Felder mit ✦, unsichere gelb markiert, Ort per Photon automatisch gesucht). Erreichbar aus „Stop hinzufügen“ und per „+ Buchung“ in der Stop-Liste; Buchungen erscheinen unter ihrem Stop, Tippen öffnet die Details (Nummer kopieren, beim Anbieter öffnen, Route, bearbeiten, löschen). Zeiten werden in der Ortszeit der Unterkunft angezeigt (`src/bookings/localTime.ts`).
-- **Teilen an die App (Share Target, nur Android/Chromium, iOS unterstützt es nicht):** Manifest `share_target` (POST `/teilen`, Text, URL, Bild, PDF). Der Service Worker (`public/share-target-sw.js`, per `workbox.importScripts`) legt das Geteilte im Cache `share-target` ab, weil der POST kein Token trägt, und öffnet `/teilen`. Die Seite liest es aus, schlägt Reise und Stop vor (oder einen neuen Stop für die Unterkunft) und löscht es nach dem Speichern oder Verwerfen. Unterbricht die Anmeldung, weist die Reiseliste auf die wartende Buchung hin.
+- **Buchungen** (`src/bookings/`): Sheet „Buchung hinzufügen“ (Typ-Chips, Wege „Bestätigung einfügen“, „Manuell“, „Per Sprache suchen“ als „folgt“; keinen eigenen Weg je Anbieter wie Booking.com, deren Bestätigungen laufen über „Bestätigung einfügen“ oder Teilen), danach immer dasselbe Prüf-Formular (aus der Bestätigung gelesene Felder mit ✦, unsichere gelb markiert, Ort per Photon automatisch gesucht). Erreichbar aus „Stop hinzufügen“ und per „+ Buchung“ in der Stop-Liste; Buchungen erscheinen unter ihrem Stop, Tippen öffnet die Details (Nummer kopieren, beim Anbieter öffnen, Route, bearbeiten, löschen). Zeiten werden in der Ortszeit der Unterkunft angezeigt (`src/bookings/localTime.ts`).
+- **Teilen an die App (Share Target, nur Android/Chromium, iOS unterstützt es nicht):** Manifest `share_target` (POST `/teilen`, Text, URL, Bild, PDF). Der Service Worker (`public/share-target-sw.js`, per `workbox.importScripts`) legt das Geteilte im Cache `share-target` ab, weil der POST kein Token trägt, und öffnet `/teilen`. Die Seite `/teilen` führt in denselben Ablauf wie „Bestätigung einfügen“ (gemeinsame Komponente `src/bookings/ConfirmationInput.tsx`): Geteiltes wird angezeigt und lässt sich um eingefügten Text oder eine Datei ergänzen (z. B. geteilter Link plus Text der Bestätigungsmail), „Auslesen“ schickt alles zusammen an den Assistant (`combineInput`: Texte aneinandergehängt, eine Datei, die selbst gewählte vor der geteilten), danach Prüf-Formular mit Vorschlag für Reise und Stop (oder einen neuen Stop für die Unterkunft). Alternativ manuell eingeben. Das Geteilte wird nach dem Speichern oder Verwerfen gelöscht.
+- Noch nicht gespeichertes Geteiltes erscheint auch im Sheet „Buchung hinzufügen“ unter „Bestätigung einfügen“ und wird dort genauso mitgelesen; `source` ist `SHARE`, sobald Geteiltes mitgelesen wurde, sonst `DOCUMENT`. Unterbricht die Anmeldung, weist die Reiseliste auf die wartende Buchung hin.
 - Die Datenschicht `src/trips/tripsApi.ts` bildet die generierten Typen (alle Felder optional) auf eigene Typen ab (`src/trips/model.ts`).
 
 ## Assistant
 
 - **Modul `assistant`:** Zugriff auf das Sprachmodell, kennt keine Fachmodule. `StructuredExtraction.extract(…)` schickt Anweisung, JSON-Schema und Eingaben (Text, Bild, PDF) an die OpenAI Responses API (Structured Outputs, `strict`) und liefert das JSON zurück. Schema und Anweisung bringt der Aufrufer mit (z. B. `bookings.logic.AccommodationExtractor`).
+- **Bilder:** `ImageGeneration.generate(…)` schickt einen Prompt an die OpenAI Images API (`/images/generations`, 1536×1024, JPEG) und liefert die Bilddaten. Aufrufer: `trips.logic.CoverImageGeneration` (Prompt aus Name und Stops des Trips, ohne Transaktion um den Modellaufruf; ein inzwischen hochgeladenes Foto bleibt). Zählt gegen dasselbe Limit je Nutzer wie das Auslesen.
 - **HTTP direkt per `RestClient`**, ohne Spring-AI-Modell-Starter: volle Kontrolle über `store: false`, PDF-Eingabe und Schema, kein Pflicht-Key beim Start.
-- **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30).
+- **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `image-model` (Standard `gpt-image-1-mini`, `OPENAI_IMAGE_MODEL`), `image-quality` (Standard `low`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30).
 - **Ohne Key** startet die App normal, `GET /bookings/assistant` meldet `extractionAvailable: false`, das Frontend bietet dann nur die manuelle Eingabe an.
-- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`nfv.assistant.api-key=` in den Test-Properties, `StructuredExtraction` gemockt).
+- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`nfv.assistant.api-key=` in den Test-Properties, `StructuredExtraction` und `ImageGeneration` gemockt). Der Trip-Name (und Stop-Namen) gehen beim Erzeugen eines Titelfotos an OpenAI.
 
 ## Security
 
@@ -168,7 +171,7 @@ flowchart LR
 - **Routenvorschläge:** Der Routen-Dialog zeigt Beispieldaten (aus der Luftlinie), „Route übernehmen“ und „Zwischenziel hinzufügen“ sind deaktiviert, bis der Routing-Dienst steht.
 - **PWA weiter ausbauen:** Reisedaten offline verfügbar machen (derzeit nur die App-Hülle und zuletzt gesehene Kacheln), Web-Push für Hinweise, App-Name und Icon im Zuge des Brandings.
 - **Karte und Ortssuche:** OpenFreeMap und die öffentliche Photon-Instanz sind nur für maßvolle Nutzung gedacht; für den Betrieb eigene Instanz oder Proxy im Backend prüfen. Das Karten-Bundle ist groß (~1 MB, lazy geladen).
-- **Titelfoto:** Generierung (Bildmodell, Prompt aus Name und Stops; „Automatisch erzeugen“ zeigt bis dahin ein Platzhalterbild) und ggf. Auslagerung der Bilddaten aus der Datenbank in einen Objektspeicher.
+- **Titelfoto:** „Automatisch erzeugen“ ruft nach dem Anlegen die Generierung auf (ohne zu warten). Da beim Anlegen noch keine Stops existieren, kommt der Prompt nur aus dem Namen; neu erzeugen (z. B. nach den ersten Stops) und Anzeige des Fortschritts fehlen im Frontend. Ohne Assistant oder bei Fehlern bleibt das Platzhalterbild. Ggf. Auslagerung der Bilddaten aus der Datenbank in einen Objektspeicher.
 - **Assistant:** Kosten beobachten (Modellwahl, Bildgröße), Hinweis in der Datenschutzerklärung, Rate-Limit bei mehreren Replicas in die Datenbank, Sprachsuche (Transkription, Such-Agent mit OSM/Websuche) und E-Mail-Weiterleitung als nächste Stufen.
 - **Zeitzonen-Daten:** timeshape `2024a` (neuere Versionen brauchen protobuf 4, GraphHopper/osmosis bringt protobuf 3; `protobuf-java` ist auf 3.25 angehoben). Die Grenzen belegen nach dem ersten Gebrauch ca. 200 MB Heap (per `SoftReference`, bei Speichermangel freigegeben).
 - **ArchUnit-Regeln** für die neuen Module (nur Id-Referenzen, keine Zyklen).

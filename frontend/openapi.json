@@ -852,6 +852,28 @@
         "tags" : [ "Trips" ]
       }
     },
+    "/api/v1/trips/{tripId}/cover-image/generation" : {
+      "post" : {
+        "description" : "Drawn by the image model from name and stops (takes a while), replaces a generated photo, keeps an uploaded one. 503 without assistant or if the model fails, 429 over the user's limit.",
+        "operationId" : "generateCoverImage",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Generate a title photo",
+        "tags" : [ "Trips" ]
+      }
+    },
     "/api/v1/trips/{tripId}/incidents" : {
       "get" : {
         "description" : "Incidents not ended yet, ascending by start.",
