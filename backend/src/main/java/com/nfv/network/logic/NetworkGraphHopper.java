@@ -1,5 +1,8 @@
 package com.nfv.network.logic;
 
+import com.carrotsearch.hppc.IntDoubleHashMap;
+import com.carrotsearch.hppc.IntDoubleMap;
+import com.carrotsearch.hppc.IntHashSet;
 import com.carrotsearch.hppc.IntSet;
 import com.graphhopper.GraphHopper;
 import com.graphhopper.GraphHopperConfig;
@@ -31,6 +34,8 @@ final class NetworkGraphHopper extends GraphHopper {
     static final String PROFILE = "car";
     /** Request hint: {@code IntSet} of directed edge keys that are impassable. */
     static final String BLOCKED_EDGE_KEYS = "blocked_edge_keys";
+    /** Request hint: {@code IntDoubleMap} of directed edge keys to extra seconds. */
+    static final String DELAYED_EDGE_KEYS = "delayed_edge_keys";
     /** Changing these needs a new import of every region. */
     private static final String ENCODED_VALUES = "car_access|block_private=false, car_average_speed, road_access, "
             + "road_class, road_environment, osm_way_id, max_speed, surface";
@@ -76,8 +81,10 @@ final class NetworkGraphHopper extends GraphHopper {
         WeightingFactory defaults = new DefaultWeightingFactory(getBaseGraph(), getEncodingManager());
         return (profile, hints, disableTurnCosts) -> {
             Weighting weighting = defaults.createWeighting(profile, hints, disableTurnCosts);
-            IntSet blocked = hints.getObject(BLOCKED_EDGE_KEYS, null);
-            return blocked == null || blocked.isEmpty() ? weighting : new BlockedEdgesWeighting(weighting, blocked);
+            IntSet blocked = hints.getObject(BLOCKED_EDGE_KEYS, new IntHashSet());
+            IntDoubleMap delayed = hints.getObject(DELAYED_EDGE_KEYS, new IntDoubleHashMap());
+            return blocked.isEmpty() && delayed.isEmpty() ? weighting
+                    : new ScenarioWeighting(weighting, blocked, delayed);
         };
     }
 

@@ -1,6 +1,6 @@
 # Streckenvorschläge (`recommendations`)
 
-- **Status:** Entwurf, noch nicht umgesetzt. Schema geplant als `V27__recommendations.sql`.
+- **Status:** Entwurf. Umgesetzt ist die Routing-Grundlage in `network` (`RouteOptions.delayedSegments`, `ScenarioWeighting`, `Routing.alternatives`), das Modul selbst noch nicht. Schema geplant als `V27__recommendations.sql`.
 - **Ziel:** Für eine Route bekommt der Nutzer bis zu `n` Vorschläge, wie er fahren kann. Dieselbe Logik liefert Vorschläge, wenn ein Incident die geplante Route trifft (Umfahrung, spätere Abfahrt, Verzögerung hinnehmen).
 - **Grundidee:** Ein Vorschlag entsteht immer aus einem **Szenario** (Ausgangslage: Punkte, Abfahrt, Einschränkungen im Netz, Referenzroute). Planung und Incident unterscheiden sich nur darin, wie das Szenario gebaut wird. Erzeugen, Bewerten, Aussortieren, Speichern, API und Frontend sind gemeinsam.
 - Ersetzt die Beispieldaten in `frontend/src/trips/routeExamples.ts` und schließt den offenen Punkt „Umfahrung bei `BLOCKED`“ aus [domain.md](domain.md#offen).

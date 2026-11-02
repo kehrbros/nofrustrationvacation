@@ -1,5 +1,6 @@
 package com.nfv.network;
 
+import com.nfv.network.logic.AlternativeOptions;
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.NoRouteException;
 import com.nfv.network.logic.RegionImport;
@@ -18,7 +19,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import java.time.Duration;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -33,6 +36,9 @@ class RoutingTest {
     // Walter Street right next to the start: without pass_through the route would turn there
     private static final GeoPoint WALTER_STREET = new GeoPoint(-41.2949086, 174.7731836);
     private static final GeoPoint AUCKLAND = new GeoPoint(-36.8485, 174.7633);
+    // Te Aro to Thorndon (3 km) is too short for alternatives, Newtown to Thorndon (5 km) has several
+    private static final GeoPoint NEWTOWN = new GeoPoint(-41.3100, 174.7790);
+    private static final AlternativeOptions ALTERNATIVES = new AlternativeOptions(4, 1.4, 0.6);
 
     @Autowired
     private Routing routing;
@@ -78,10 +84,86 @@ class RoutingTest {
         Set<Long> tunnel = new HashSet<>(tunnelSegments(
                 normal.segments().stream().map(RoutedSegment::segmentId).toList()));
 
-        RouteResult detour = route(new RouteOptions(tunnel), stop(TE_ARO), stop(THORNDON));
+        RouteResult detour = route(RouteOptions.blocked(tunnel), stop(TE_ARO), stop(THORNDON));
 
         assertThat(detour.segments()).extracting(RoutedSegment::segmentId).doesNotContainAnyElementsOf(tunnel);
         assertThat(detour.duration()).isGreaterThan(normal.duration());
+    }
+
+    @Test
+    void largeDelayForcesDetour() {
+        Set<Long> tunnel = tunnelOnFastestRoute();
+
+        RouteResult detour = route(delayed(tunnel, Duration.ofHours(1)), stop(TE_ARO), stop(THORNDON));
+
+        assertThat(detour.segments()).extracting(RoutedSegment::segmentId).doesNotContainAnyElementsOf(tunnel);
+    }
+
+    @Test
+    void smallDelayKeepsRoute() {
+        Set<Long> tunnel = tunnelOnFastestRoute();
+
+        RouteResult result = route(delayed(tunnel, Duration.ofSeconds(1)), stop(TE_ARO), stop(THORNDON));
+
+        assertThat(result.segments()).extracting(RoutedSegment::segmentId).containsAll(tunnel);
+    }
+
+    @Test
+    void negativeDelayIsRejected() {
+        assertThatThrownBy(() -> new RouteOptions(Set.of(), Map.of(1L, Duration.ofSeconds(-1))))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void alternativesStartWithFastest() {
+        RouteResult fastest = route(RouteOptions.none(), stop(NEWTOWN), stop(THORNDON));
+
+        List<RouteResult> alternatives = routing.alternatives(stop(NEWTOWN), stop(THORNDON), RouteOptions.none(),
+                ALTERNATIVES);
+
+        assertThat(alternatives).hasSizeBetween(2, ALTERNATIVES.maxPaths());
+        assertThat(alternatives.getFirst().duration())
+                .as("without curbsides at the stops at least as fast as route()")
+                .isLessThanOrEqualTo(fastest.duration());
+        assertThat(alternatives).allSatisfy(alternative -> {
+            assertThat(alternative.segments()).isNotEmpty();
+            assertThat(alternative.snappedPoints()).hasSize(2);
+            assertThat(alternative.duration()).isGreaterThanOrEqualTo(alternatives.getFirst().duration());
+        });
+        assertThat(alternatives).extracting(this::segmentIds).doesNotHaveDuplicates();
+    }
+
+    @Test
+    void alternativesAvoidBlockedSegments() {
+        Set<Long> tunnel = tunnelOnFastestRoute();
+
+        List<RouteResult> alternatives = routing.alternatives(stop(TE_ARO), stop(THORNDON),
+                RouteOptions.blocked(tunnel), ALTERNATIVES);
+
+        assertThat(alternatives).isNotEmpty().allSatisfy(alternative -> assertThat(alternative.segments())
+                .extracting(RoutedSegment::segmentId).doesNotContainAnyElementsOf(tunnel));
+    }
+
+    @Test
+    void alternativesNeedTwoStops() {
+        assertThatThrownBy(() -> routing.alternatives(stop(TE_ARO),
+                new RoutePoint(THORNDON, RoutePoint.Kind.VIA, null), RouteOptions.none(), ALTERNATIVES))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    private Set<Long> tunnelOnFastestRoute() {
+        RouteResult normal = route(RouteOptions.none(), stop(TE_ARO), stop(THORNDON));
+        Set<Long> tunnel = new HashSet<>(tunnelSegments(segmentIds(normal)));
+        assertThat(tunnel).as("Terrace Tunnel on the fastest route").isNotEmpty();
+        return tunnel;
+    }
+
+    private static RouteOptions delayed(Set<Long> segmentIds, Duration delay) {
+        return new RouteOptions(Set.of(), segmentIds.stream().collect(Collectors.toMap(id -> id, id -> delay)));
+    }
+
+    private List<Long> segmentIds(RouteResult result) {
+        return result.segments().stream().map(RoutedSegment::segmentId).toList();
     }
 
     @Test

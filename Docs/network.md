@@ -39,8 +39,12 @@
 
 - Andere Module nutzen nur diese Interfaces und Records, nie Entities, Repositories oder GraphHopper-Typen. Geometrie als eigene Records (`GeoPoint`, `GeoLine`, `GeoArea`).
 - `Routing.route(List<RoutePoint>, RouteOptions)`: `RoutePoint` mit `STOP`/`VIA` und optionalem Straßenhinweis. Stops nur als erster und letzter Punkt, dazwischen Via-Punkte (`RoutePlanning` plant je Stop-Paar), sonst `IllegalArgumentException`.
-  - `RouteOptions`: derzeit nur `blockedSegmentIds`. Geplant mit `recommendations`: `delayedSegments` (Zuschlag ≥ 0), siehe [recommendations.md](recommendations.md#schnittstellen). Gewichte steigen nur, LM bleibt gültig. Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
-  - Geplant `Routing.alternatives`: Alternativen über GraphHopper `alternative_route` (mit LM möglich). In 11.1 nur zwei Punkte, ohne `pass_through` und `curbsides`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
+  - `RouteOptions(blockedSegmentIds, delayedSegments)`: gesperrte Segmente und Verzögerung je Segment (≥ 0, sonst `IllegalArgumentException`), siehe [recommendations.md](recommendations.md#schnittstellen). Gesperrt schlägt verzögert. Verzögerungen ändern nur die Wahl des Wegs, Dauern im `RouteResult` bleiben ohne Verzögerung (rechnet die Bewertung in `recommendations`). Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
+- `Routing.alternatives(from, to, RouteOptions, AlternativeOptions)`: schnellste Strecke und Alternativen zwischen zwei Stops über GraphHopper `alternative_route` (mit LM). In 11.1 nur zwei Punkte, ohne `pass_through` und `curbsides`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
+  - `AlternativeOptions`: `maxPaths` (≥ 1, inkl. schnellster), `maxWeightFactor` (≥ 1), `maxShareFactor` (0–1).
+  - Ergebnis `List<RouteResult>`, mindestens ein Eintrag, erster = schnellste. Weitere Einträge nicht streng nach Dauer sortiert.
+  - Kurze Strecken (Wellington-Extrakt: ~3 km Te Aro → Thorndon) liefern oft keine Alternative, nur die schnellste.
+  - Ohne Bordsteinseite an den Stops ist die schnellste Alternative ggf. schneller als `route` (Newtown → Thorndon: ~11 %).
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
   - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
 - `SegmentQueries`: Details zu Segmenten (`ref`, Name, Geometrie, ausgemustert) für API und Benachrichtigungen.
@@ -53,11 +57,11 @@
 
 - **Stops:** `curbsides` nach `driving-side` der Region (NZ `left`), mit `force_curbside=false`: GraphHopper hält die Seite ein, wo möglich, sonst wird sie ignoriert. Strikt schlägt das Routing auf Einbahnstraßen fehl.
 - **Via-Punkte:** `curbside` `any`, `pass_through=true` (kein Wenden am Via-Punkt), `point_hints` aus dem Straßenhinweis.
-- **Sperren:** eigene `WeightingFactory`, die die `edge_key`s gesperrter Segmente (alle Kanten eines Segments, richtungsgenau) unpassierbar macht. Funktioniert mit LM.
+- **Sperren und Verzögerungen** (`ScenarioWeighting`): eigene `WeightingFactory`. `edge_key`s gesperrter Segmente (alle Kanten eines Segments, richtungsgenau) sind unpassierbar, verzögerte kosten Gewicht + Sekunden (Gewicht der Custom-Model-Gewichtung ≈ Sekunden). Besteht ein Segment aus mehreren Kanten, bekommt jede den gleichen Anteil, eine Durchfahrt kostet die Verzögerung genau einmal. Gewichte steigen nur, funktioniert mit LM. Gilt für `route` und `alternatives` gleich.
 - **Anteile:** nur am ersten und letzten Abschnitt einer Route kleiner als 0–1, Position des gesnappten Start- bzw. Endpunkts auf der Kantengeometrie.
 - **Snappen:** `snap_preventions` `tunnel`, `bridge`, `ferry` (ein Stop landet nicht im Tunnel darunter), höchstens 500 m vom angefragten Punkt.
 - **Region:** die erste Region mit Graph, deren Bounding Box alle Punkte enthält.
-- **Mapping im Speicher:** `edge_key` → Segment-Id als Array je Graph, beim Umschalten aus `edge_mapping` geladen (NZ geschätzt 20–30 MB), keine Datenbankabfrage je Route. Nur die `edge_key`s gesperrter Segmente kommen per Abfrage.
+- **Mapping im Speicher:** `edge_key` → Segment-Id als Array je Graph, beim Umschalten aus `edge_mapping` geladen (NZ geschätzt 20–30 MB), keine Datenbankabfrage je Route. Nur die `edge_key`s gesperrter und verzögerter Segmente kommen per Abfrage.
 - **Umschalten:** Lese-/Schreibsperre je Region, eine laufende Route rechnet nie auf einem geschlossenen Graphen.
 
 ## Konfiguration
