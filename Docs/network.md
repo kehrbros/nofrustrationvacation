@@ -67,9 +67,9 @@
 ## Konfiguration
 
   ```properties
-  nfv.network.import-on-start=true
-  nfv.network.regions.nz.osm-file=./data/osm/new-zealand-latest.osm.pbf
-  nfv.network.regions.nz.graph-dir=./data/graphs/nz
+  nfv.network.import-on-start=${NFV_NETWORK_IMPORT_ON_START:true}
+  nfv.network.regions.nz.osm-file=${NFV_DATA_DIR:${user.home}/data}/osm/new-zealand-latest.osm.pbf
+  nfv.network.regions.nz.graph-dir=${NFV_DATA_DIR:${user.home}/data}/graphs/nz
   # MMAP: Graph außerhalb des Heaps, RAM_STORE in Tests
   nfv.network.regions.nz.data-access=MMAP
   nfv.network.regions.nz.driving-side=LEFT
@@ -80,7 +80,24 @@
   nfv.network.regions.nz.min-segment-ratio=0.95
   ```
 
-- Noch keine Region in `application.properties`, bis der Download kommt.
+- Region `nz` steht in `application.properties`, die Zeilen „Geplant“ noch nicht.
+- **Extrakte nicht im Repository** (kein Git LFS: ~400 MB je NZ-Extrakt, jede Aktualisierung bliebe im LFS-Speicher), `*.osm.pbf` ist in `.gitignore`.
+- **Ablage auf jedem Host** (Entwicklerrechner, Server) außerhalb des Repos unter `~/data`:
+  - `~/data/osm/new-zealand-latest.osm.pbf`: Extrakt, von Hand kopiert.
+  - `~/data/graphs/nz/<extractVersionId>`: GraphHopper-Graph, entsteht beim ersten Start (einige Minuten), danach nur geladen.
+  - Ohne Docker (`mvn spring-boot:run`, IDE) gilt `${user.home}/data`. Docker bindet `~/data/osm` (nur lesend) und `~/data/graphs` nach `/data` ein und setzt `NFV_DATA_DIR=/data`. Anderer Host-Pfad über `NFV_HOST_DATA_DIR`, siehe [deployment.md](deployment.md).
+- Bis `ExtractSource` von Geofabrik lädt, Extrakt von Hand holen oder kopieren:
+
+  ```bash
+  mkdir -p ~/data/osm ~/data/graphs
+  curl -fL -o ~/data/osm/new-zealand-latest.osm.pbf \
+    https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
+  ```
+
+  - Optional prüfen: `.md5` neben der Datei auf Geofabrik (`…/new-zealand-latest.osm.pbf.md5`), `md5sum -c`.
+  - Stand des Extrakts steht im Dateikopf (`datareader.data.date`, beim Import als `ExtractVersion.dataDate` gespeichert), der Dateiname trägt kein Datum.
+  - Neuer Extrakt: Datei ersetzen und neuer Import (folgt mit der Aktualisierung). Ein vorhandener Graph der aktuellen Version wird beim Start geladen, nicht neu importiert.
+- **Ohne Extrakt** startet die App trotzdem: Import `FAILED` (im Log), Routing antwortet mit 503. `NFV_NETWORK_IMPORT_ON_START=false` überspringt den Import.
 - `ferries=true` für NZ: Nord- und Südinsel sind nur per Fähre verbunden. `ferries` und die Encoded Values gehören zum Graphen, eine Änderung braucht einen neuen Import.
 
 ## Tests

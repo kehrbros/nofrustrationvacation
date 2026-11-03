@@ -20,6 +20,20 @@ services:
       NFV_BACKEND_URL: ${BACKEND_URL:-http://localhost:8080}
       NFV_FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      # Road network data mounted below, see Docs/network.md#konfiguration
+      NFV_DATA_DIR: /data
+    # Host directories (default ~/data of the user running "docker stack deploy"), must exist on the node:
+    # mkdir -p ~/data/osm ~/data/graphs
+    volumes:
+      # OSM extract copied by hand to the host (not in Git)
+      - type: bind
+        source: ${NFV_HOST_DATA_DIR:-${HOME}/data}/osm
+        target: /data/osm
+        read_only: true
+      # GraphHopper graph built on the first start
+      - type: bind
+        source: ${NFV_HOST_DATA_DIR:-${HOME}/data}/graphs
+        target: /data/graphs
     # Mounted as files /run/secrets/<target>, Spring reads them via spring.config.import=configtree:/run/secrets/
     # and resolves the placeholders ${PAYPAL_CLIENT_ID} etc. in application.properties
     secrets:
@@ -41,6 +55,10 @@ services:
       - nfv
     deploy:
       replicas: 1
+      # Bind mounts are local to a node, run on the node that holds ~/data
+      placement:
+        constraints:
+          - node.role == manager
       update_config:
         order: stop-first
         failure_action: rollback
@@ -50,7 +68,8 @@ services:
         delay: 10s
       resources:
         limits:
-          memory: 1G
+          # Import of the NZ extract needs a few GB
+          memory: 4G
 
   postgres:
     image: postgis/postgis:17-3.5-alpine
