@@ -6,6 +6,7 @@ import AddBookingSheet from '../bookings/AddBookingSheet';
 import { createAccommodationBooking } from '../bookings/bookingsApi';
 import { stopTimesFromForm, toInput, type AccommodationForm } from '../bookings/form';
 import type { BookingSource } from '../bookings/model';
+import { stayDefaults } from '../bookings/stayDefaults';
 import Sheet from '../components/Sheet';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { useTripContext } from '../trips/tripContext';
@@ -17,7 +18,7 @@ import { addStop } from '../trips/tripsApi';
  * entered here fills place and times if still empty and is saved with the stop.
  */
 export default function StopSheet() {
-  const { trip, reload, close } = useTripContext();
+  const { trip, bookings, reload, close } = useTripContext();
   const [query, setQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
   const [place, setPlace] = useState<Place | null>(null);
@@ -186,6 +187,8 @@ export default function StopSheet() {
         <AddBookingSheet
           context="Neuer Stop"
           submitLabel="Übernehmen"
+          defaults={stayDefaults(trip, { arrivalAt: localDateTimeIso(arrival), departureAt: localDateTimeIso(departure) }, bookings)}
+          near={place ? { latitude: place.latitude, longitude: place.longitude } : null}
           onClose={() => setAddingBooking(false)}
           onSubmit={async (form, source) => {
             setBooking({ form, source });

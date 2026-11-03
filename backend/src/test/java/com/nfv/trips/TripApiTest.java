@@ -106,6 +106,25 @@ class TripApiTest {
     }
 
     @Test
+    void travelersAreKeptChangedAndChecked() throws Exception {
+        long tripId = createTrip(user, "Toskana", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.travelers").value(is((Object) null)));
+
+        String json = "{\"name\":\"Toskana\",\"startAt\":\"2027-07-12T00:00:00+02:00\","
+                + "\"endAt\":\"2027-07-26T23:59:00+02:00\",\"travelers\":%s}";
+        mockMvc.perform(put("/api/v1/trips/{id}", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(json.formatted("4")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.travelers").value(4));
+        mockMvc.perform(put("/api/v1/trips/{id}", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(json.formatted("0")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.travelers").value(4));
+    }
+
+    @Test
     void listIsAscendingByStartWithPhases() throws Exception {
         createTrip(user, "Bald", iso(NOW.plusDays(10)), iso(NOW.plusDays(12)));
         createTrip(user, "Vorbei", iso(NOW.minusDays(20)), iso(NOW.minusDays(18)));

@@ -32,6 +32,9 @@
     "description" : "Bookings at the stops of the authenticated user's trips, first accommodations",
     "name" : "Bookings"
   }, {
+    "description" : "Search an alternative to an accommodation booking (LiteAPI, ranked by the assistant) and book it, paid with PayPal",
+    "name" : "Alternative accommodations"
+  }, {
     "description" : "Balances and bookings of the authenticated user",
     "name" : "Accounting"
   }, {
@@ -114,6 +117,113 @@
         },
         "summary" : "Replace an accommodation booking",
         "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/accommodation-bookings/{bookingId}/alternative-criteria" : {
+      "get" : {
+        "description" : "Use case: the booking cannot be used. Place, dates, guests, rooms and price of the booking.",
+        "operationId" : "alternativeCriteria",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AlternativeCriteriaDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Criteria from a booking",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/accommodation-bookings/{bookingId}/alternative-reservations" : {
+      "post" : {
+        "description" : "Locks price and availability (prebook) and creates the PayPal payment. Send the user to approveUrl, then call /booking-reservations/{id}/booking. 409 OFFER_UNAVAILABLE (search again), 409 PRICE_EXCEEDED, 503 PAYPAL_NOT_CONFIGURED.",
+        "operationId" : "reserveAlternative",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReservationInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Reserve an alternative",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/accommodation-bookings/{bookingId}/alternative-searches" : {
+      "post" : {
+        "description" : "Offers from LiteAPI that meet all criteria, ranked by the assistant if available. Takes some seconds. 503 ALTERNATIVES_UNAVAILABLE, 429 ALTERNATIVES_RATE_LIMITED.",
+        "operationId" : "searchAlternatives",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AlternativeCriteriaInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AlternativeSearchResultDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Search alternatives",
+        "tags" : [ "Alternative accommodations" ]
       }
     },
     "/api/v1/accounting/balances" : {
@@ -450,6 +560,92 @@
         "tags" : [ "Top-ups" ]
       }
     },
+    "/api/v1/booking-reservations/{reservationId}" : {
+      "get" : {
+        "operationId" : "getReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "A reservation",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/booking-reservations/{reservationId}/abort" : {
+      "post" : {
+        "description" : "E.g. after cancelling at PayPal; nothing was paid.",
+        "operationId" : "abortReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Abort a reservation",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/booking-reservations/{reservationId}/booking" : {
+      "post" : {
+        "description" : "Authorizes the payment, books at LiteAPI, captures the payment and adds the booking to the stop. Safe to repeat. 422 PAYMENT_NOT_APPROVED/PAYMENT_DECLINED, 409 OFFER_UNAVAILABLE (the payment is released), 503 ALTERNATIVES_UNAVAILABLE (try again).",
+        "operationId" : "bookReservation",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Book a reservation after the payment was approved",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
     "/api/v1/bookings/accommodation-drafts" : {
       "post" : {
         "description" : "Pasted or shared text and/or a screenshot (JPEG, PNG, WebP, GIF) or PDF up to 5 MB. The content is sent to the language model (OpenAI) and not stored. 503 ASSISTANT_UNAVAILABLE if the assistant is not configured or fails, 429 ASSISTANT_RATE_LIMITED.",
@@ -486,6 +682,103 @@
         },
         "summary" : "Read an accommodation booking from a confirmation",
         "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/accommodation-facts" : {
+      "post" : {
+        "description" : "From the LiteAPI hotel data (with hotelId); missing fields are looked up on the web by the assistant (OpenAI web search, only name, address and coordinates of the accommodation are sent). Counts towards the assistant's rate limit when it is asked.",
+        "operationId" : "lookUpAccommodation",
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/AccommodationQueryDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AccommodationFactsDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Look up contact and house rules of an accommodation",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/accommodation-suggestions" : {
+      "get" : {
+        "description" : "LiteAPI hotels whose name contains the query (at least 3 characters). With latitude and longitude (the stop) those within 30 km come first, nearest first. Empty if LiteAPI is not configured or not reachable.",
+        "operationId" : "suggestAccommodations",
+        "parameters" : [ {
+          "in" : "query",
+          "name" : "query",
+          "required" : true,
+          "schema" : {
+            "type" : "string"
+          }
+        }, {
+          "in" : "query",
+          "name" : "latitude",
+          "required" : false,
+          "schema" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        }, {
+          "in" : "query",
+          "name" : "longitude",
+          "required" : false,
+          "schema" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/AccommodationSuggestionDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Suggest accommodations by name",
+        "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/alternatives/status" : {
+      "get" : {
+        "description" : "Whether alternatives can be searched, booked, ranked.",
+        "operationId" : "alternativesStatus",
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AlternativesStatusDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Alternatives status",
+        "tags" : [ "Alternative accommodations" ]
       }
     },
     "/api/v1/bookings/assistant" : {
@@ -527,6 +820,35 @@
         },
         "summary" : "Delete a booking",
         "tags" : [ "Bookings" ]
+      }
+    },
+    "/api/v1/bookings/{bookingId}/cancellation" : {
+      "post" : {
+        "description" : "Only in the app, e.g. the booking an alternative replaces; the provider is not contacted.",
+        "operationId" : "cancelBooking",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Mark a booking as cancelled",
+        "tags" : [ "Alternative accommodations" ]
       }
     },
     "/api/v1/incidents/trip-counts" : {
@@ -845,7 +1167,7 @@
             "description" : "OK"
           }
         },
-        "summary" : "Change name and period of a trip",
+        "summary" : "Change name, period and travelers of a trip",
         "tags" : [ "Trips" ]
       }
     },
@@ -1590,6 +1912,326 @@
           }
         }
       },
+      "AccommodationFactsDto" : {
+        "type" : "object",
+        "description" : "Contact and house rules of an accommodation, not stored. Times are local at the accommodation. fromLiteApi/fromAssistant name the fields by origin; fields from the assistant were found on the web and should be checked by the user.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInFrom" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "checkOutUntil" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "fromAssistant" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "fromLiteApi" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "researched" : {
+            "type" : "boolean",
+            "description" : "Whether the assistant looked up missing fields"
+          },
+          "sources" : {
+            "type" : "array",
+            "description" : "Web pages the assistant used",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "website" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AccommodationQueryDto" : {
+        "type" : "object",
+        "description" : "Accommodation whose contact and house rules are looked up. hotelId if it was chosen from the suggestions; name, address and coordinates help the assistant identify it.",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "hotelId" : {
+            "type" : [ "string", "null" ]
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          }
+        }
+      },
+      "AccommodationSuggestionDto" : {
+        "type" : "object",
+        "description" : "Accommodation found by name (LiteAPI hotel data), for the autocompletion of the name",
+        "properties" : {
+          "addressLine" : {
+            "type" : [ "string", "null" ]
+          },
+          "countryCode" : {
+            "type" : [ "string", "null" ]
+          },
+          "hotelId" : {
+            "type" : "string",
+            "description" : "LiteAPI hotel id"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "stars" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        }
+      },
+      "AlternativeCandidateDto" : {
+        "type" : "object",
+        "description" : "Offer of a hotel that meets all criteria. price is the total for the stay including the fee.",
+        "properties" : {
+          "address" : {
+            "type" : [ "string", "null" ]
+          },
+          "boardName" : {
+            "type" : [ "string", "null" ]
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "distanceMeters" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "freeCancellationUntil" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Free cancellation until then, local at the hotel"
+          },
+          "hotelId" : {
+            "type" : "string"
+          },
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "name" : {
+            "type" : "string"
+          },
+          "offerId" : {
+            "type" : "string"
+          },
+          "photoUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "possiblySame" : {
+            "type" : "boolean",
+            "description" : "Within 50 m of the current accommodation, may be the same place"
+          },
+          "price" : {
+            "type" : "string",
+            "format" : "decimal",
+            "example" : "189.00"
+          },
+          "rating" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ],
+            "description" : "Why the assistant ranks it there, absent without ranking"
+          },
+          "refundable" : {
+            "type" : "boolean"
+          },
+          "roomName" : {
+            "type" : [ "string", "null" ]
+          },
+          "stars" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          }
+        }
+      },
+      "AlternativeCriteriaDto" : {
+        "type" : "object",
+        "description" : "Criteria filled from the booking. Dates local at the accommodation, maxPrice is the total for the stay. missing: fields the user has to enter (location, checkIn, checkOut, guests).",
+        "properties" : {
+          "checkIn" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "checkOut" : {
+            "type" : [ "string", "null" ],
+            "format" : "date"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "excludeHotelId" : {
+            "type" : [ "string", "null" ],
+            "description" : "LiteAPI id of the current accommodation, if known"
+          },
+          "guests" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "maxPrice" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "missing" : {
+            "type" : "array",
+            "items" : {
+              "type" : "string"
+            }
+          },
+          "placeName" : {
+            "type" : [ "string", "null" ],
+            "description" : "Address or name the coordinates belong to"
+          },
+          "radiusMeters" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "rooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "AlternativeCriteriaInputDto" : {
+        "type" : "object",
+        "description" : "Criteria of a search. Dates local at the place, maxPrice is the total for the stay including the fee (empty: no limit).",
+        "properties" : {
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "excludeHotelId" : {
+            "type" : [ "string", "null" ]
+          },
+          "guests" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "maxPrice" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "radiusMeters" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "rooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        }
+      },
+      "AlternativeSearchResultDto" : {
+        "type" : "object",
+        "description" : "Candidates best first, ranked by the assistant if ranked is true, else by price",
+        "properties" : {
+          "candidates" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/AlternativeCandidateDto"
+            }
+          },
+          "offersChecked" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Offers LiteAPI returned before checking the criteria"
+          },
+          "ranked" : {
+            "type" : "boolean"
+          },
+          "recommendedHotelId" : {
+            "type" : [ "string", "null" ]
+          }
+        }
+      },
+      "AlternativesStatusDto" : {
+        "type" : "object",
+        "description" : "Whether alternatives can be searched (LiteAPI), booked (LiteAPI and PayPal) and ranked (assistant)",
+        "properties" : {
+          "bookingAvailable" : {
+            "type" : "boolean"
+          },
+          "rankingAvailable" : {
+            "type" : "boolean"
+          },
+          "searchAvailable" : {
+            "type" : "boolean"
+          }
+        }
+      },
       "AppUserDto" : {
         "type" : "object",
         "properties" : {
@@ -1778,6 +2420,11 @@
           "startAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "travelers" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Number of travelers (1-99), suggested as guests of bookings"
           }
         }
       },
@@ -2007,6 +2654,137 @@
           "durationSeconds" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }
+      },
+      "ReservationDto" : {
+        "type" : "object",
+        "description" : "Booking of an alternative via LiteAPI, paid with PayPal; price (including fee) is what the user pays",
+        "properties" : {
+          "approveUrl" : {
+            "type" : [ "string", "null" ],
+            "description" : "Approve the payment there, only in the answer that creates it"
+          },
+          "booking" : {
+            "$ref" : "#/components/schemas/BookingDto",
+            "description" : "The created booking once booked"
+          },
+          "bookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "failure" : {
+            "type" : [ "string", "null" ]
+          },
+          "fee" : {
+            "type" : "string",
+            "format" : "decimal",
+            "example" : "17.18"
+          },
+          "freeCancellationUntil" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "guests" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hotelAddress" : {
+            "type" : [ "string", "null" ]
+          },
+          "hotelName" : {
+            "type" : "string"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "price" : {
+            "type" : "string",
+            "format" : "decimal",
+            "example" : "189.00"
+          },
+          "refundable" : {
+            "type" : "boolean"
+          },
+          "replacesBookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "rooms" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PREBOOKED", "PAYMENT_PENDING", "AUTHORIZED", "PROVIDER_BOOKED", "BOOKED", "FAILED" ]
+          },
+          "stopId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "ReservationInputDto" : {
+        "type" : "object",
+        "description" : "Offer picked from the search with its criteria and the person it is booked for. Name, e-mail and phone go to LiteAPI and are kept only until the booking is made.",
+        "properties" : {
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "email" : {
+            "type" : "string"
+          },
+          "firstName" : {
+            "type" : "string"
+          },
+          "guests" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hotelId" : {
+            "type" : "string"
+          },
+          "lastName" : {
+            "type" : "string"
+          },
+          "maxPrice" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "412.50"
+          },
+          "offerId" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : "string"
+          },
+          "rooms" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },
@@ -2331,6 +3109,11 @@
             "items" : {
               "$ref" : "#/components/schemas/StopDto"
             }
+          },
+          "travelers" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Number of travelers, suggested as guests of bookings"
           }
         }
       },
@@ -2460,7 +3243,7 @@
       },
       "UpdateTripDto" : {
         "type" : "object",
-        "description" : "Name and period of a trip. Points in time with the offset of the user's time zone",
+        "description" : "Name, period and travelers of a trip. Points in time with the offset of the user's time zone",
         "properties" : {
           "endAt" : {
             "type" : "string",
@@ -2472,6 +3255,11 @@
           "startAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "travelers" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Number of travelers (1-99), null removes it"
           }
         }
       },

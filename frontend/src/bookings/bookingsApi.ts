@@ -5,10 +5,19 @@ import {
   deleteBooking as deleteBookingRequest,
   extractAccommodation as extractAccommodationRequest,
   listBookings,
+  lookUpAccommodation as lookUpAccommodationRequest,
+  suggestAccommodations as suggestAccommodationsRequest,
 } from '../generated/api';
 import type { AccommodationDraftDto, AccommodationDto, BookingDto } from '../generated/api';
 import { TripsApiError } from '../trips/tripsApi';
-import type { Accommodation, AccommodationBookingInput, AccommodationDraft, Booking } from './model';
+import type {
+  Accommodation,
+  AccommodationBookingInput,
+  AccommodationDraft,
+  AccommodationFacts,
+  AccommodationSuggestion,
+  Booking,
+} from './model';
 
 async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: Response }>): Promise<T> {
   const { data, error, response } = await call;
@@ -124,4 +133,57 @@ export async function extractAccommodation(text: string | null, file: File | nul
     body.file = file;
   }
   return toDraft(await unwrap(extractAccommodationRequest({ body })));
+}
+
+/** LiteAPI accommodations whose name contains the query, near the point first; empty on any failure. */
+export async function suggestAccommodations(
+  query: string,
+  near: { latitude: number; longitude: number } | null,
+  signal?: AbortSignal,
+): Promise<AccommodationSuggestion[]> {
+  try {
+    const found = await unwrap(
+      suggestAccommodationsRequest({
+        query: { query, latitude: near?.latitude, longitude: near?.longitude },
+        signal,
+      }),
+    );
+    return found.map((dto) => ({
+      hotelId: dto.hotelId!,
+      name: dto.name ?? '',
+      addressLine: dto.addressLine ?? null,
+      countryCode: dto.countryCode ?? null,
+      latitude: dto.latitude ?? null,
+      longitude: dto.longitude ?? null,
+      stars: dto.stars ?? null,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Contact and house rules: LiteAPI hotel data, what is missing looked up on the web by the assistant. */
+export async function lookUpAccommodation(query: {
+  hotelId: string | null;
+  name: string;
+  addressLine: string | null;
+  countryCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}): Promise<AccommodationFacts> {
+  const dto = await unwrap(lookUpAccommodationRequest({ body: query }));
+  return {
+    addressLine: dto.addressLine ?? null,
+    countryCode: dto.countryCode ?? null,
+    phone: dto.phone ?? null,
+    email: dto.email ?? null,
+    website: dto.website ?? null,
+    checkInFrom: dto.checkInFrom ?? null,
+    checkInUntil: dto.checkInUntil ?? null,
+    checkOutUntil: dto.checkOutUntil ?? null,
+    fromLiteApi: dto.fromLiteApi ?? [],
+    fromAssistant: dto.fromAssistant ?? [],
+    researched: dto.researched ?? false,
+    sources: dto.sources ?? [],
+  };
 }

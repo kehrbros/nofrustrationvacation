@@ -10,8 +10,8 @@ import static com.tngtech.archunit.core.domain.JavaClass.Predicates.resideOutsid
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
- * The PayPal module is the technical connection only, business logic lives in the accounting module, see
- * Docs/paypal.md.
+ * The PayPal module is the technical connection only, business logic lives in the modules that pay with it
+ * (accounting, bookings), see Docs/paypal.md.
  */
 class PayPalModuleTest {
     private static final String PAYPAL = "com.nfv.paypal..";
@@ -29,8 +29,8 @@ class PayPalModuleTest {
     }
 
     @Test
-    void onlyTheAccountingModuleUsesPayPal() {
-        noClasses().that().resideOutsideOfPackages(PAYPAL, "com.nfv.accounting..")
+    void onlyAccountingAndBookingsUsePayPal() {
+        noClasses().that().resideOutsideOfPackages(PAYPAL, "com.nfv.accounting..", "com.nfv.bookings..")
                 .should().dependOnClassesThat().resideInAPackage(PAYPAL)
                 .check(classes);
     }

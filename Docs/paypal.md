@@ -1,13 +1,14 @@
 # PayPal-Anbindung
 
-- **Modul `com.nfv.paypal`:** nur die technische Anbindung an die PayPal REST API. Kennt keine Fachmodule, nur `common` (ArchUnit `PayPalModuleTest`). Bisher einziger Nutzer ist `com.nfv.accounting`, siehe [accounting.md](accounting.md). Geplant: Zahlung alternativer Unterkünfte in `com.nfv.bookings` (Authorize, Capture, Void, Refund, Return-URL je Aufruf), siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung).
+- **Modul `com.nfv.paypal`:** nur die technische Anbindung an die PayPal REST API. Kennt keine Fachmodule, nur `common` (ArchUnit `PayPalModuleTest`). Nutzer: `com.nfv.bookings` (Zahlung alternativer Unterkünfte, siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung)) und der Altbestand `com.nfv.accounting`, siehe [accounting.md](accounting.md).
 - **Fassaden:**
   - `PayPalConnect`: „Log in with PayPal“ (OAuth 2.0 Authorization Code). Der Provider meldet sich bei PayPal an und bestätigt sein Konto; wir erhalten `payer_id`, E-Mail und Verifizierungsstatus (Code-Tausch über `/v1/identity/openidconnect/tokenservice`, dann `/v1/oauth2/token/userinfo?schema=openid`, wie in PayPals Doku zu Payouts-Empfängern; der Tausch über `/v1/oauth2/token` mit `schema=paypalv1.1` scheiterte in der Sandbox mit `400 invalid_request`, Scope `openid email https://uri.paypal.com/services/paypalattributes`). Kein PayPal-Passwort, keine manuell eingetippte E-Mail.
-  - `PayPalCheckout`: Einzahlungen über die Orders API v2 (`intent=CAPTURE`): Order anlegen → Zahler bestätigt bei PayPal (`payer-action`-Link) → Capture.
+  - `PayPalCheckout`: Zahlungen über die Orders API v2. Order anlegen → Zahler bestätigt bei PayPal (`payer-action`-Link) → bei `intent=CAPTURE` Capture (Einzahlungen in `accounting`, Return-URLs aus der Konfiguration), bei `intent=AUTHORIZE` erst `authorize` (Geld reserviert), dann `captureAuthorization` (`final_capture`) oder `voidAuthorization` (freigeben, z. B. wenn die Buchung scheitert). `refundCapture` erstattet vollständig. Return- und Cancel-URL je Order (`createOrder(…, intent, returnUrl, cancelUrl)`), z. B. zurück auf die Unterroute der Alternativen.
   - `PayPalPayouts`: Auszahlungen über die Payouts API an die `payer_id` (`recipient_type=PAYPAL_ID`). Asynchron: Status später per `GET /v1/payments/payouts/{batchId}`.
 - **`client/PayPalHttp`:** App-Token per Client Credentials, gecacht bis 60 s vor Ablauf, bei 401 einmal neu geholt. Fehler: 4xx → `PayPalRejectedException` (mit `issue`, z. B. `INSTRUMENT_DECLINED`, ohne Wirkung), 5xx/IO → `PayPalUnavailableException` (Ausgang unbekannt).
 - **Idempotenz:**
   - Order anlegen und Capture mit `PayPal-Request-Id` (`create-top-up-{id}`, `capture-top-up-{id}`), Wiederholung liefert das erste Ergebnis. `ORDER_ALREADY_CAPTURED` → Order wird gelesen.
+  - Alternativen: `create-stay-{id}`, `authorize-stay-{id}`, `capture-stay-{id}`, `void-stay-{id}`. `ORDER_ALREADY_AUTHORIZED` → Order wird gelesen, `AUTHORIZATION_ALREADY_VOIDED` gilt als erledigt.
   - Payouts mit `sender_batch_id = nfv-payout-{id}`, PayPal lehnt eine zweite Batch mit derselben Id ab (30 Tage).
 
 ## Konfiguration und Zugangsdaten

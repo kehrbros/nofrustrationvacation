@@ -1,6 +1,6 @@
 # Konzept: Alternative Unterkünfte suchen (LiteAPI + Assistant)
 
-- **Status:** Konzept, nicht umgesetzt. Bei der Umsetzung [architecture.md](architecture.md) und [domain.md](domain.md#bookings) in derselben Änderung anpassen.
+- **Status:** umgesetzt (2026-11-03), Zahlung nur über PayPal, das Payment SDK von LiteAPI wird nicht genutzt. Abweichungen vom ursprünglichen Konzept stehen unter [Umsetzung](#umsetzung-stand-2026-11-03).
 - **Ziel:** Zu einer hinterlegten Unterkunft-Buchung eine Alternative finden, die alle übergebenen Kriterien erfüllt, und sie in der App buchen.
 - **Kriterien (erste Stufe):** maximaler Preis, Region (Adresse bzw. Koordinaten + Umkreis), Verfügbarkeit für die Gästezahl, Anzahl Zimmer, Datum von/bis.
 - **Erster Use-Case „Buchung nicht nutzbar“:** falsch gebucht, Hotel hat die Buchung vergessen, überbucht o. Ä. Die Kriterien werden aus der aktuellen Unterkunft befüllt, der Nutzer kann sie vor der Suche ändern.
@@ -164,9 +164,23 @@
 - Fälle: Vorbefüllung (fehlende Gäste/Koordinaten, laufender Aufenthalt, anteiliger Preis), harte Prüfung verwirft zu teure und zu weit entfernte Angebote, Ranking verwirft fremde Ids, Suche ohne Assistant, Prebook über Max. Preis → `PRICE_EXCEEDED`, `2001` → `OFFER_EXPIRED`, Buchung idempotent über `clientReference`, neue Booking mit `source` `SEARCH`.
 - Manuell gegen die Sandbox (`sand_`-Key, Testkarten des Payment SDK).
 
+## Umsetzung (Stand 2026-11-03)
+
+- **Code:** `bookings.logic` `LiteApi` (Client, eigene Records), `AlternativeSearch` (Kriterien, harte Prüfung), `AlternativeRanking` (Assistant), `AlternativeReservations` (Ablauf) mit `ReservationSteps` (eine Transaktion je Schritt), `Pricing`, `SearchLimiter`; `bookings.api.AlternativeController`; `bookings.config.AlternativesProperties` (`nfv.bookings.alternatives.*`); Frontend `src/bookings/AlternativesSheet.tsx`.
+- **Zahlung nur PayPal** (Entscheidung 2026-11-03), kein Payment SDK. Buchung bei LiteAPI immer mit `ACC_CREDIT_CARD`, Rates und Prebook mit `margin: 0`.
+- **Provision:** `fee-percent` (Standard 10 %) auf den Nettopreis, gedeckelt auf den `suggestedSellingPrice`, falls der über dem Nettopreis liegt. Der Max. Preis gilt für den Endpreis.
+- **Status** der Reservierung: `PREBOOKED`, `PAYMENT_PENDING` (Order angelegt), `AUTHORIZED`, `PROVIDER_BOOKED` (bei LiteAPI gebucht, Geld noch nicht eingezogen), `BOOKED`, `FAILED`.
+- **Kein Poller:** `POST /booking-reservations/{id}/booking` setzt beim letzten gespeicherten Schritt fort und ist wiederholbar (PayPal-Request-Ids, `clientReference` `nfv-stay-<id>`). Antwortet LiteAPI auf das Buchen mit `4005` (Referenz schon gebucht, Antwort davor verloren), bleibt das Geld reserviert und der Fall wird geloggt (manuell prüfen). Lehnt PayPal den Capture nach erfolgter Buchung ab, ebenso.
+- **Fehler von LiteAPI:** einen Code `2001` gibt es laut Referenz nicht. Jede 4xx-Antwort auf Prebook oder Book (außer 401/403) ist `OFFER_UNAVAILABLE`, 5xx und Netzwerkfehler `ALTERNATIVES_UNAVAILABLE`.
+- **Gäste:** LiteAPI braucht je Zimmer einen Gast; eingetragen wird der Buchende für jedes Zimmer. Gästezahl wird gleichmäßig auf die Zimmer verteilt (`Pricing.adultsPerRoom`).
+- **Hotel und Gastdaten** stehen in der Reservierung (Tabelle `booking_reservation`, `V30`), nicht historisiert. Gastdaten werden bei `BOOKED` oder `FAILED` gelöscht. Hotel-Daten kommen aus `GET /data/hotel`, Check-in/Check-out-Zeiten daraus, sonst 15:00/11:00.
+- **Grund** („falsch gebucht“ usw.) wird nicht gespeichert. Die bisherige Buchung wird nur auf Wunsch in der App als storniert markiert (`POST /bookings/{id}/cancellation`).
+- **Nicht umgesetzt:** Storno einer gebuchten Alternative (LiteAPI `PUT /bookings/{id}` und PayPal-Refund, `refundCapture` ist vorhanden), Abgleich per `GET /bookings/{id}`, MCP-Tools, Ausschluss der bisherigen Unterkunft über ähnliche Namen (nur über `placeRef` und die Markierung „möglicherweise die bisherige Unterkunft“ bis 50 m).
+- **Lokal ausprobieren:** `LITEAPI_API_KEY` (Sandbox-Key `sand_…`), `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` (Sandbox), Frontend über ngrok (PayPal akzeptiert `localhost` nicht als Return-URL), siehe [paypal.md](paypal.md#lokal-ohne-localhost-sandbox). `OPENAI_API_KEY` optional für das Ranking. Im Stack Docker Secret `nfv_liteapi_api_key`, siehe [deployment.md](deployment.md).
+
 ## Offene Punkte
 
-- Bestätigen, dass LiteAPI gemeint ist; Live-Key und Freischaltung bei Nuitee, Karte im LiteAPI-Konto für `ACC_CREDIT_CARD`.
+- Live-Key und Freischaltung bei Nuitee, Karte im LiteAPI-Konto für `ACC_CREDIT_CARD`.
 - Höhe der Provision, PayPal-Gebühren (wer trägt sie, in die Provision einrechnen), Provision bei Storno.
 - Max. Preis: Gesamtpreis oder pro Nacht, Aufschlag auf den bisherigen Preis als Standard (z. B. +20 %)? Bisherige Buchung schon bezahlt, daher ist der Preis der Alternative zusätzlich.
 - Kinder und Alter, `guestNationality` (Profil oder Gerät), Sprache der Hotel-Daten.

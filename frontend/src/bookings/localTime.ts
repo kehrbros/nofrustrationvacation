@@ -23,6 +23,11 @@ export function formatLocalDateTime(iso: string): string {
   return `${dayFormat.format(asUtcDate(date))} · ${time}`;
 }
 
+/** "Mo., 12. Juli", the day at the place. */
+export function formatLocalDate(iso: string): string {
+  return dayFormat.format(asUtcDate(wallClock(iso).date));
+}
+
 /** "12.–15. Juli" or "30. Juli – 2. Aug." for a stay, local at the place. */
 export function formatStay(startIso: string, endIso: string): string {
   const start = asUtcDate(wallClock(startIso).date);

@@ -112,20 +112,27 @@ public class TripLogic {
     }
 
     @Transactional
-    public Trip create(long appUserId, String name, OffsetDateTime startAt, OffsetDateTime endAt) {
+    public Trip create(long appUserId, String name, OffsetDateTime startAt, OffsetDateTime endAt,
+                       @Nullable Integer travelers) {
         String trimmed = requireName(name);
         requirePeriod(startAt, endAt);
-        return tripRepository.save(new Trip(appUserId, trimmed, startAt, endAt, OffsetDateTime.now(clock)));
+        requireTravelers(travelers);
+        Trip trip = new Trip(appUserId, trimmed, startAt, endAt, OffsetDateTime.now(clock));
+        trip.changeTravelers(travelers);
+        return tripRepository.save(trip);
     }
 
-    /** Name and period, nothing to plan: passage times depend on the departures at the stops only. */
+    /** Name, period and travelers, nothing to plan: passage times depend on the departures at the stops only. */
     @Transactional
-    public Trip update(long appUserId, long tripId, String name, OffsetDateTime startAt, OffsetDateTime endAt) {
+    public Trip update(long appUserId, long tripId, String name, OffsetDateTime startAt, OffsetDateTime endAt,
+                       @Nullable Integer travelers) {
         Trip trip = get(appUserId, tripId);
         String trimmed = requireName(name);
         requirePeriod(startAt, endAt);
+        requireTravelers(travelers);
         trip.rename(trimmed);
         trip.reschedule(startAt, endAt);
+        trip.changeTravelers(travelers);
         return trip;
     }
 
@@ -361,6 +368,12 @@ public class TripLogic {
         }
         if (endAt.isBefore(startAt)) {
             throw new InvalidTripInputException("trip ends before it starts");
+        }
+    }
+
+    private static void requireTravelers(@Nullable Integer travelers) {
+        if (travelers != null && (travelers < 1 || travelers > 99)) {
+            throw new InvalidTripInputException("travelers must be between 1 and 99");
         }
     }
 

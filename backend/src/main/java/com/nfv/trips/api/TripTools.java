@@ -27,6 +27,7 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 public class TripTools {
+    private static final String TRAVELERS = "Number of travelers (1-99), suggested as guests of bookings.";
     private static final String TIME = "Point in time with offset, e.g. 2027-07-12T08:00:00+12:00";
     private static final String PLANNING = " Routes are planned right away; planning needs coordinates of both stops "
             + "and a departure at the start stop, see planOutcome and planReason of the routes.";
@@ -63,21 +64,24 @@ public class TripTools {
     public TripDetailDto createTrip(@McpToolParam(description = "Name of the trip") String name,
                                     @McpToolParam(description = "Begin of the trip. " + TIME) OffsetDateTime startAt,
                                     @McpToolParam(description = "End of the trip, inclusive. " + TIME)
-                                    OffsetDateTime endAt) {
+                                    OffsetDateTime endAt,
+                                    @McpToolParam(description = TRAVELERS, required = false) @Nullable Integer travelers) {
         long appUserId = appUserId();
-        return tripDtos.detail(appUserId, tripLogic.create(appUserId, name, startAt, endAt).getId());
+        return tripDtos.detail(appUserId, tripLogic.create(appUserId, name, startAt, endAt, travelers).getId());
     }
 
-    @McpTool(name = "update_trip", description = "Changes name and period of a trip.",
+    @McpTool(name = "update_trip", description = "Changes name, period and number of travelers of a trip.",
             annotations = @McpTool.McpAnnotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true,
                     openWorldHint = false))
     public TripDetailDto updateTrip(@McpToolParam(description = "Id of the trip") long tripId,
                                     @McpToolParam(description = "Name of the trip") String name,
                                     @McpToolParam(description = "Begin of the trip. " + TIME) OffsetDateTime startAt,
                                     @McpToolParam(description = "End of the trip, inclusive. " + TIME)
-                                    OffsetDateTime endAt) {
+                                    OffsetDateTime endAt,
+                                    @McpToolParam(description = TRAVELERS + " Omitted: removes the number.",
+                                            required = false) @Nullable Integer travelers) {
         long appUserId = appUserId();
-        tripLogic.update(appUserId, tripId, name, startAt, endAt);
+        tripLogic.update(appUserId, tripId, name, startAt, endAt, travelers);
         return tripDtos.detail(appUserId, tripId);
     }
 

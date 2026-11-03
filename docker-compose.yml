@@ -33,6 +33,8 @@ services:
         target: POSTGRES_PASSWORD
       - source: openai_api_key
         target: OPENAI_API_KEY
+      - source: liteapi_api_key
+        target: LITEAPI_API_KEY
     ports:
       - target: 8080
         published: ${BACKEND_PORT:-8080}
@@ -136,3 +138,6 @@ secrets:
   openai_api_key:
     external: true
     name: nfv_openai_api_key
+  liteapi_api_key:
+    external: true
+    name: nfv_liteapi_api_key

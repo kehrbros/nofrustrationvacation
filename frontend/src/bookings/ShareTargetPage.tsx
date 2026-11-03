@@ -9,9 +9,10 @@ import { addStop, fetchTrip, fetchTrips } from '../trips/tripsApi';
 import AccommodationFields from './AccommodationFields';
 import { createAccommodationBooking, isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
-import { emptyForm, stopTimesFromForm, toInput, validateForm, type FilledForm } from './form';
+import { emptyForm, stopTimesFromForm, toInput, validateForm, withStayDefaults, type FilledForm } from './form';
 import type { BookingSource } from './model';
 import { readConfirmation } from './readConfirmation';
+import { stopPoint } from './stayDefaults';
 import { clearShared, readShared, type SharedContent } from './shareTarget';
 
 const NEW_STOP = -1;
@@ -90,6 +91,8 @@ export default function ShareTargetPage() {
         if (!active) return;
         setTrip(detail);
         setStopId(suggestStop(detail, form) ?? NEW_STOP);
+        // the travelers of the trip as guests if the confirmation did not name them
+        setFilled((current) => ({ ...current, form: withStayDefaults(current.form, { guests: detail.travelers }) }));
       },
       () => active && setTrip(null),
     );
@@ -234,6 +237,7 @@ export default function ShareTargetPage() {
             filled={filled.filled}
             uncertain={filled.uncertain}
             autoLocate={source !== 'MANUAL'}
+            near={stopPoint(trip?.stops.find((stop) => stop.id === stopId))}
           />
           {error && <Alert type="error" showIcon message={error} />}
           <button type="button" className="va-button va-button-accent va-block" disabled={saving || tripId == null} onClick={() => void save()}>

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router';
 
 import AuthCallback from './auth/AuthCallback';
+import AlternativesSheet from './bookings/AlternativesSheet';
 import BookingSheet from './bookings/BookingSheet';
 import ShareTargetPage from './bookings/ShareTargetPage';
 import StopBookingSheet from './bookings/StopBookingSheet';
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="stops/neu" element={<StopSheet />} />
         <Route path="stops/:stopId/buchung" element={<StopBookingSheet />} />
         <Route path="buchungen/:bookingId" element={<BookingSheet />} />
+        <Route path="buchungen/:bookingId/alternativen" element={<AlternativesSheet />} />
         <Route path="hinweise/:routeId/:incidentId" element={<IncidentSheet />} />
         <Route path="routen/:routeId" element={<RouteSheet />} />
       </Route>

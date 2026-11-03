@@ -84,6 +84,24 @@ public class BookingLogic {
         return new BookingView(booking, details);
     }
 
+    /** An accommodation booking of the user with its details. */
+    public BookingView accommodation(long appUserId, long bookingId) {
+        Booking booking = owned(appUserId, bookingId);
+        AccommodationDetails details = accommodationRepository.findByBookingId(bookingId).orElse(null);
+        if (booking.getType() != BookingType.ACCOMMODATION || details == null) {
+            throw new InvalidBookingInputException("booking is no accommodation");
+        }
+        return new BookingView(booking, details);
+    }
+
+    /** Marks the booking as cancelled in the app, e.g. after booking an alternative; the provider is not contacted. */
+    @Transactional
+    public BookingView cancel(long appUserId, long bookingId) {
+        Booking booking = owned(appUserId, bookingId);
+        booking.cancel();
+        return new BookingView(booking, accommodationRepository.findByBookingId(bookingId).orElse(null));
+    }
+
     @Transactional
     public void delete(long appUserId, long bookingId) {
         Booking booking = owned(appUserId, bookingId);

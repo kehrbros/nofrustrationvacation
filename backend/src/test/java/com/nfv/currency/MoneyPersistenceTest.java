@@ -37,7 +37,7 @@ class MoneyPersistenceTest {
                 SELECT table_name, column_name, numeric_precision, numeric_scale FROM information_schema.columns
                 WHERE table_schema = 'public' AND (column_name LIKE '%price%' OR column_name LIKE '%cost%'
                     OR column_name IN ('balance', 'amount', 'original_amount'))
-                    AND table_name NOT IN ('booking', 'booking_aud')""");
+                    AND table_name NOT IN ('booking', 'booking_aud', 'booking_reservation')""");
 
         assertEquals(10, columns.size(), columns.toString());
         for (Map<String, Object> column : columns) {

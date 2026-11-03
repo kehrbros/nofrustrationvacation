@@ -3,7 +3,7 @@
 ## Lokal mit Docker Compose
 
 - **Datei:** `docker-compose.local.yml`, Services `postgres`, `backend`, `frontend`. Alle Images werden aus den Dockerfiles im Repo gebaut, kein Zugriff auf die Container Registry und kein lokales Java/Maven/Node nötig. Das Backend baut `backend/Dockerfile.local` aus den Quellen (Multi-Stage mit Maven, Kontext über `Dockerfile.local.dockerignore`), CI nutzt weiter `backend/Dockerfile` mit dem vorher gebauten Jar.
-- **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NFV_IDP_SIGNING_KEY` und `OPENAI_API_KEY` optional. Docker Compose liest die `.env` automatisch.
+- **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NFV_IDP_SIGNING_KEY`, `OPENAI_API_KEY` und `LITEAPI_API_KEY` optional. Docker Compose liest die `.env` automatisch.
 - **Start:** `docker compose -f docker-compose.local.yml up --build`. Frontend http://localhost:5173 (Port des Vite-Dev-Servers, damit Redirect-URIs und PayPal-Return-URL passen, also nicht parallel zu `npm run dev`), Backend http://localhost:8080, Login `test`/`test`.
 - **Datenbank:** PostgreSQL 17 mit PostGIS wie im Stack, Daten im Volume `postgres-data`, Port `LOCAL_POSTGRES_PORT` (Standard 5432) für DB-Tools. Zurücksetzen: `docker compose -f docker-compose.local.yml down -v`. Das Passwort gilt nur beim ersten Anlegen des Volumes.
 - Ohne Docker Compose: `mvn spring-boot:test-run` startet die App mit einem PostGIS-Container (Testcontainers, Docker nötig, Daten flüchtig), siehe README.
@@ -28,10 +28,11 @@
   | `nfv_paypal_client_secret` | `/run/secrets/PAYPAL_CLIENT_SECRET` | `nfv.paypal.client-secret` |
   | `nfv_idp_signing_key` | `/run/secrets/NFV_IDP_SIGNING_KEY` | `nfv.auth.signing-key` |
   | `nfv_openai_api_key` | `/run/secrets/OPENAI_API_KEY` | `nfv.assistant.api-key` (Auslesen von Buchungsbestätigungen, Titelfotos; leer: nur manuelle Eingabe, Platzhalterbild) |
+  | `nfv_liteapi_api_key` | `/run/secrets/LITEAPI_API_KEY` | `nfv.bookings.alternatives.api-key` (Alternative Unterkünfte suchen und buchen; leer: Funktion aus) |
   | `nfv_postgres_password` | `/run/secrets/POSTGRES_PASSWORD` (Backend), `/run/secrets/postgres_password` (Postgres, `POSTGRES_PASSWORD_FILE`) | `spring.datasource.password` |
 
 - **Wie das Backend sie liest:** `spring.config.import=optional:configtree:/run/secrets/` in `application.properties`. Jede Datei wird zur Property mit dem Dateinamen als Schlüssel (abschließender Zeilenumbruch wird entfernt), die vorhandenen Platzhalter `${PAYPAL_CLIENT_ID:}` usw. lösen darauf auf. Ohne `/run/secrets` (lokal) greifen wie bisher Umgebungsvariablen bzw. `application-local.properties`, siehe [paypal.md](paypal.md).
-- **Anlegen** (vor dem ersten Deploy, alle fünf sind Pflicht):
+- **Anlegen** (vor dem ersten Deploy, alle sechs sind Pflicht):
 
   ```sh
   printf '%s' '<client-id>'     | docker secret create nfv_paypal_client_id -
@@ -39,6 +40,7 @@
   openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:3072 | docker secret create nfv_idp_signing_key -
   openssl rand -base64 24 | tr -d '\n' | docker secret create nfv_postgres_password -
   printf '%s' '<openai-api-key>' | docker secret create nfv_openai_api_key -   # leer anlegen, wenn kein Key
+  printf '%s' '<liteapi-api-key>' | docker secret create nfv_liteapi_api_key -   # leer anlegen, wenn kein Key
   ```
 
 - **Rotieren:** Secrets sind unveränderlich. Neues Secret mit neuem Namen anlegen, `name:` in `docker-compose.yml` anpassen, neu deployen. Ein neuer Signaturschlüssel macht alle ausgegebenen Tokens ungültig: Nutzer melden sich neu an, MCP-Clients verbinden sich neu. Das Postgres-Passwort wirkt nur bei der Initialisierung des leeren Volumes, danach zusätzlich per `ALTER USER nfv PASSWORD '...'` ändern.

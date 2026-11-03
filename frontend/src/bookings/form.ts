@@ -8,8 +8,9 @@ export interface AccommodationForm {
   countryCode: string;
   latitude: number | null;
   longitude: number | null;
+  /** Origin of the place: liteapi:<hotelId> (chosen from the LiteAPI suggestions) or osm:<type>/<id>. */
   placeRef: string | null;
-  /** Shown next to "auf der Karte", e.g. the address found by the place search. */
+  /** Name and address of the chosen place, e.g. for a new stop. */
   placeDetail: string;
   phone: string;
   email: string;
@@ -18,8 +19,10 @@ export interface AccommodationForm {
   reference: string;
   manageUrl: string;
   checkInDate: string;
+  /** Not shown: start of the stay if checkInFrom is empty (from a confirmation, a stored booking or the default). */
   checkInTime: string;
   checkOutDate: string;
+  /** Not shown: end of the stay if checkOutUntil is empty. */
   checkOutTime: string;
   checkInFrom: string;
   checkInUntil: string;
@@ -119,18 +122,9 @@ export function formFromDraft(draft: AccommodationDraft): FilledForm {
   set('currency', draft.currency);
   set('cancellationDeadline', draft.cancellationDeadline?.slice(0, 16));
 
-  if (draft.checkInTime) {
-    set('checkInTime', shortTime(draft.checkInTime));
-  } else {
-    form.checkInTime = shortTime(draft.checkInFrom) || DEFAULT_CHECK_IN;
-    uncertain.add('checkInTime');
-  }
-  if (draft.checkOutTime) {
-    set('checkOutTime', shortTime(draft.checkOutTime));
-  } else {
-    form.checkOutTime = shortTime(draft.checkOutUntil) || DEFAULT_CHECK_OUT;
-    uncertain.add('checkOutTime');
-  }
+  // times of the stay are not shown; booked times win over the defaults, the house rules over both (see stayTimes)
+  form.checkInTime = shortTime(draft.checkInTime) || DEFAULT_CHECK_IN;
+  form.checkOutTime = shortTime(draft.checkOutTime) || DEFAULT_CHECK_OUT;
   (['name', 'checkInDate', 'checkOutDate'] as FormField[]).forEach((field) => {
     if (!form[field]) {
       uncertain.add(field);
@@ -174,6 +168,48 @@ export function formFromBooking(booking: Booking): AccommodationForm {
   };
 }
 
+/** What the booking is entered for: dates of the stay at the stop and the travelers of the trip. */
+export interface StayDefaults {
+  /** yyyy-mm-dd */
+  checkInDate?: string | null;
+  checkOutDate?: string | null;
+  guests?: number | null;
+}
+
+/** Fills empty dates and guests from the stop and the trip; what is already in the form stays. */
+export function withStayDefaults(form: AccommodationForm, defaults: StayDefaults | undefined): AccommodationForm {
+  if (!defaults) {
+    return form;
+  }
+  const next = { ...form };
+  if (!next.checkInDate && defaults.checkInDate) {
+    next.checkInDate = defaults.checkInDate;
+  }
+  if (!next.checkOutDate && defaults.checkOutDate && defaults.checkOutDate > next.checkInDate) {
+    next.checkOutDate = defaults.checkOutDate;
+  }
+  if (!next.guests.trim() && defaults.guests) {
+    next.guests = String(defaults.guests);
+  }
+  return next;
+}
+
+/**
+ * Start and end of the stay (HH:MM, local at the accommodation). The form asks for dates only: the time is the
+ * check-in from / check-out until of the house rules, else the booked time or the default.
+ */
+export function stayTimes(form: AccommodationForm): { checkIn: string; checkOut: string } {
+  return {
+    checkIn: (form.checkInFrom || form.checkInTime || DEFAULT_CHECK_IN).slice(0, 5),
+    checkOut: (form.checkOutUntil || form.checkOutTime || DEFAULT_CHECK_OUT).slice(0, 5),
+  };
+}
+
+/** LiteAPI hotel id of the chosen accommodation, null if it was not chosen from the LiteAPI suggestions. */
+export function liteApiHotelId(form: AccommodationForm): string | null {
+  return form.placeRef?.startsWith('liteapi:') ? form.placeRef.slice('liteapi:'.length) : null;
+}
+
 const blank = (value: string) => (value.trim() ? value.trim() : null);
 const time = (value: string) => (value ? `${value.slice(0, 5)}:00` : null);
 
@@ -182,10 +218,11 @@ export function validateForm(form: AccommodationForm): string | null {
   if (!form.name.trim()) {
     return 'Bitte den Namen der Unterkunft angeben.';
   }
-  if (!form.checkInDate || !form.checkOutDate || !form.checkInTime || !form.checkOutTime) {
-    return 'Bitte An- und Abreise mit Uhrzeit angeben.';
+  if (!form.checkInDate || !form.checkOutDate) {
+    return 'Bitte An- und Abreise angeben.';
   }
-  if (`${form.checkOutDate}T${form.checkOutTime}` <= `${form.checkInDate}T${form.checkInTime}`) {
+  const { checkIn, checkOut } = stayTimes(form);
+  if (`${form.checkOutDate}T${checkOut}` <= `${form.checkInDate}T${checkIn}`) {
     return 'Die Abreise muss nach der Anreise liegen.';
   }
   const price = form.price.trim().replace(',', '.');
@@ -211,6 +248,7 @@ export function validateForm(form: AccommodationForm): string | null {
 /** Request body, call only after validateForm returned null. */
 export function toInput(form: AccommodationForm, source: BookingSource): AccommodationBookingInput {
   const price = blank(form.price.replace(',', '.'));
+  const { checkIn, checkOut } = stayTimes(form);
   return {
     source,
     name: form.name.trim(),
@@ -225,8 +263,8 @@ export function toInput(form: AccommodationForm, source: BookingSource): Accommo
     provider: blank(form.provider),
     reference: blank(form.reference),
     manageUrl: blank(form.manageUrl),
-    checkIn: `${form.checkInDate}T${form.checkInTime.slice(0, 5)}:00`,
-    checkOut: `${form.checkOutDate}T${form.checkOutTime.slice(0, 5)}:00`,
+    checkIn: `${form.checkInDate}T${checkIn}:00`,
+    checkOut: `${form.checkOutDate}T${checkOut}:00`,
     fallbackTimeZone: systemTimeZone(),
     checkInFrom: time(form.checkInFrom),
     checkInUntil: time(form.checkInUntil),
@@ -242,8 +280,9 @@ export function toInput(form: AccommodationForm, source: BookingSource): Accommo
 
 /** Arrival and departure (datetime-local) for a stop from the stay; same wall clock, the stop uses the system zone. */
 export function stopTimesFromForm(form: AccommodationForm): { arrival: string; departure: string } {
+  const { checkIn, checkOut } = stayTimes(form);
   return {
-    arrival: form.checkInDate ? `${form.checkInDate}T${form.checkInTime.slice(0, 5)}` : '',
-    departure: form.checkOutDate ? `${form.checkOutDate}T${form.checkOutTime.slice(0, 5)}` : '',
+    arrival: form.checkInDate ? `${form.checkInDate}T${checkIn}` : '',
+    departure: form.checkOutDate ? `${form.checkOutDate}T${checkOut}` : '',
   };
 }
