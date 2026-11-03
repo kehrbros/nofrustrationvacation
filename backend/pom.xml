@@ -43,12 +43,13 @@
                 <version>2.20.0</version>
             </dependency>
             <!-- GraphHopper (osmosis-osm-binary) brings protobuf-java 3.12, timeshape needs at least 3.25 (its generated
-                 code). Newer 3.x runtimes run older 3.x generated code. timeshape from 2025b on needs protobuf 4, keep
+                 code). Newer 3.x runtimes run older 3.x generated code up to 3.25.5: from 3.25.6 on, code generated
+                 before 3.22 (osmosis) throws when reading .osm.pbf files. timeshape from 2025b on needs protobuf 4, keep
                  it below until GraphHopper moves to protobuf 4. -->
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
-                <version>3.25.6</version>
+                <version>3.25.5</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework.ai</groupId>

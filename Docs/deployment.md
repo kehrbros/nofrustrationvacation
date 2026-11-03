@@ -6,6 +6,7 @@
 - **Secrets:** lokal in der `.env` im Repo-Root (in `.gitignore`, nie committen). Vorlage `.env.example` kopieren: `POSTGRES_PASSWORD` ist Pflicht, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `NFV_IDP_SIGNING_KEY`, `OPENAI_API_KEY` und `LITEAPI_API_KEY` optional. Docker Compose liest die `.env` automatisch.
 - **Start:** `docker compose -f docker-compose.local.yml up --build`. Frontend http://localhost:5173 (Port des Vite-Dev-Servers, damit Redirect-URIs und PayPal-Return-URL passen, also nicht parallel zu `npm run dev`), Backend http://localhost:8080, Login `test`/`test`.
 - **Datenbank:** PostgreSQL 17 mit PostGIS wie im Stack, Daten im Volume `postgres-data`, Port `LOCAL_POSTGRES_PORT` (Standard 5432) für DB-Tools. Zurücksetzen: `docker compose -f docker-compose.local.yml down -v`. Das Passwort gilt nur beim ersten Anlegen des Volumes.
+- **Streckennetz:** Bind-Mounts `~/data/osm` (nur lesend) und `~/data/graphs` nach `/data` (`NFV_DATA_DIR=/data`), Host-Pfad über `NFV_HOST_DATA_DIR`. Extrakt von Hand nach `~/data/osm/new-zealand-latest.osm.pbf`, siehe [network.md](network.md#konfiguration). Ohne Extrakt startet das Backend, Routing antwortet mit 503. `NFV_NETWORK_IMPORT_ON_START=false` in der `.env` überspringt den Import.
 - Ohne Docker Compose: `mvn spring-boot:test-run` startet die App mit einem PostGIS-Container (Testcontainers, Docker nötig, Daten flüchtig), siehe README.
 
 ## Docker Swarm
@@ -15,7 +16,11 @@
 - **Datenbank:** PostgreSQL mit PostGIS (`postgis/postgis:17-3.5-alpine`), Host/DB/User über `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`.
 - **Postgres-Service:** Daten im Volume `postgres-data`. Das Volume ist lokal auf einem Node, deshalb Placement `node.role == manager`. Bei mehreren Managern auf ein Node-Label umstellen (`docker node update --label-add nfv.db=true <node>`, Constraint `node.labels.nfv.db == true`).
 - **Backend:** 1 Replica, Scheduler (Wechselkurse, PayPal-Status) und die Zuordnung von Incidents laufen im Prozess. Signaturschlüssel (Secret) und Autorisierungen des IdP (Datenbank) überleben einen Neustart, Logins und MCP-Verbindungen bleiben gültig. Swarm kennt kein `depends_on`, das Backend startet neu, bis Postgres erreichbar ist.
-- **Streckennetz** (geplant): Image `postgis/postgis` statt `postgres`, Volume für `/data/osm` und `/data/graphs`, mehr Speicher fürs Backend (NZ-Import einige GB, Graph Memory-Mapped außerhalb des Heaps, `-XX:MaxRAMPercentage`). Konfiguration je Region siehe [network.md](network.md#konfiguration).
+- **Streckennetz:** Bind-Mounts `${NFV_HOST_DATA_DIR:-${HOME}/data}/osm` (nur lesend) und `…/graphs` nach `/data` (`NFV_DATA_DIR=/data`). Extrakt nicht im Image und nicht im Repository, bis zum Geofabrik-Download von Hand nach `~/data/osm/new-zealand-latest.osm.pbf`, siehe [network.md](network.md#konfiguration).
+  - Verzeichnisse vorher anlegen (`mkdir -p ~/data/osm ~/data/graphs`), Swarm startet den Container sonst nicht.
+  - `${HOME}` löst `docker stack deploy` aus der Shell auf: Deploy als anderer Nutzer (z. B. `sudo`) → `NFV_HOST_DATA_DIR` setzen.
+  - Bind-Mounts sind lokal auf einem Node, daher Backend mit Placement `node.role == manager` (wie Postgres).
+  - Speicherlimit Backend 4G (NZ-Import einige GB, Graph Memory-Mapped außerhalb des Heaps, `-XX:MaxRAMPercentage=75`). Erster Start mit Import dauert einige Minuten, Routing antwortet bis dahin mit 503.
 - **Frontend:** 2 Replicas, Rolling Update `start-first`. nginx leitet `/api/**` an `http://backend:8080` weiter (`BACKEND_UPSTREAM`, Template `frontend/nginx.conf`), der Browser spricht die API also same-origin an. Login (OIDC) geht direkt an `BACKEND_URL`.
 
 ## Secrets

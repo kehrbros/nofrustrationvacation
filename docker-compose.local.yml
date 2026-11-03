@@ -51,6 +51,14 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Empty: no search for alternative accommodations (LiteAPI, sandbox keys start with sand_)
       LITEAPI_API_KEY: ${LITEAPI_API_KEY:-}
+      # Road network data mounted below, see Docs/network.md#konfiguration
+      NFV_DATA_DIR: /data
+      NFV_NETWORK_IMPORT_ON_START: ${NFV_NETWORK_IMPORT_ON_START:-true}
+    volumes:
+      # OSM extract copied by hand to the host (not in Git), read only
+      - ${NFV_HOST_DATA_DIR:-${HOME}/data}/osm:/data/osm:ro
+      # GraphHopper graph built on the first start, kept between container rebuilds
+      - ${NFV_HOST_DATA_DIR:-${HOME}/data}/graphs:/data/graphs
     ports:
       - "8080:8080"
     depends_on:
