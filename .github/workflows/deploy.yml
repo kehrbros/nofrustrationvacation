@@ -63,7 +63,6 @@ jobs:
           : "${DEPLOY_PORT:?Missing DEPLOY_PORT secret}"
           : "${DEPLOY_USER:?Missing DEPLOY_USER secret}"
           : "${DEPLOY_SSH_KEY:?Missing DEPLOY_SSH_KEY secret}"
-          : "${DEPLOY_KNOWN_HOSTS:?Missing DEPLOY_KNOWN_HOSTS secret}"
           : "${DOMAIN:?Missing DOMAIN variable}"
           [[ "$DOMAIN" =~ ^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$ ]] || { echo 'DOMAIN must be a plain host name like app.example.org'; exit 1; }
           : "${NFV_HOST_DATA_DIR:?Missing NFV_HOST_DATA_DIR variable}"
@@ -81,7 +80,16 @@ jobs:
           ssh_dir="$(mktemp -d "$RUNNER_TEMP/nfv-ssh.XXXXXX")"
           trap 'rm -rf "$ssh_dir"' EXIT
           printf '%s\n' "$DEPLOY_SSH_KEY" > "$ssh_dir/key"
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+          # DEPLOY_KNOWN_HOSTS is optional: with it the host key is checked strictly, without it any
+          # host key is accepted (no protection against a man in the middle, acceptable for the hackathon).
+          if [[ -n "${DEPLOY_KNOWN_HOSTS:-}" ]]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > "$ssh_dir/known_hosts"
+            host_key_checking=yes
+          else
+            echo '::warning::DEPLOY_KNOWN_HOSTS not set, the host key of the server is not verified'
+            : > "$ssh_dir/known_hosts"
+            host_key_checking=no
+          fi
 
           # Render first so a config error cannot start a remote deployment.
           docker stack config -c docker-compose.yml > "$ssh_dir/stack.yml"
@@ -91,7 +99,7 @@ jobs:
           ssh -F /dev/null -T \
             -o BatchMode=yes \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking="$host_key_checking" \
             -o UserKnownHostsFile="$ssh_dir/known_hosts" \
             -o ConnectTimeout=20 \
             -o ServerAliveInterval=15 \

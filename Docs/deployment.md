@@ -117,7 +117,7 @@
   | `DEPLOY_PORT` | SSH-Port, z. B. `22` |
   | `DEPLOY_USER` | `deploy` |
   | `DEPLOY_SSH_KEY` | Private Key `nfv-deploy` (komplette Datei inkl. `-----BEGIN/END …-----`) |
-  | `DEPLOY_KNOWN_HOSTS` | Ausgabe von `ssh-keyscan -p <port> <host>` (geprüft, s. o.) |
+  | `DEPLOY_KNOWN_HOSTS` | optional, Ausgabe von `ssh-keyscan -p <port> <host>` (geprüft, s. o.). Ohne das Secret prüft die Pipeline den Host-Key nicht (kein Schutz gegen Man-in-the-Middle, Warnung im Lauf) |
 
 - **Variablen:**
 
