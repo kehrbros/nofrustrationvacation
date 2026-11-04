@@ -37,7 +37,11 @@
   | `nfv_postgres_password` | `/run/secrets/POSTGRES_PASSWORD` (Backend), `/run/secrets/postgres_password` (Postgres, `POSTGRES_PASSWORD_FILE`) | `spring.datasource.password` |
 
 - **Wie das Backend sie liest:** `spring.config.import=optional:configtree:/run/secrets/` in `application.properties`. Jede Datei wird zur Property mit dem Dateinamen als Schlüssel (abschließender Zeilenumbruch wird entfernt), die vorhandenen Platzhalter `${PAYPAL_CLIENT_ID:}` usw. lösen darauf auf. Ohne `/run/secrets` (lokal) greifen wie bisher Umgebungsvariablen bzw. `application-local.properties`, siehe [paypal.md](paypal.md).
-- **Anlegen** (vor dem ersten Deploy, alle sechs sind Pflicht):
+- **Anlegen per Script (empfohlen):** `bash deploy/create-secrets.sh <admin>@<host> [<port>]` lokal im Repo-Root (Git Bash, Linux; Bash ≥ 4), mit einem Admin-Nutzer, der Docker auf dem Server ausführen darf (nicht `deploy`).
+  - Fragt jedes Secret verdeckt ab. Leer: unverändert. Wert: neues Secret `nfv_<name>_v1` bzw. nächste Version. `generate` erzeugt Signaturschlüssel bzw. Postgres-Passwort (openssl), `-` legt ein leeres Secret an (OpenAI/LiteAPI aus).
+  - Werte gehen nur per stdin über SSH, nicht als Argumente.
+  - Trägt die aktuelle Version jedes Secrets unter `name:` in `docker-compose.yml` ein und gibt sie aus. Danach `docker-compose.yml` committen und pushen, der Deploy nutzt dann die neuen Secrets.
+- **Anlegen von Hand** (vor dem ersten Deploy, alle sechs sind Pflicht, Namen in `docker-compose.yml` anpassen):
 
   ```sh
   printf '%s' '<client-id>'     | docker secret create nfv_paypal_client_id -
