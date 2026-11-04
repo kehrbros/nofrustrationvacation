@@ -23,7 +23,7 @@ flowchart LR
 - **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
 - **OpenAI:** liest Buchungsbestätigungen aus und zeichnet Titelfotos (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
 - **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools für Trips, Stops und Waypoints, siehe [API](#api).
-- **Verkehrsdatenquellen:** liefern Ereignisse in das Modul `input`, entweder abgerufen (`TRAFFIC_FEED`) oder gepusht (`WEBHOOK`). Noch keine Quelle angebunden.
+- **Verkehrsdatenquellen:** liefern Ereignisse in das Modul `input`, entweder abgerufen (`TRAFFIC_FEED`) oder gepusht (`WEBHOOK`). Noch keine Quelle angebunden. Entwurf mit gemeinsamer Schnittstelle `TrafficSource` je Quelle und Land, erste Quelle NZTA: [traffic-feed.md](traffic-feed.md).
 - **Routing:** kein externer Dienst, GraphHopper läuft eingebettet im Modul `network` (geplant), Kartendaten von Geofabrik, siehe [network.md](network.md).
 - **Benachrichtigung:** Kanal noch offen.
 
@@ -67,7 +67,9 @@ flowchart LR
     incidents --> network
     incidents -->|RouteSectionRepository| trips
     trips -.->|RouteChanged| incidents
-    input --> incidents
+    trips -.->|StopArrivalChanged, geplant| incidents
+    input -->|IncidentReporting| incidents
+    input -->|StructuredExtraction, geplant| assistant
     trips --> user
     recommendations --> network
     recommendations --> incidents
@@ -80,13 +82,15 @@ flowchart LR
 - **Rückwärts über Events:** `trips` kennt `incidents` nicht. Nach dem Planen einer Route veröffentlicht `RouteLogic` das Spring-Event `RouteChanged`, `incidents` reagiert darauf (synchron, in derselben Transaktion).
 - **`network` nach außen nur über `network.logic`** (`Routing`, `SegmentQueries`, `RegionImport`, `NetworkRefreshed`), keine Entities, Repositories oder GraphHopper-Typen. Später per ArchUnit.
 - **`incidents` liest den Index aus `trips`:** `ConsequenceMatcher` nutzt `RouteSectionRepository` (Index Segment → RouteSection). Später ggf. durch eine schmale Schnittstelle in `trips.logic` ersetzen.
+- **`input` und `incidents`** (beschlossen 2026-11-04, geplant): `input` empfängt, speichert, liest und reichert an (`→ assistant`), kennt `network` nicht. `incidents` verortet über `network.SegmentMatching` (`IncidentReporting`), legt Incidents an und bewertet Consequences. Bewertung bei geänderter Ankunft über das Event `StopArrivalChanged` aus `trips`.
 - **`recommendations`** liest Routen über `trips.logic` und übernimmt Vorschläge über `TripEditing` (Waypoints, Abfahrt, Planung). Reagiert auf `ConsequenceChanged` (nach dem Commit, eigener Thread) und `RouteChanged`, siehe [recommendations.md](recommendations.md).
 - **`auth`** ist per ArchUnit (`AuthModuleIsolationTest`) isoliert. Für die neuen Module gibt es noch keine ArchUnit-Regeln.
 
 ## Runtime View
 
-1. **Ereignis kommt an** (offen): Quelle → `input` speichert ein `Event` unverändert (`payload`), doppelte Zustellung über `externalId` erkannt.
-2. **Ereignis verarbeiten** (offen): Straße und Ort → Segmente, neuer oder bestehender `Incident` über `IncidentLogic.create`/`change`, `Event.processed(incidentId)`.
+1. **Ereignis kommt an** (Entwurf [traffic-feed.md](traffic-feed.md)): Quelle → `input` speichert ein `Event` unverändert (`payload`), doppelte Zustellung über `externalId` erkannt.
+2. **Ereignis verarbeiten** (Entwurf): Adapter liest das Event, `input` reichert nur bei geändertem Text per Modell an, `incidents.IncidentReporting` verortet über `network.SegmentMatching` und legt an oder ändert (`IncidentLogic.create`/`change`), `Event.processed(incidentId)`.
+   - **Bewerten** (Entwurf [consequence-assessment.md](consequence-assessment.md)): je Route gegen die Ankunft des Ziel-Stops, Kategorien `TOO_LATE`, `DELAYED`, `NO_IMPACT`.
 3. **Zuordnung:** `ConsequenceMatcher.matchIncident` findet über die Segmente die Routen, deren erwartete Durchfahrt die Gültigkeit überschneidet, und legt `Consequence`s an, aktualisiert oder entfernt sie.
 4. **Route planen:** REST oder MCP → `TripEditing` → Änderung in `TripLogic` (verwirft Sections betroffener Routen, committet) → je betroffene Route `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
 5. **Vorschläge** (Entwurf): `ConsequenceChanged` → `recommendations` baut ein Szenario mit Sperre bzw. Verzögerung und speichert bis zu `n` Vorschläge. Bei der Planung auf Anfrage aus dem Frontend. Übernehmen → `TripEditing.replaceWaypoints` → `RoutePlanning.plan`.
@@ -146,7 +150,7 @@ flowchart LR
 - **Modul `assistant`:** Zugriff auf das Sprachmodell, kennt keine Fachmodule. `StructuredExtraction.extract(…)` schickt Anweisung, JSON-Schema und Eingaben (Text, Bild, PDF) an die OpenAI Responses API (Structured Outputs, `strict`) und liefert das JSON zurück. Schema und Anweisung bringt der Aufrufer mit (z. B. `bookings.logic.AccommodationExtractor`).
 - **Bilder:** `ImageGeneration.generate(…)` schickt einen Prompt an die OpenAI Images API (`/images/generations`, 1536×1024, JPEG) und liefert die Bilddaten. Aufrufer: `trips.logic.CoverImageGeneration` (Prompt aus Name und Stops des Trips, ohne Transaktion um den Modellaufruf; ein inzwischen hochgeladenes Foto bleibt). Zählt gegen dasselbe Limit je Nutzer wie das Auslesen.
 - **HTTP direkt per `RestClient`**, ohne Spring-AI-Modell-Starter: volle Kontrolle über `store: false`, PDF-Eingabe und Schema, kein Pflicht-Key beim Start.
-- **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `image-model` (Standard `gpt-image-1-mini`, `OPENAI_IMAGE_MODEL`), `image-quality` (Standard `low`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30).
+- **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `image-model` (Standard `gpt-image-1-mini`, `OPENAI_IMAGE_MODEL`), `image-quality` (Standard `low`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30), geplant `system-requests-per-hour` (Hintergrundaufrufe ohne Nutzer, z. B. Anreicherung von Verkehrsmeldungen, eigener Zähler, Standard 60, beschlossen 2026-11-04, siehe [traffic-feed.md](traffic-feed.md#anreicherung-messageenrichment)).
 - **Ohne Key** startet die App normal, `GET /bookings/assistant` meldet `extractionAvailable: false`, das Frontend bietet dann nur die manuelle Eingabe an.
 - **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`nfv.assistant.api-key=` in den Test-Properties, `StructuredExtraction` und `ImageGeneration` gemockt). Der Trip-Name (und Stop-Namen) gehen beim Erzeugen eines Titelfotos an OpenAI.
 
@@ -171,7 +175,7 @@ flowchart LR
 ## Offene Punkte
 
 - **Streckennetz:** Aktualisierung, Geschwindigkeiten, weitere Regionen, siehe [network.md](network.md#offen).
-- **Ereignisquellen:** konkrete Feeds und Webhooks, Abruf-Scheduler, Webhook-Endpunkt mit Signaturprüfung, Verarbeitung Event → Incident inkl. Ortsbestimmung.
+- **Ereignisquellen:** entworfen in [traffic-feed.md](traffic-feed.md) (Schnittstelle, Abruf, Abgleich, Anreicherung, Verortung) und [consequence-assessment.md](consequence-assessment.md) (Bewertung), noch nicht umgesetzt.
 - **Benachrichtigung:** Kanal (Web-Push, E-Mail, MCP), Auslöser (neue oder geänderte Consequence), Duplikate vermeiden.
 - **Skalierung der Zuordnung:** derzeit synchron in der Transaktion. Bei vielen Routen oder Events asynchron nach dem Commit (`@TransactionalEventListener`, Queue).
 - **API und Frontend:** Trips, Stops, Waypoints, Titelfoto, Hinweise und MCP-Tools sind im Backend umgesetzt. Buchungen von Unterkünften sind umgesetzt (Eingabe, Auslesen von Bestätigungen, Teilen an die App). Im Frontend fehlen Bearbeiten und Löschen von Trips und Stops, Stops einfügen/umsortieren, Waypoints und die Anzeige des Planungsstatus. Offen sind außerdem weitere Buchungstypen, MCP-Tools für Buchungen und die Profil-Einträge (Profil, Benachrichtigungen, Einstellungen, KI-Assistenten, im Menü als „folgt“).

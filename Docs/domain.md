@@ -79,20 +79,24 @@
 - `Event` (Tabelle `input_event`, eine Tabelle für alle Subtypen, Spalte `kind`): Rohdaten `payload`, `externalId` (eindeutig je Quelle, erkennt doppelte Zustellung), `receivedAt`, `processedAt`.
   - `TrafficEvent` (`TRAFFIC`): aus dem Payload gelesene Straße, Beschreibung, Zeitraum.
   - `WebhookEvent` (`WEBHOOK`): Signatur geprüft ja/nein.
-- Ein Event löst 0..1 Incident aus (`incidentId`). Mehrere Events (z. B. Aktualisierungen einer Sperrung) können zum selben Incident führen. Die Verarbeitung Event → Incident fehlt noch.
+- Ein Event löst 0..1 Incident aus (`incidentId`). Mehrere Events (z. B. Aktualisierungen einer Sperrung) können zum selben Incident führen. Die Verarbeitung Event → Incident fehlt noch, Entwurf in [traffic-feed.md](traffic-feed.md).
 
 ## Incidents
 
 - `Incident`: Typ (`CLOSURE`, `CONGESTION`, `ROADWORKS`, `ACCIDENT`, `OTHER`), Beschreibung, gültig `validFrom`–`validTo` (`validTo` leer = bis auf Weiteres), erwartete Verzögerung. Verortet an 1..* Segmenten (`incident_segment`).
+- **Typwechsel und Annahme (beschlossen 2026-11-04, noch nicht umgesetzt):** `IncidentLogic.change` nimmt auch den Typ (gleiche Id, Envers behält den alten Typ, Consequences werden aktualisiert und behalten ihre Id). `Incident.assumedDelay`: Verzögerung, die die Quelle ohne Zahl annimmt (z. B. NZTA `Delays` 15 min), als geschätzt markiert.
+- **Zeitfenster (beschlossen 2026-11-03, noch nicht umgesetzt):** `Incident` 0..* `IncidentWindow` (`startsAt`, `endsAt`, `incident_window`, historisiert), z. B. nächtliche Sperrung über Wochen. Keine Fenster = durchgehend. `validFrom`–`validTo` bleibt die Hülle. Die Consequence merkt sich das erste getroffene Fenster (`windowStart`, `windowEnd`). Herkunft und Begründung in [traffic-feed.md](traffic-feed.md#zeitfenster).
 - `Incident` 1–* `Consequence`. Jede Consequence betrifft genau eine Route (höchstens eine je Incident und Route) und referenziert die erste betroffene `RouteSection`. Dazu `impact` (`CLOSURE` → `BLOCKED`, sonst `DELAYED`) und `delay` (= erwartete Verzögerung des Incidents).
+- **Bewertung (beschlossen 2026-11-04, noch nicht umgesetzt):** jede Consequence bekommt eine Kategorie `TOO_LATE`, `DELAYED` oder `NO_IMPACT`, bewertet je Route gegen die Ankunft des Ziel-Stops (`Stop.arrivalAt` = Frist), mit aufaddierter Verzögerung. Details in [consequence-assessment.md](consequence-assessment.md).
 - Consequences sind abgeleitet und werden nie von Nutzern bearbeitet. Werden Route oder Section gelöscht, löscht die Datenbank die Consequence mit (`ON DELETE CASCADE`).
 
 ## Zuordnungslogik (`ConsequenceMatcher`)
 
 1. **Incident neu oder geändert** (`IncidentLogic.create`/`change`): Segmente des Incidents → über den Index Segment → RouteSection (`ix_route_section_segment`) die Sections darauf, deren erwartete Durchfahrt die Gültigkeit überschneidet → je Route eine Consequence.
 2. **Route neu oder geändert** (`RouteChanged`, synchron in derselben Transaktion): Segmente der Route → aktive Incidents darauf (`validTo` leer oder nicht vorbei) → dieselbe Prüfung auf Überschneidung.
-- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`). Als reine Funktion `IncidentOverlap` in `incidents.logic`, auch für die Bewertung von Streckenvorschlägen. Andere Module lesen Incidents über `ActiveIncidents.onSegments` (Records, keine Entities).
+- Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`). Mit Zeitfenstern (geplant) zusätzlich: mindestens ein Fenster mit `passageEnd >= startsAt` und `passageStart <= endsAt`; die Abfragen bleiben auf der Hülle, die Fenster prüft `IncidentOverlap`. Als reine Funktion `IncidentOverlap` in `incidents.logic`, auch für die Bewertung von Streckenvorschlägen. Andere Module lesen Incidents über `ActiveIncidents.onSegments` (Records, keine Entities).
 - Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht.
+- **Toleranz (beschlossen 2026-11-04, noch nicht umgesetzt):** Die Durchfahrt wird für die Prüfung um `max(15 min, 10 % der Zeit seit Abfahrt)` erweitert. Treffer nur durch die Toleranz sind „knapp“ (`MARGINAL`), höchstens `DELAYED`, siehe [consequence-assessment.md](consequence-assessment.md#toleranz-der-durchfahrt-beschlossen-2026-11-04).
 - Tests: `ConsequenceMatchingTest`.
 
 ## Streckenvorschläge
@@ -103,11 +107,11 @@
 ## Offen
 
 - **Incidents an Unterkünften** (z. B. „Unterkunft nicht erreichbar“): bewusst ausgelassen, werden später betrachtet. Dann betrifft ein Incident evtl. einen Stop oder eine Booking statt Segmenten.
-- **Event → Incident:** Segmente aus Straße und Ortsangabe bestimmen, mehrere Events demselben Incident zuordnen (Aktualisierung, Aufhebung), Typ und Gültigkeit aus dem Payload ableiten.
+- **Event → Incident:** entworfen in [traffic-feed.md](traffic-feed.md), noch nicht umgesetzt.
 - **Neuplanung:** nach `NetworkRefreshed` (betroffene Routen neu planen) und Routen mit `ROUTING_UNAVAILABLE` automatisch erneut planen fehlen noch. Umfahrung bei `BLOCKED` über `recommendations`, Entwurf in [recommendations.md](recommendations.md).
-- **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt.
+- **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt, für die Bewertung geplant ([consequence-assessment.md](consequence-assessment.md#verzögerung-je-consequence)).
 - **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
-- **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen.
+- **Impact und Delay genauer:** derzeit nur aus dem Typ des Incidents abgeleitet und gleich für alle Routen. Geplant: Annahme der Quelle (`assumedDelay`) und Bewertung je Route, siehe [consequence-assessment.md](consequence-assessment.md).
 - **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung, Unterkunft nicht erreichbar), Transport und Aktivitäten, Sprach-/Namenssuche mit KI (Stufe 3), E-Mail-Weiterleitung (Stufe 4), Stornieren per API, Zeiten eines aus der Buchung angelegten Stops in der Zone der Unterkunft.
 - **Benachrichtigung:** wer wann worüber informiert wird, Schwellen (z. B. erst ab 15 min Verzögerung).
 - **Trips teilen:** derzeit gehört ein Trip genau einem Nutzer.
