@@ -2,8 +2,6 @@ package com.nfv.recommendations.api;
 
 import com.nfv.network.logic.RoutingUnavailableException;
 import com.nfv.recommendations.logic.InvalidSuggestionInputException;
-import com.nfv.recommendations.logic.SuggestionSetNotFoundException;
-import com.nfv.recommendations.logic.SuggestionStaleException;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
@@ -18,21 +16,15 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 
 /**
  * Maps errors of the suggestions API to problem details, before the fallback in {@code ControllerExceptionHandler}.
- * Foreign or unknown routes and sets look the same: 404 {@code TRIP_NOT_FOUND}.
+ * Foreign and unknown routes look the same: 404 {@code TRIP_NOT_FOUND}.
  */
 @ControllerAdvice(basePackages = "com.nfv.recommendations")
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class RecommendationExceptionHandler {
 
-    @ExceptionHandler({TripNotFoundException.class, TripItemNotFoundException.class,
-            SuggestionSetNotFoundException.class})
+    @ExceptionHandler({TripNotFoundException.class, TripItemNotFoundException.class})
     public ResponseEntity<ProblemDetail> handleNotFound(RuntimeException exception) {
         return problem(HttpStatus.NOT_FOUND, "TRIP_NOT_FOUND", exception.getMessage());
-    }
-
-    @ExceptionHandler(SuggestionStaleException.class)
-    public ResponseEntity<ProblemDetail> handleStale(SuggestionStaleException exception) {
-        return problem(HttpStatus.CONFLICT, "SUGGESTION_STALE", exception.getMessage());
     }
 
     @ExceptionHandler({InvalidSuggestionInputException.class, InvalidTripInputException.class})

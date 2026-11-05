@@ -2,9 +2,6 @@ package com.nfv.recommendations.logic;
 
 import com.nfv.network.logic.RoutePoint;
 import com.nfv.network.logic.RouteOptions;
-import com.nfv.recommendations.entities.OptionKind;
-import com.nfv.recommendations.entities.SuggestionTrigger;
-import com.nfv.recommendations.entities.WaypointMode;
 import com.nfv.trips.logic.PlannedSection;
 import jakarta.annotation.Nullable;
 
@@ -16,7 +13,7 @@ import java.util.stream.Stream;
 
 /**
  * Starting point of suggestions: points, departure, restrictions in the network and the planned route. Planning and
- * incidents only differ in how it is built ({@link ScenarioFactory}), see Docs/recommendations.md#szenario.
+ * incidents only differ in how it is built ({@link ScenarioFactory}), see Docs/recommendations.md#szenario-recommendationslogic.
  *
  * @param vias        waypoints of the user, empty with {@code IGNORE}
  * @param constraints blocked and delayed segments, none when planning

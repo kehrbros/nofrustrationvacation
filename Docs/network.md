@@ -48,6 +48,7 @@
   - Ergebnis `RouteResult`: Region, `extractVersionId`, Distanz, Dauer, Geometrie, `RoutedSegment`s (Segment-Id, `fromFraction`, `toFraction`, Distanz, Dauer), `SnappedPoint`s (gesnappter Punkt, Abstand, Position in den Segmenten).
   - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
 - `SegmentQueries.segments(ids)` → `SegmentInfo`: `ref`, Name, Länge, Mittelpunkt (`ST_LineInterpolatePoint`), Gegenrichtung (`reverseId`: gleicher Weg, Start und Ende vertauscht, `null` bei Einbahnstraßen). Genutzt von `recommendations` (Via-Punkte, „über SH 2“, Wenden am Via-Punkt). Später Geometrie und ausgemustert für API und Benachrichtigungen.
+- `SegmentQueries.line(List<SectionPart>)` → `GeoLine`: Linie über Teilstücke von Segmenten (`ST_LineSubstring` nach `fromFraction`/`toFraction`, in Reihenfolge, doppelte Punkte an den Übergängen entfernt). Genutzt von `trips.RouteLines` für die Karte.
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
 - `NetworkRefreshed` (Spring-Event): Region, neue `ExtractVersion`, ausgemusterte Segment-Ids.

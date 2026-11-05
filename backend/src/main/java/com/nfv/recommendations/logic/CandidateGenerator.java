@@ -1,6 +1,5 @@
 package com.nfv.recommendations.logic;
 
-import com.nfv.recommendations.entities.OptionKind;
 
 import java.util.List;
 

@@ -1,4 +1,4 @@
-package com.nfv.recommendations.entities;
+package com.nfv.recommendations.logic;
 
 /** Feature of a {@link RouteOption}, the frontend builds the texts. */
 public enum OptionLabel {

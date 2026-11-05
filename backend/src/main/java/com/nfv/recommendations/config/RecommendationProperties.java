@@ -3,8 +3,6 @@ package com.nfv.recommendations.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-import java.time.Duration;
-
 /**
  * Thresholds of the route suggestions, see Docs/recommendations.md.
  *
@@ -16,8 +14,7 @@ import java.time.Duration;
  * @param currentSharedRatio     at least this much shared distance with the planned route → label {@code CURRENT}
  * @param viaReproduceRatio      via points must reproduce at least this part of the suggestion
  * @param maxViaPointsPerSection most via points per section that differs from the fastest way
- * @param planningLifetime       a planning set expires after this time
- * @param retention              expired sets are deleted after this time
+ * @param maxChosenPoints        most points of a chosen suggestion, see {@code RouteChoice}
  */
 @ConfigurationProperties("nfv.recommendations")
 public record RecommendationProperties(
@@ -29,6 +26,5 @@ public record RecommendationProperties(
         @DefaultValue("0.95") double currentSharedRatio,
         @DefaultValue("0.9") double viaReproduceRatio,
         @DefaultValue("3") int maxViaPointsPerSection,
-        @DefaultValue("1h") Duration planningLifetime,
-        @DefaultValue("7d") Duration retention) {
+        @DefaultValue("25") int maxChosenPoints) {
 }

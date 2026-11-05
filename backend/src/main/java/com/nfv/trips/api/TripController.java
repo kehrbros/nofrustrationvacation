@@ -3,6 +3,7 @@ package com.nfv.trips.api;
 import com.nfv.trips.dto.CreateStopDto;
 import com.nfv.trips.dto.CreateTripDto;
 import com.nfv.trips.dto.MoveStopDto;
+import com.nfv.trips.dto.RouteLineDto;
 import com.nfv.trips.dto.TripDetailDto;
 import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.UpdateStopDto;
@@ -11,6 +12,7 @@ import com.nfv.trips.entities.Trip;
 import com.nfv.trips.logic.CoverImageGeneration;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.NewStop;
+import com.nfv.trips.logic.RouteLines;
 import com.nfv.trips.logic.TripEditing;
 import com.nfv.trips.logic.TripLogic;
 import com.nfv.user.security.CurrentUser;
@@ -46,6 +48,7 @@ public class TripController {
     private final TripEditing tripEditing;
     private final TripDtos tripDtos;
     private final CoverImageGeneration coverImageGeneration;
+    private final RouteLines routeLines;
 
     @Operation(summary = "All trips", description = "Ascending by start, with the phase relative to now.")
     @GetMapping
@@ -66,6 +69,17 @@ public class TripController {
     @GetMapping("/{tripId}")
     public TripDetailDto getTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
         return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Planned ways of the routes as lines", description = "For the map; routes that are not "
+            + "planned (yet) are missing.")
+    @GetMapping("/{tripId}/route-lines")
+    public List<RouteLineDto> getRouteLines(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        return routeLines.of(user.appUserId(), tripId).stream()
+                .map(line -> new RouteLineDto(line.routeId(), line.points().stream()
+                        .map(p -> new RouteLineDto.LinePointDto(p.lat(), p.lon())).toList(),
+                        line.distanceMeters(), line.duration().toSeconds(), line.via()))
+                .toList();
     }
 
     @Operation(summary = "Change name, period and travelers of a trip", description = "Routes are not planned again.")

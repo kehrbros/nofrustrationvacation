@@ -3,7 +3,6 @@ package com.nfv.recommendations.logic;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.logic.ActiveIncident;
 import com.nfv.network.logic.RouteOptions;
-import com.nfv.recommendations.entities.RouteOption;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
@@ -35,7 +34,7 @@ final class CandidateEvaluator {
      * @param conflicts incidents passed during their validity, each once
      */
     record Outcome(OffsetDateTime departure, OffsetDateTime arrival, double distanceMeters, Duration duration,
-                   Duration delay, boolean blocked, List<RouteOption.Conflict> conflicts) {
+                   Duration delay, boolean blocked, List<SuggestedOption.Conflict> conflicts) {
         Set<Long> incidentIds() {
             Set<Long> ids = new HashSet<>();
             conflicts.forEach(conflict -> ids.add(conflict.incidentId()));
@@ -59,7 +58,7 @@ final class CandidateEvaluator {
         double distance = 0;
         boolean blocked = false;
         Set<Long> delayedSeen = new HashSet<>();
-        Map<Long, RouteOption.Conflict> conflicts = new LinkedHashMap<>();
+        Map<Long, SuggestedOption.Conflict> conflicts = new LinkedHashMap<>();
         for (Step step : steps) {
             OffsetDateTime end = passage.plus(step.duration());
             Duration extra = Duration.ZERO;
@@ -74,7 +73,7 @@ final class CandidateEvaluator {
                 if (conflicts.containsKey(incident.id()) || !incident.overlaps(passage, end)) {
                     continue;
                 }
-                conflicts.put(incident.id(), new RouteOption.Conflict(incident.id(), incident.impact(),
+                conflicts.put(incident.id(), new SuggestedOption.Conflict(incident.id(), incident.impact(),
                         incident.expectedDelay()));
                 if (incident.impact() == Impact.BLOCKED) {
                     blocked = true;

@@ -9,8 +9,10 @@ import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
 import ProfileButton from '../profile/ProfileButton';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
-import type { TripIncident } from '../trips/model';
-import { routeName, type TripContext } from '../trips/tripContext';
+import type { RouteLine, TripIncident } from '../trips/model';
+import { formatDuration } from '../trips/routeOptionText';
+import { fetchRouteLines } from '../trips/routesApi';
+import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
 import { formatDateTime, formatPeriod } from '../trips/time';
 import { fetchTrip, fetchTripIncidents, TripsApiError } from '../trips/tripsApi';
 
@@ -25,12 +27,20 @@ export default function TripPage() {
   const id = Number(tripId);
   const navigate = useNavigate();
   const { data, error, reload } = useAsync(
-    // bookings are optional for the page: without them the trip still shows
-    () => Promise.all([fetchTrip(id), fetchTripIncidents(id), fetchTripBookings(id).catch(() => [] as Booking[])]),
+    // bookings and route lines are optional for the page: without them the trip still shows
+    () =>
+      Promise.all([
+        fetchTrip(id),
+        fetchTripIncidents(id),
+        fetchTripBookings(id).catch(() => [] as Booking[]),
+        fetchRouteLines(id).catch(() => [] as RouteLine[]),
+      ]),
     [id],
   );
   const [expanded, setExpanded] = useState(false);
-  const [trip, incidents, bookings] = data ?? [undefined, [] as TripIncident[], [] as Booking[]];
+  const [routePreview, setRoutePreview] = useState<RoutePreview | null>(null);
+  const [trip, incidents, bookings, lines] = data ?? [undefined, [] as TripIncident[], [] as Booking[], [] as RouteLine[]];
+  const routeLines = useMemo(() => new Map(lines.map((line) => [line.routeId, line])), [lines]);
 
   const stopById = useMemo(() => new Map((trip?.stops ?? []).map((stop) => [stop.id, stop])), [trip]);
   const bookingsByStop = useMemo(() => {
@@ -63,7 +73,18 @@ export default function TripPage() {
     return <Spin fullscreen />;
   }
 
-  const context: TripContext = { trip, incidents, incidentsByRoute, stopById, bookings, bookingsByStop, reload, close };
+  const context: TripContext = {
+    trip,
+    incidents,
+    incidentsByRoute,
+    stopById,
+    bookings,
+    bookingsByStop,
+    routeLines,
+    setRoutePreview,
+    reload,
+    close,
+  };
   const stopCount = trip.stops.length;
   // routes in the order of the trip, affected ones first while collapsed
   const routes = [...trip.routes].sort(
@@ -89,6 +110,8 @@ export default function TripPage() {
           <TripMap
             stops={trip.stops}
             routes={trip.routes}
+            routeLines={routeLines}
+            preview={routePreview}
             incidentsByRoute={incidentsByRoute}
             onRouteClick={openRoute}
             onIncidentClick={openIncident}
@@ -180,13 +203,20 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
   const route = context.trip.routes.find((candidate) => candidate.id === routeId)!;
   const from = context.stopById.get(route.fromStopId);
   const incident = context.incidentsByRoute.get(route.id)?.[0];
+  const line = context.routeLines.get(route.id);
   return (
     <Link to={`routen/${route.id}`} className="va-route-row" aria-label={`Route ${routeName(route, context.stopById)} ansehen`}>
       <span className="va-column va-grow">
         <span className="va-strong">{routeName(route, context.stopById)}</span>
         <span className="va-small va-muted">
-          {from?.departureAt ? `Abfahrt ${formatDateTime(from.departureAt)}` : 'Abfahrt offen'}
-          {incident && ` · ${incidentTitle(incident)}`}
+          {[
+            line?.via && `über ${line.via}`,
+            line && formatDuration(line.durationSeconds),
+            from?.departureAt ? `Abfahrt ${formatDateTime(from.departureAt)}` : 'Abfahrt offen',
+            incident && incidentTitle(incident),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </span>
       </span>
       {incident && <span className="va-chip va-chip-soft">{impactLabel(incident.impact)}</span>}

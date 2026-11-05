@@ -3,9 +3,6 @@ package com.nfv.recommendations.logic;
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.RouteOptions;
 import com.nfv.network.logic.RoutePoint;
-import com.nfv.recommendations.entities.OptionKind;
-import com.nfv.recommendations.entities.SuggestionTrigger;
-import com.nfv.recommendations.entities.WaypointMode;
 import com.nfv.trips.logic.RouteSnapshot;
 import jakarta.annotation.Nullable;
 
@@ -14,7 +11,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** Builds the {@link Scenario}, the only part that depends on the trigger, see Docs/recommendations.md#szenario. */
+/** Builds the {@link Scenario}, the only part that depends on the trigger, see Docs/recommendations.md#szenario-recommendationslogic. */
 final class ScenarioFactory {
     private ScenarioFactory() {
     }

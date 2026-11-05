@@ -8,7 +8,6 @@ import com.nfv.network.logic.RoutedSegment;
 import com.nfv.network.logic.Routing;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.recommendations.config.RecommendationProperties;
-import com.nfv.recommendations.entities.RouteOption;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -24,7 +23,7 @@ import java.util.stream.Collectors;
 
 /**
  * Via points that reproduce a candidate when they become waypoints: the intention is stored, not the segments, see
- * Docs/recommendations.md#übernehmen-eines-vorschlags.
+ * Docs/recommendations.md#auswahl-speichern.
  */
 @Slf4j
 @Component
@@ -34,7 +33,7 @@ class ViaPointExtractor {
     private final RecommendationProperties properties;
 
     /** Point with its place along the candidate: index into its segments, user waypoints between two indices. */
-    private record Placed(double order, RouteOption.Point point) {
+    private record Placed(double order, SuggestedOption.Point point) {
     }
 
     /**
@@ -44,7 +43,7 @@ class ViaPointExtractor {
      *
      * @param segments details of all segments of the candidate
      */
-    List<RouteOption.Point> extract(Scenario scenario, Candidate candidate, Candidate base,
+    List<SuggestedOption.Point> extract(Scenario scenario, Candidate candidate, Candidate base,
                                     Map<Long, SegmentInfo> segments) {
         List<RoutedSegment> all = candidate.segments();
         List<Placed> placed = new ArrayList<>();
@@ -62,7 +61,7 @@ class ViaPointExtractor {
             offset += legSegments.size();
             if (leg < scenario.vias().size()) {
                 Scenario.Via via = scenario.vias().get(leg);
-                placed.add(new Placed(offset - 0.5, new RouteOption.Point(via.point().point().lat(),
+                placed.add(new Placed(offset - 0.5, new SuggestedOption.Point(via.point().point().lat(),
                         via.point().point().lon(), via.point().roadHint(), via.waypointId())));
             }
         }
@@ -103,10 +102,10 @@ class ViaPointExtractor {
             return;
         }
         String hint = info.ref() != null ? info.ref() : info.name();
-        placed.add(new Placed(index, new RouteOption.Point(info.midpoint().lat(), info.midpoint().lon(), hint, null)));
+        placed.add(new Placed(index, new SuggestedOption.Point(info.midpoint().lat(), info.midpoint().lon(), hint, null)));
     }
 
-    private Set<Long> routedIds(Scenario scenario, List<RouteOption.Point> points) {
+    private Set<Long> routedIds(Scenario scenario, List<SuggestedOption.Point> points) {
         List<RoutePoint> route = new ArrayList<>();
         route.add(scenario.start());
         points.forEach(point -> route.add(new RoutePoint(new GeoPoint(point.latitude(), point.longitude()),
@@ -146,7 +145,7 @@ class ViaPointExtractor {
         return run.stream().mapToDouble(i -> segments.get(i).distanceMeters()).sum();
     }
 
-    private static List<RouteOption.Point> points(List<Placed> placed) {
+    private static List<SuggestedOption.Point> points(List<Placed> placed) {
         return placed.stream().sorted(Comparator.comparingDouble(Placed::order)).map(Placed::point).toList();
     }
 

@@ -11,10 +11,6 @@ import com.nfv.network.logic.RoutedSegment;
 import com.nfv.network.logic.Routing;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.network.logic.SegmentQueries;
-import com.nfv.recommendations.entities.OptionKind;
-import com.nfv.recommendations.entities.RouteOption;
-import com.nfv.recommendations.entities.SuggestionTrigger;
-import com.nfv.recommendations.entities.WaypointMode;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -110,7 +106,7 @@ class AlternativesAndViaPointsTest {
 
         assertThat(viaPointExtractor.extract(scenario, base, base, segments)).isEmpty();
         for (Candidate candidate : candidates.subList(1, candidates.size())) {
-            List<RouteOption.Point> points = viaPointExtractor.extract(scenario, candidate, base, segments);
+            List<SuggestedOption.Point> points = viaPointExtractor.extract(scenario, candidate, base, segments);
             assertThat(points).isNotEmpty();
             // as RoutePlanning plans it after applying: with curbsides at the stops
             List<RoutePoint> route = new ArrayList<>();

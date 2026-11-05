@@ -1,4 +1,4 @@
-package com.nfv.recommendations.entities;
+package com.nfv.recommendations.logic;
 
 /** Generator a {@link RouteOption} comes from, see Docs/recommendations.md#generatoren. */
 public enum OptionKind {

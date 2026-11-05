@@ -7,7 +7,6 @@ import com.nfv.network.logic.Routing;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.network.logic.SegmentQueries;
 import com.nfv.recommendations.config.RecommendationProperties;
-import com.nfv.recommendations.entities.OptionKind;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 

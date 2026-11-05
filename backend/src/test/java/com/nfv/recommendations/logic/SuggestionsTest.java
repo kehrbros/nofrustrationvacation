@@ -4,12 +4,6 @@ import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.IncidentLogic;
 import com.nfv.network.logic.RegionImport;
 import com.nfv.network.logic.RegionStatus;
-import com.nfv.recommendations.data.SuggestionSetRepository;
-import com.nfv.recommendations.entities.OptionLabel;
-import com.nfv.recommendations.entities.RouteOption;
-import com.nfv.recommendations.entities.RouteOptionPoint;
-import com.nfv.recommendations.entities.SuggestionStatus;
-import com.nfv.recommendations.entities.WaypointMode;
 import com.nfv.trips.data.RouteRepository;
 import com.nfv.trips.data.RouteSectionRepository;
 import com.nfv.trips.data.StopRepository;
@@ -61,8 +55,6 @@ class SuggestionsTest {
     @Autowired
     private IncidentLogic incidentLogic;
     @Autowired
-    private SuggestionSetRepository setRepository;
-    @Autowired
     private TripRepository tripRepository;
     @Autowired
     private StopRepository stopRepository;
@@ -97,16 +89,16 @@ class SuggestionsTest {
         SuggestionResult result = suggestions.forPlanning(userId, routeId, null, false, null);
 
         assertThat(result.problem()).isNull();
-        assertThat(result.set().getWaypointMode()).isEqualTo(WaypointMode.IGNORE);
-        List<RouteOption> options = result.set().getOptions();
+        assertThat(result.waypointMode()).isEqualTo(WaypointMode.IGNORE);
+        List<SuggestedOption> options = result.options();
         assertThat(options).hasSizeBetween(2, 3);
-        assertThat(options).extracting(RouteOption::getRank).containsExactly(rankList(options.size()));
-        assertThat(options.getFirst().getLabels()).contains(OptionLabel.FASTEST);
-        assertThat(options).flatExtracting(RouteOption::getPoints).extracting(RouteOptionPoint::getWaypointId)
+        assertThat(options).extracting(SuggestedOption::rank).containsExactly(rankList(options.size()));
+        assertThat(options.getFirst().labels()).contains(OptionLabel.FASTEST);
+        assertThat(options).flatExtracting(SuggestedOption::points).extracting(SuggestedOption.Point::waypointId)
                 .doesNotContain(kelburn);
-        assertThat(options).isSortedAccordingTo(Comparator.comparing(RouteOption::getArrivalAt));
+        assertThat(options).isSortedAccordingTo(Comparator.comparing(SuggestedOption::arrivalAt));
         assertThat(result.reference()).isNotNull();
-        assertThat(options.getFirst().getArrivalAt()).as("faster than the planned detour via Kelburn")
+        assertThat(options.getFirst().arrivalAt()).as("faster than the planned detour via Kelburn")
                 .isBefore(result.reference().arrivalAt());
     }
 
@@ -118,23 +110,23 @@ class SuggestionsTest {
 
         SuggestionResult result = suggestions.forPlanning(userId, routeId, 3, true, null);
 
-        assertThat(result.set().getWaypointMode()).isEqualTo(WaypointMode.FOLLOW);
-        assertThat(result.set().getOptions()).isNotEmpty().allSatisfy(option -> assertThat(option.getPoints())
-                .extracting(RouteOptionPoint::getWaypointId).filteredOn(Objects::nonNull).containsExactly(kelburn));
-        assertThat(result.set().getOptions().getFirst().getLabels()).contains(OptionLabel.CURRENT);
+        assertThat(result.waypointMode()).isEqualTo(WaypointMode.FOLLOW);
+        assertThat(result.options()).isNotEmpty().allSatisfy(option -> assertThat(option.points())
+                .extracting(SuggestedOption.Point::waypointId).filteredOn(Objects::nonNull).containsExactly(kelburn));
+        assertThat(result.options().getFirst().labels()).contains(OptionLabel.CURRENT);
     }
 
     @Test
-    void sameBasisReusesTheSet() {
+    void suggestionsAreComputedAgainAndNotStored() {
         long routeId = newRoute(DEPARTURE);
         routePlanning.plan(routeId);
 
-        long first = suggestions.forPlanning(userId, routeId, 3, false, null).set().getId();
-        long second = suggestions.forPlanning(userId, routeId, 3, false, null).set().getId();
-        long otherCount = suggestions.forPlanning(userId, routeId, 2, false, null).set().getId();
+        SuggestionResult first = suggestions.forPlanning(userId, routeId, 3, false, null);
+        SuggestionResult second = suggestions.forPlanning(userId, routeId, 3, false, null);
 
-        assertThat(second).isEqualTo(first);
-        assertThat(otherCount).isNotEqualTo(first);
+        assertThat(second.options()).extracting(SuggestedOption::geometry)
+                .isEqualTo(first.options().stream().map(SuggestedOption::geometry).toList());
+        assertThat(first.departureAt()).isEqualTo(DEPARTURE);
     }
 
     @Test
@@ -148,22 +140,10 @@ class SuggestionsTest {
         SuggestionResult result = suggestions.forPlanning(userId, routeId, 3, false, null);
 
         assertThat(result.reference().blocked()).isTrue();
-        assertThat(result.set().getOptions()).isNotEmpty().allSatisfy(option -> {
-            assertThat(option.getConflicts()).isEmpty();
-            assertThat(option.getLabels()).contains(OptionLabel.AVOIDS_INCIDENT);
+        assertThat(result.options()).isNotEmpty().allSatisfy(option -> {
+            assertThat(option.conflicts()).isEmpty();
+            assertThat(option.labels()).contains(OptionLabel.AVOIDS_INCIDENT);
         });
-    }
-
-    @Test
-    void routeChangeMakesSetStale() {
-        long routeId = newRoute(DEPARTURE);
-        routePlanning.plan(routeId);
-        long setId = suggestions.forPlanning(userId, routeId, 3, false, null).set().getId();
-
-        routePlanning.plan(routeId);
-
-        assertThat(setRepository.findById(setId).orElseThrow().getStatus()).isEqualTo(SuggestionStatus.STALE);
-        assertThat(suggestions.forPlanning(userId, routeId, 3, false, null).set().getId()).isNotEqualTo(setId);
     }
 
     @Test
@@ -191,9 +171,6 @@ class SuggestionsTest {
 
         assertThatThrownBy(() -> suggestions.forPlanning(other, routeId, 3, false, null))
                 .isInstanceOf(TripItemNotFoundException.class);
-        long setId = suggestions.forPlanning(userId, routeId, 3, false, null).set().getId();
-        assertThatThrownBy(() -> suggestions.get(other, setId)).isInstanceOf(SuggestionSetNotFoundException.class);
-        assertThat(suggestions.get(userId, setId).set().getOptions()).isNotEmpty();
     }
 
     private long newRoute(@Nullable OffsetDateTime departure) {

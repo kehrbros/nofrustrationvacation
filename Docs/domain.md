@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`, Streckenvorschläge und `waypoint.origin` `V29__recommendations.sql`, Buchung alternativer Unterkünfte `V30__booking_reservation.sql`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`, Streckenvorschläge und `waypoint.origin` `V29__recommendations.sql`, Buchung alternativer Unterkünfte `V30__booking_reservation.sql`, Reisende `V31`, Streckenvorschläge nicht mehr gespeichert `V32__drop_suggestion_sets.sql`. Nächste freie Migration: `V33`.
 
 ## Bounded Contexts
 
@@ -13,10 +13,10 @@
 | `com.nfv.bookings` | `Booking`, `AccommodationDetails`, `BookingReservation` |
 | `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent` |
 | `com.nfv.incidents` | `Incident`, `Consequence` |
-| `com.nfv.recommendations` | `SuggestionSet`, `RouteOption` (mit `RouteOptionPoint`, `RouteOptionConflict`) |
+| `com.nfv.recommendations` | keine (Vorschläge werden flüchtig berechnet, gespeichert wird nur die gewählte Strecke als `Waypoint`s) |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
-- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` und `SuggestionSet`/`RouteOption` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
+- **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
 
 ## Trips
 
@@ -34,7 +34,7 @@
 - `Route` 1–1..* `RouteSection`, geordnet (`position` ab 0, eindeutig je Route). Jede Section zeigt auf genau ein Segment (`segmentId`) und hat die erwartete Durchfahrt als Zeitraum `expectedPassageStart`–`expectedPassageEnd`.
 - `RouteLogic.replaceSections(routeId, sections)` ersetzt alle Sections einer Route und veröffentlicht `RouteChanged`.
 - **`Waypoint`:** Punkt, über den der Nutzer zwischen zwei Stops fahren will, gehört zu einer Route, geordnet (`position`, eindeutig je Route), ohne Aufenthalt. Koordinate Pflicht, optional Name und Straßenhinweis (z. B. `SH 73`). Gespeichert wird die Koordinate (Absicht), das gesnappte Segment wird bei jeder Planung neu bestimmt. Historisiert, die Referenz auf die Route nicht (Route ist nicht historisiert).
-  - `origin`: `USER` (vom Nutzer) oder `SUGGESTION` (beim Übernehmen eines Streckenvorschlags erzeugt), beim Anlegen gesetzt und danach unverändert, auch wenn der Nutzer den Waypoint ändert. REST und MCP legen immer `USER` an.
+  - `origin`: `USER` (vom Nutzer) oder `SUGGESTION` (beim Wählen eines Streckenvorschlags erzeugt), beim Anlegen gesetzt und danach unverändert, auch wenn der Nutzer den Waypoint ändert. REST und MCP legen immer `USER` an.
 - Waypoints einer Route werden als geordnete Liste ersetzt: mit Id geändert, ohne Id angelegt, fehlende gelöscht.
 - **Planen:** `RoutePlanning.plan(routeId)` holt Stops und Waypoints, ruft `network.Routing` (ohne Incidents, Umfahrungen sind Empfehlungen), berechnet die Durchfahrt aus der Abfahrt am Start-Stop plus den Dauern der Segmente davor und übergibt `PlannedSection`s an `RouteLogic.replaceSections`. Routing läuft außerhalb der Transaktion.
   - Ergebnis `PlanResult` mit `PlanOutcome`: `PLANNED`, `MISSING_COORDINATES` (ein Stop ohne Koordinaten), `MISSING_DEPARTURE` (Start-Stop ohne Abfahrt, keine Zeit geraten), `NO_ROUTE` (mit Grund), `ROUTING_UNAVAILABLE` (Streckennetz noch nicht geladen, später erneut planen). Außer bei `PLANNED` bleiben die Sections unverändert.
@@ -104,7 +104,9 @@
 ## Streckenvorschläge
 
 - Für eine Route bis zu `n` Vorschläge, wie gefahren werden kann, bei der Planung und wenn ein Incident die Route trifft. Beide aus einem `Scenario` (Punkte, Abfahrt, Sperren/Verzögerungen, Referenzroute) mit derselben Logik, Details in [recommendations.md](recommendations.md).
-- Übernehmen speichert Via-Punkte als `Waypoint` (`origin` `SUGGESTION`) und plant die Route neu, keine Segmentliste.
+- Vorschläge werden bei jeder Anfrage neu berechnet und nicht gespeichert. Die gewählte Strecke kommt als Liste von Punkten zurück (`PUT /routes/{id}/choice`), wird als `Waypoint`s gespeichert (neue mit `origin` `SUGGESTION`, bestehende des Nutzers bleiben) und die Route neu geplant, keine Segmentliste. Eine gespeicherte Route gilt als gewählt, es gibt keinen eigenen Merker.
+- Keine Prüfung auf parallele Änderungen, die letzte Wahl gewinnt. Später allgemein über Versionierung der Entitäten (`@Version`), bei Routen inklusive der Stops.
+- Der geplante Verlauf einer Route kommt aus `RouteLines` (`trips.logic`): Linie aus den Sections über `network.SegmentQueries.line`, Distanz, Dauer und „über …“ aus den Straßenhinweisen der `SUGGESTION`-Waypoints.
 
 ## Offen
 
