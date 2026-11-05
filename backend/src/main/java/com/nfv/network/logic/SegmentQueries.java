@@ -41,4 +41,20 @@ public class SegmentQueries {
         rows.forEach(info -> segments.put(info.id(), info));
         return segments;
     }
+
+    /** Whether any of the segments lies in the region. */
+    @Transactional(readOnly = true)
+    public boolean anyInRegion(Collection<Long> segmentIds, String region) {
+        if (segmentIds.isEmpty()) {
+            return false;
+        }
+        Boolean any = jdbc.query(connection -> {
+            PreparedStatement statement = connection.prepareStatement(
+                    "SELECT EXISTS (SELECT 1 FROM road_segment WHERE id = ANY(?) AND region = ?)");
+            statement.setArray(1, connection.createArrayOf("bigint", segmentIds.toArray()));
+            statement.setString(2, region);
+            return statement;
+        }, rs -> rs.next() && rs.getBoolean(1));
+        return Boolean.TRUE.equals(any);
+    }
 }

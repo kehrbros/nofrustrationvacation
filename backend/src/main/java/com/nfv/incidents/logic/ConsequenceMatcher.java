@@ -1,7 +1,7 @@
 package com.nfv.incidents.logic;
 
+import com.nfv.incidents.config.AssessmentProperties;
 import com.nfv.incidents.data.ConsequenceRepository;
-import com.nfv.incidents.data.IncidentRepository;
 import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.trips.data.RouteSectionRepository;
@@ -11,97 +11,60 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
+import java.util.Collection;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
+import java.util.Set;
 
 /**
- * Keeps {@link Consequence}s in line with incidents and routes, see Docs/domain.md:
+ * Keeps {@link Consequence}s in line with incidents and routes, see Docs/domain.md and
+ * Docs/consequence-assessment.md:
  * <ul>
- *     <li>incident new or changed: its segments → route sections on them (index segment → route section) → a
- *     consequence for every route that passes during the validity of the incident</li>
- *     <li>route new or changed: its segments → active incidents on them → the same overlap check</li>
+ *     <li>incident new or changed: its segments → routes passing them around its validity (index segment → route
+ *     section), plus the routes it already has consequences on → each route assessed as a whole</li>
+ *     <li>route new or changed, or the arrival of its target stop changed: the route assessed as a whole</li>
  * </ul>
- * Existing consequences are updated, so their ids stay stable (for notifications later), and removed when they no
- * longer apply.
+ * The assessment ({@link ConsequenceAssessment}) decides which incidents hit the route, including hits only by
+ * earlier delays ({@code BY_SHIFT}) or within the tolerance ({@code MARGINAL}). Consequences keep their ids (for
+ * notifications later) and are removed when they no longer apply.
  */
 @Component
 @RequiredArgsConstructor
 public class ConsequenceMatcher {
-    private final IncidentRepository incidentRepository;
     private final ConsequenceRepository consequenceRepository;
     private final RouteSectionRepository routeSectionRepository;
-    private final Clock clock;
+    private final ConsequenceAssessment assessment;
+    private final AssessmentProperties rules;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public List<Consequence> matchIncident(Incident incident) {
+        // Envelope widened: a passage up to max-wait before the start can be moved into it by earlier delays, the
+        // tolerance reaches up to tolerance-max on both sides
+        OffsetDateTime from = incident.getValidFrom().minus(rules.maxWait()).minus(rules.toleranceMax());
         List<RouteSection> passing = incident.getValidTo() == null
-                ? routeSectionRepository.findPassingAfter(incident.getSegmentIds(), incident.getValidFrom())
-                : routeSectionRepository.findPassing(incident.getSegmentIds(), incident.getValidFrom(), incident.getValidTo());
-        Map<Long, RouteSection> firstByRoute = firstByRoute(passing);
-
-        Map<Long, Consequence> existing = consequenceRepository.findByIncidentId(incident.getId()).stream()
-                .collect(Collectors.toMap(Consequence::getRouteId, Function.identity()));
-        return apply(existing, firstByRoute.entrySet().stream()
-                .map(e -> new Match(incident, e.getKey(), e.getValue()))
-                .toList(), Match::routeId);
+                ? routeSectionRepository.findPassingAfter(incident.getSegmentIds(), from)
+                : routeSectionRepository.findPassing(incident.getSegmentIds(), from,
+                incident.getValidTo().plus(rules.toleranceMax()));
+        Set<Long> routeIds = new LinkedHashSet<>();
+        passing.forEach(section -> routeIds.add(section.getRoute().getId()));
+        consequenceRepository.findByIncidentId(incident.getId()).forEach(c -> routeIds.add(c.getRouteId()));
+        return assessRoutes(routeIds).stream()
+                .filter(c -> c.getIncident().getId() == incident.getId())
+                .toList();
     }
 
     @Transactional(propagation = Propagation.MANDATORY)
     public List<Consequence> matchRoute(long routeId) {
-        List<RouteSection> sections = routeSectionRepository.findByRouteIdOrderByPosition(routeId);
-        List<Match> matches = new ArrayList<>();
-        if (!sections.isEmpty()) {
-            List<Long> segmentIds = sections.stream().map(RouteSection::getSegmentId).distinct().toList();
-            for (Incident incident : incidentRepository.findActiveOnSegments(segmentIds, OffsetDateTime.now(clock))) {
-                sections.stream()
-                        .filter(s -> incident.getSegmentIds().contains(s.getSegmentId()))
-                        .filter(s -> incident.overlaps(s.getExpectedPassageStart(), s.getExpectedPassageEnd()))
-                        .findFirst()
-                        .ifPresent(s -> matches.add(new Match(incident, routeId, s)));
-            }
-        }
-        Map<Long, Consequence> existing = consequenceRepository.findByRouteId(routeId).stream()
-                .collect(Collectors.toMap(c -> c.getIncident().getId(), Function.identity()));
-        return apply(existing, matches, m -> m.incident().getId());
+        return assessment.assessRoute(routeId);
     }
 
-    /**
-     * Updates or creates a consequence per match, removes the existing ones without a match.
-     *
-     * @param existing existing consequences by {@code key}, the route id or the incident id
-     */
-    private List<Consequence> apply(Map<Long, Consequence> existing, List<Match> matches, Function<Match, Long> key) {
-        OffsetDateTime now = OffsetDateTime.now(clock);
-        Map<Long, Consequence> remaining = new HashMap<>(existing);
-        List<Consequence> result = new ArrayList<>();
-        for (Match match : matches) {
-            Incident incident = match.incident();
-            Consequence consequence = remaining.remove(key.apply(match));
-            if (consequence == null) {
-                consequence = new Consequence(incident, match.routeId(), match.section().getId(), incident.impact(),
-                        incident.getExpectedDelay(), now);
-            } else {
-                consequence.update(match.section().getId(), incident.impact(), incident.getExpectedDelay(), now);
-            }
-            result.add(consequence);
-        }
-        consequenceRepository.deleteAll(remaining.values());
-        return consequenceRepository.saveAll(result);
-    }
-
-    private static Map<Long, RouteSection> firstByRoute(List<RouteSection> sections) {
-        return sections.stream().collect(Collectors.toMap(s -> s.getRoute().getId(), Function.identity(),
-                (a, b) -> a.getPosition() <= b.getPosition() ? a : b,
-                LinkedHashMap::new));
-    }
-
-    private record Match(Incident incident, long routeId, RouteSection section) {
+    /** Assesses the routes again, e.g. after the deadline of their target stop changed. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public List<Consequence> assessRoutes(Collection<Long> routeIds) {
+        List<Consequence> consequences = new ArrayList<>();
+        routeIds.forEach(routeId -> consequences.addAll(assessment.assessRoute(routeId)));
+        return consequences;
     }
 }

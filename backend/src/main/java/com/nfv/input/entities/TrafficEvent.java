@@ -32,4 +32,14 @@ public class TrafficEvent extends Event {
         this.startsAt = startsAt;
         this.endsAt = endsAt;
     }
+
+    /**
+     * Version of an event as fetched from a traffic feed, not read yet (that happens when it is processed).
+     *
+     * @param externalId {@code <subjectId>@<version>}, or {@code <subjectId>@cleared@<time>} when it disappeared
+     */
+    public TrafficEvent(EventSource source, String externalId, String subjectId, @Nullable String messageHash,
+                        String payload, OffsetDateTime receivedAt) {
+        super(source, externalId, subjectId, messageHash, payload, receivedAt);
+    }
 }

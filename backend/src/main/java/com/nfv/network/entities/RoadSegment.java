@@ -47,6 +47,9 @@ public class RoadSegment extends AbstractEntity {
     private boolean bridge;
     @Column(nullable = false)
     private boolean tunnel;
+    /** Ramp or link road (OSM {@code highway=*_link}). */
+    @Column(nullable = false)
+    private boolean link;
     @Column(name = "length_m", nullable = false)
     private double lengthMeters;
     /** WGS84 (SRID 4326), in driving direction. */

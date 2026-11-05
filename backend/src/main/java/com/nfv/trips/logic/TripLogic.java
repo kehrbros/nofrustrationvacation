@@ -14,6 +14,7 @@ import com.nfv.trips.entities.TripCoverImage;
 import com.nfv.trips.entities.Waypoint;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +53,7 @@ public class TripLogic {
     private final WaypointRepository waypointRepository;
     private final TripCoverImageRepository coverImageRepository;
     private final RouteLogic routeLogic;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     /** All trips of the user, ascending by start. Grouping into current, upcoming and past is up to the client. */
@@ -155,7 +157,7 @@ public class TripLogic {
 
     /**
      * Changes the stop. New coordinates discard the sections of the routes to and from it, a new departure those of
-     * the route from it. The arrival does not affect planning.
+     * the route from it. The arrival does not affect planning, it publishes {@link StopArrivalChanged}.
      */
     @Transactional
     public TripChange updateStop(long appUserId, long tripId, long stopId, NewStop changed) {
@@ -166,18 +168,28 @@ public class TripLogic {
         boolean relocated = !Objects.equals(stop.getLatitude(), changed.latitude())
                 || !Objects.equals(stop.getLongitude(), changed.longitude());
         boolean departs = !sameInstant(stop.getDepartureAt(), changed.departureAt());
+        boolean arrives = !sameInstant(stop.getArrivalAt(), changed.arrivalAt());
         stop.rename(name);
         stop.relocate(changed.latitude(), changed.longitude());
         stop.reschedule(changed.arrivalAt(), changed.departureAt());
         Set<Long> affected = new LinkedHashSet<>();
+        Set<Long> arrivingRoutes = new LinkedHashSet<>();
         for (Route route : routeRepository.findByTripId(tripId)) {
             boolean from = route.getFromStop().getId() == stopId;
             boolean to = route.getToStop().getId() == stopId;
             if (relocated && (from || to) || departs && from) {
                 affected.add(route.getId());
             }
+            if (to) {
+                arrivingRoutes.add(route.getId());
+            }
         }
         affected.forEach(routeLogic::discardSections);
+        if (arrives && !arrivingRoutes.isEmpty()) {
+            // the deadline of the routes to the stop changed: incidents assesses them again
+            stopRepository.flush();
+            events.publishEvent(new StopArrivalChanged(stopId, arrivingRoutes));
+        }
         return new TripChange(tripId, affected);
     }
 

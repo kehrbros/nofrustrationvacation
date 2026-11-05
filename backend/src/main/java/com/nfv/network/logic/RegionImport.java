@@ -35,11 +35,15 @@ public class RegionImport {
             Path dir = graphDir(region, current.get().getId());
             if (Files.isDirectory(dir)) {
                 try {
-                    graphs.switchTo(region, loaded(current.get().getId(), NetworkGraphHopper.load(dir, config)));
-                    log.info("Region {}: graph of version {} loaded", region, current.get().getId());
-                    return status(region);
+                    // segments written before V35 have no link flag: only an import fills it
+                    if (segmentWriter.hasLinks(region)) {
+                        graphs.switchTo(region, loaded(current.get().getId(), NetworkGraphHopper.load(dir, config)));
+                        log.info("Region {}: graph of version {} loaded", region, current.get().getId());
+                        return status(region);
+                    }
+                    log.info("Region {}: segments without link flag, importing again", region);
                 } catch (RuntimeException e) {
-                    // e.g. graph written with other encoded values or profiles
+                    // e.g. graph written with other profiles
                     log.warn("Region {}: graph of version {} not usable, importing again", region,
                             current.get().getId(), e);
                 }

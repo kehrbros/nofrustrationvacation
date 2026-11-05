@@ -2,6 +2,8 @@ package com.nfv.input.data;
 
 import com.nfv.input.entities.Event;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 import java.util.Optional;
@@ -12,4 +14,16 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     List<Event> findByProcessedAtIsNullOrderByReceivedAt();
 
     List<Event> findByIncidentId(long incidentId);
+
+    /** Traffic events not processed yet, oldest first, so versions of an event are processed in order. */
+    @Query("SELECT e.id FROM TrafficEvent e WHERE e.processedAt IS NULL ORDER BY e.receivedAt, e.id")
+    List<Long> findPendingTrafficEventIds();
+
+    /** Latest event of the same event at the source that led to an incident. */
+    Optional<Event> findFirstBySourceIdAndSubjectIdAndIncidentIdIsNotNullOrderByIdDesc(long sourceId,
+                                                                                        String subjectId);
+
+    /** Incidents the source has led to. */
+    @Query("SELECT DISTINCT e.incidentId FROM Event e WHERE e.source.id = :sourceId AND e.incidentId IS NOT NULL")
+    List<Long> findIncidentIdsBySourceId(@Param("sourceId") long sourceId);
 }

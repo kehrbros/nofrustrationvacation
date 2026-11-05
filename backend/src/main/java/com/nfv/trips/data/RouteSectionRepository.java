@@ -29,6 +29,12 @@ public interface RouteSectionRepository extends JpaRepository<RouteSection, Long
     List<RouteSection> findPassingAfter(@Param("segmentIds") Collection<Long> segmentIds,
                                         @Param("from") OffsetDateTime from);
 
+    /** Segments of all sections whose expected passage overlaps {@code [from, to]}. */
+    @Query("""
+            SELECT DISTINCT s.segmentId FROM RouteSection s
+            WHERE s.expectedPassageEnd >= :from AND s.expectedPassageStart <= :to""")
+    List<Long> findSegmentIdsPassing(@Param("from") OffsetDateTime from, @Param("to") OffsetDateTime to);
+
     @Modifying(flushAutomatically = true)
     @Query("DELETE FROM RouteSection s WHERE s.route.id = :routeId")
     int deleteByRouteId(@Param("routeId") long routeId);

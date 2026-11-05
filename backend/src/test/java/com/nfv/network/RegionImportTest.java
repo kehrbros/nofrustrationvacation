@@ -77,6 +77,22 @@ class RegionImportTest {
         assertThat(versionRepository.count()).isEqualTo(versions);
     }
 
+    @Test
+    void segmentsWithoutLinkFlagAreImportedAgain() {
+        long imported = regionImport.importRegion(REGION).extractVersionId();
+        List<Long> idsBefore = segmentIds(imported);
+        assertThat(count("SELECT COUNT(*) FROM road_segment WHERE region = ? AND link", REGION)).isPositive();
+        // as after V35: the graph is there, the flag is not filled
+        jdbc.update("UPDATE road_segment SET link = FALSE WHERE region = ?", REGION);
+
+        RegionStatus status = regionImport.loadOrImport(REGION);
+
+        assertThat(status.state()).isEqualTo(RegionStatus.State.READY);
+        assertThat(status.extractVersionId()).isNotEqualTo(imported);
+        assertThat(count("SELECT COUNT(*) FROM road_segment WHERE region = ? AND link", REGION)).isPositive();
+        assertThat(segmentIds(status.extractVersionId())).isEqualTo(idsBefore);
+    }
+
     private List<Long> segmentIds(long versionId) {
         return jdbc.queryForList(
                 "SELECT id FROM road_segment WHERE last_seen_version_id = ? ORDER BY id", Long.class, versionId);

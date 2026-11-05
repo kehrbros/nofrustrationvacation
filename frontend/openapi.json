@@ -531,7 +531,7 @@
     },
     "/api/v1/incidents/trip-counts" : {
       "get" : {
-        "description" : "Only trips with at least one incident.",
+        "description" : "Only TOO_LATE and DELAYED, only trips with at least one.",
         "operationId" : "getTripIncidentCounts",
         "responses" : {
           "200" : {
@@ -983,7 +983,7 @@
     },
     "/api/v1/trips/{tripId}/incidents" : {
       "get" : {
-        "description" : "Incidents not ended yet, ascending by start.",
+        "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage.",
         "operationId" : "getTripIncidents",
         "parameters" : [ {
           "in" : "path",
@@ -1010,6 +1010,38 @@
           }
         },
         "summary" : "Current incidents of a trip",
+        "tags" : [ "Incidents" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/incidents/routes" : {
+      "get" : {
+        "description" : "Per planned route: worst category of its incidents, expected arrival and slack against the arrival at the target stop.",
+        "operationId" : "getRouteSummaries",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/RouteIncidentSummaryDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Situation of the routes of a trip",
         "tags" : [ "Incidents" ]
       }
     },
@@ -2057,6 +2089,49 @@
           }
         }
       },
+      "RouteIncidentSummaryDto" : {
+        "type" : "object",
+        "description" : "Situation of a route with its incidents, against the arrival at its target stop",
+        "properties" : {
+          "deadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival of the target stop, null: arrival time missing"
+          },
+          "expectedArrival" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival with the incidents, null if not passable or not planned"
+          },
+          "plannedArrival" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival without incidents, null if not planned"
+          },
+          "plannedTooLate" : {
+            "type" : "boolean",
+            "description" : "Even without incidents the arrival is after the deadline"
+          },
+          "routeId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "slackMinutes" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Deadline minus expected arrival in minutes, negative: too late; null without either"
+          },
+          "unpassable" : {
+            "type" : "boolean",
+            "description" : "An incident on the route cannot be passed"
+          },
+          "worstCategory" : {
+            "type" : [ "string", "null" ],
+            "description" : "Worst category of its current incidents, null without",
+            "enum" : [ "TOO_LATE", "DELAYED", "NO_IMPACT" ]
+          }
+        }
+      },
       "RouteOptionDto" : {
         "type" : "object",
         "description" : "One route suggestion, rank 1 is the best",
@@ -2351,10 +2426,29 @@
         "type" : "object",
         "description" : "Incident affecting a route of a trip, one entry per incident and route",
         "properties" : {
+          "assessedDelayMinutes" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Own delay on this route in minutes (wait at a closure, delay or assumption), null: not passable"
+          },
+          "category" : {
+            "type" : [ "string", "null" ],
+            "description" : "Effect on the arrival at the target stop, null if not assessed yet",
+            "enum" : [ "TOO_LATE", "DELAYED", "NO_IMPACT" ]
+          },
+          "deadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival of the target stop, null without"
+          },
+          "delayAssumed" : {
+            "type" : "boolean",
+            "description" : "assessedDelayMinutes is an assumption of the source, show as estimated"
+          },
           "delayMinutes" : {
             "type" : [ "integer", "null" ],
             "format" : "int64",
-            "description" : "Expected delay on this route in minutes, null if unknown"
+            "description" : "Expected delay of the incident in minutes as given, null if unknown"
           },
           "description" : {
             "type" : [ "string", "null" ]
@@ -2362,6 +2456,11 @@
           "detectedAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "expectedArrival" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival at the target stop after this incident, null if not passable or not planned"
           },
           "impact" : {
             "type" : "string",
@@ -2371,9 +2470,23 @@
             "type" : "integer",
             "format" : "int64"
           },
+          "match" : {
+            "type" : "string",
+            "description" : "DIRECT, BY_SHIFT (only hit after earlier delays) or MARGINAL (only within the tolerance of the passage, never TOO_LATE)",
+            "enum" : [ "DIRECT", "BY_SHIFT", "MARGINAL" ]
+          },
+          "passageAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Passage of the affected section, moved by earlier delays"
+          },
           "routeId" : {
             "type" : "integer",
             "format" : "int64"
+          },
+          "timesUnconfirmed" : {
+            "type" : "boolean",
+            "description" : "Closure whose times are only in the description and could not be read yet: show as \"check times\""
           },
           "type" : {
             "type" : "string",
@@ -2391,6 +2504,15 @@
             "type" : [ "string", "null" ],
             "format" : "date-time",
             "description" : "null: until further notice"
+          },
+          "windowEnd" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "windowStart" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Time window of the incident the passage falls into, null without windows"
           }
         }
       },

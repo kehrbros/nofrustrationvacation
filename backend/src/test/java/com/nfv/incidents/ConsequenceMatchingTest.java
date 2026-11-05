@@ -1,11 +1,15 @@
 package com.nfv.incidents;
 
 import com.nfv.incidents.data.ConsequenceRepository;
+import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.IncidentLogic;
+import com.nfv.incidents.logic.IncidentReporting;
+import com.nfv.incidents.logic.ReportedIncident;
+import com.nfv.incidents.logic.TripIncidents;
 import com.nfv.network.data.ExtractVersionRepository;
 import com.nfv.network.data.RoadSegmentRepository;
 import com.nfv.network.entities.ExtractVersion;
@@ -17,8 +21,10 @@ import com.nfv.trips.entities.Route;
 import com.nfv.trips.entities.RouteSection;
 import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
+import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.PlannedSection;
 import com.nfv.trips.logic.RouteLogic;
+import com.nfv.trips.logic.TripLogic;
 import com.nfv.user.logic.AppUserProvisioning;
 import jakarta.persistence.EntityManager;
 import org.hibernate.envers.AuditReaderFactory;
@@ -73,10 +79,20 @@ class ConsequenceMatchingTest {
     @Autowired
     private EntityManager entityManager;
 
+    @Autowired
+    private TripLogic tripLogic;
+    @Autowired
+    private TripIncidents tripIncidents;
+    @Autowired
+    private IncidentReporting incidentReporting;
+
     private long first;
     private long second;
     private long elsewhere;
     private long routeId;
+    private long userId;
+    private long tripId;
+    private long targetStopId;
 
     @BeforeEach
     void network() {
@@ -150,6 +166,98 @@ class ConsequenceMatchingTest {
     }
 
     @Test
+    void arrivalChangeFlipsBetweenDelayedAndTooLate() {
+        // planned arrival DEPARTURE + 30 min, 20 min jam on the second segment → expected arrival + 50 min
+        plan(routeId, first, second);
+        Incident jam = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(second)));
+        Consequence delayed = consequenceRepository.findByIncidentId(jam.getId()).getFirst();
+        assertThat(delayed.getCategory()).isEqualTo(Category.DELAYED);
+        assertThat(delayed.getAssessedDelay()).isEqualTo(Duration.ofMinutes(20));
+        assertThat(delayed.getExpectedArrival()).isEqualTo(DEPARTURE.plusMinutes(50));
+        assertThat(delayed.getDeadline()).isEqualTo(DEPARTURE.plusHours(1));
+
+        arriveAt(DEPARTURE.plusMinutes(40));
+        Consequence late = consequenceRepository.findByIncidentId(jam.getId()).getFirst();
+        assertThat(late.getId()).isEqualTo(delayed.getId());
+        assertThat(late.getCategory()).isEqualTo(Category.TOO_LATE);
+        assertThat(late.getDeadline()).isEqualTo(DEPARTURE.plusMinutes(40));
+        assertThat(tripIncidents.routeSummaries(userId, tripId)).singleElement().satisfies(summary -> {
+            assertThat(summary.worstCategory()).isEqualTo(Category.TOO_LATE);
+            assertThat(summary.expectedArrival()).isEqualTo(DEPARTURE.plusMinutes(50));
+            assertThat(summary.slack()).isEqualTo(Duration.ofMinutes(-10));
+        });
+        assertThat(tripIncidents.activeCountsByTrip(userId)).containsEntry(tripId, 1);
+
+        arriveAt(DEPARTURE.plusHours(2));
+        assertThat(consequenceRepository.findByIncidentId(jam.getId()).getFirst().getCategory())
+                .isEqualTo(Category.DELAYED);
+
+        arriveAt(null);
+        assertThat(consequenceRepository.findByIncidentId(jam.getId()).getFirst().getDeadline()).isNull();
+    }
+
+    @Test
+    void noImpactIsListedButNotCounted() {
+        plan(routeId, first, second);
+        Incident caution = inTransaction(() -> incidentLogic.create(IncidentType.OTHER, "Vorsicht",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(2), Set.of(first)));
+
+        assertThat(consequenceRepository.findByIncidentId(caution.getId())).singleElement()
+                .satisfies(c -> assertThat(c.getCategory()).isEqualTo(Category.NO_IMPACT));
+        assertThat(tripIncidents.active(userId, tripId)).hasSize(1);
+        assertThat(tripIncidents.activeCountsByTrip(userId)).doesNotContainKey(tripId);
+    }
+
+    @Test
+    void passedPlaceIsNeitherListedNorCounted() {
+        OffsetDateTime passage = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        planAt(passage, first);
+        inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau", passage.minusHours(1),
+                passage.plusDays(1), Duration.ofMinutes(20), Set.of(first)));
+
+        assertThat(consequenceRepository.findByRouteId(routeId)).hasSize(1);
+        assertThat(tripIncidents.active(userId, tripId)).isEmpty();
+        assertThat(tripIncidents.activeCountsByTrip(userId)).doesNotContainKey(tripId);
+    }
+
+    @Test
+    void waitStillRunningIsListed() {
+        OffsetDateTime passage = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        planAt(passage, first);
+        inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung", passage.minusHours(1),
+                passage.plusHours(3), null, Set.of(first)));
+
+        assertThat(tripIncidents.active(userId, tripId)).hasSize(1);
+    }
+
+    @Test
+    void impassableCountsAsWaitingMaxWait() {
+        OffsetDateTime recent = OffsetDateTime.now(ZoneOffset.UTC).minusHours(1);
+        planAt(recent, first);
+        inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung", recent.minusDays(2), null, null,
+                Set.of(first)));
+        assertThat(tripIncidents.active(userId, tripId)).hasSize(1);
+
+        planAt(OffsetDateTime.now(ZoneOffset.UTC).minusHours(13), first);
+        assertThat(consequenceRepository.findByRouteId(routeId)).hasSize(1);
+        assertThat(tripIncidents.active(userId, tripId)).isEmpty();
+    }
+
+    @Test
+    void scheduledIncidentEndedBeforeItsStartAffectsNothing() {
+        plan(routeId, first);
+        Incident scheduled = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Geplant",
+                DEPARTURE.plusMinutes(5), DEPARTURE.plusHours(3), null, Set.of(first)));
+        assertThat(consequenceRepository.findByIncidentId(scheduled.getId())).hasSize(1);
+
+        incidentReporting.report(new ReportedIncident(IncidentType.CLOSURE, null, DEPARTURE.plusMinutes(5), null, null,
+                null, null, null, null, "test", true, List.of(), null, false, false), scheduled.getId());
+
+        assertThat(consequenceRepository.findByIncidentId(scheduled.getId())).isEmpty();
+    }
+
+    @Test
     void incidentHistoryIncludesItsSegments() {
         Incident incident = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, null,
                 DEPARTURE, null, null, Set.of(first)));
@@ -177,12 +285,24 @@ class ConsequenceMatchingTest {
 
     private long newRoute() {
         return inTransaction(() -> {
-            long userId = appUserProvisioning.findOrCreate("trip-" + UUID.randomUUID(), null, null).getId();
+            userId = appUserProvisioning.findOrCreate("trip-" + UUID.randomUUID(), null, null).getId();
             Trip trip = tripRepository.save(new Trip(userId, "Urlaub", DEPARTURE, DEPARTURE.plusDays(7), DEPARTURE.minusDays(2)));
+            tripId = trip.getId();
             Stop start = stopRepository.save(new Stop(trip, 0, "Heilbronn", null, null, null, DEPARTURE));
             Stop end = stopRepository.save(new Stop(trip, 1, "Kupferzell", null, null, DEPARTURE.plusHours(1), null));
+            targetStopId = end.getId();
             return routeRepository.save(new Route(trip, start, end)).getId();
         });
+    }
+
+    private void arriveAt(OffsetDateTime arrival) {
+        inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId,
+                new NewStop("Kupferzell", null, null, arrival, null)));
+    }
+
+    /** One section of 15 minutes starting at {@code passage}. */
+    private void planAt(OffsetDateTime passage, long segmentId) {
+        routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, passage, passage.plusMinutes(15))));
     }
 
     /** Passes each segment in 15 minutes, starting at {@link #DEPARTURE}. */
