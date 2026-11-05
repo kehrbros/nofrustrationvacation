@@ -8,7 +8,7 @@
 
 services:
   backend:
-    image: ${BACKEND_IMAGE:-ghcr.io/kehrbros/vacantagent/backend:main}
+    image: ${BACKEND_IMAGE:-ghcr.io/kehrbros/nofrustrationvacation/backend:main}
     build:
       context: ./backend
     environment:
@@ -107,7 +107,7 @@ services:
 
   # TLS terminating reverse proxy, the only service with published ports, see Docs/deployment.md#tls-caddy
   caddy:
-    image: ${CADDY_IMAGE:-ghcr.io/kehrbros/vacantagent/caddy:main}
+    image: ${CADDY_IMAGE:-ghcr.io/kehrbros/nofrustrationvacation/caddy:main}
     build:
       context: ./deploy/caddy
     environment:
@@ -151,7 +151,7 @@ services:
           memory: 128M
 
   frontend:
-    image: ${FRONTEND_IMAGE:-ghcr.io/kehrbros/vacantagent/frontend:main}
+    image: ${FRONTEND_IMAGE:-ghcr.io/kehrbros/nofrustrationvacation/frontend:main}
     build:
       context: ./frontend
       args:

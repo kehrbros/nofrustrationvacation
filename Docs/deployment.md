@@ -12,7 +12,7 @@
 ## Docker Swarm
 
 - **Stack:** `docker-compose.yml` im Repo-Root, Services `postgres` (PostgreSQL 17 mit PostGIS), `backend` (Spring Boot, Port 8080), `frontend` (nginx mit dem Vite-Build, Port 80) und `caddy` (TLS-Proxy, Ports 80/443) im Overlay-Netz `nfv`. Nur Caddy veröffentlicht Ports, siehe [TLS (Caddy)](#tls-caddy).
-- **Images:** CI baut und pusht bei jedem Push auf `main` `ghcr.io/kehrbros/vacantagent/backend`, `…/frontend` und `…/caddy` mit den Tags `main` und `sha-<commit>` für `linux/amd64` und `linux/arm64` (der Server ist ARM/aarch64; QEMU, der Node-Build des Frontends läuft nativ über `--platform=$BUILDPLATFORM`), siehe [Continuous Deployment](#continuous-deployment). Andere Tags über `BACKEND_IMAGE`/`FRONTEND_IMAGE`/`CADDY_IMAGE`. Lokal bauen: `cd backend && mvn -DskipTests verify`, danach im Root `docker compose build`. `docker stack deploy` ignoriert `build` und braucht die Images auf jedem Node (Registry oder lokal bei Single-Node-Swarm).
+- **Images:** CI baut und pusht bei jedem Push auf `main` `ghcr.io/kehrbros/nofrustrationvacation/backend`, `…/frontend` und `…/caddy` mit den Tags `main` und `sha-<commit>` für `linux/amd64` und `linux/arm64` (der Server ist ARM/aarch64; QEMU, der Node-Build des Frontends läuft nativ über `--platform=$BUILDPLATFORM`), siehe [Continuous Deployment](#continuous-deployment). Andere Tags über `BACKEND_IMAGE`/`FRONTEND_IMAGE`/`CADDY_IMAGE`. Lokal bauen: `cd backend && mvn -DskipTests verify`, danach im Root `docker compose build`. `docker stack deploy` ignoriert `build` und braucht die Images auf jedem Node (Registry oder lokal bei Single-Node-Swarm).
 - **Datenbank:** PostgreSQL mit PostGIS, im Stack `imresamu/postgis:17-3.5-alpine` (Multi-Arch-Build von `postgis/postgis`, das es nur für amd64 gibt; lokal und in Tests weiter `postgis/postgis:17-3.5-alpine`), Host/DB/User über `POSTGRES_HOST`, `POSTGRES_DB`, `POSTGRES_USER`.
 - **Postgres-Service:** Daten im Volume `postgres-data`. Das Volume ist lokal auf einem Node, deshalb Placement `node.role == manager`. Bei mehreren Managern auf ein Node-Label umstellen (`docker node update --label-add nfv.db=true <node>`, Constraint `node.labels.nfv.db == true`).
 - **Backend:** 1 Replica, Scheduler (Wechselkurse, PayPal-Status) und die Zuordnung von Incidents laufen im Prozess. Signaturschlüssel (Secret) und Autorisierungen des IdP (Datenbank) überleben einen Neustart, Logins und MCP-Verbindungen bleiben gültig. Swarm kennt kein `depends_on`, das Backend startet neu, bis Postgres erreichbar ist.
@@ -100,7 +100,7 @@
   - Docker-Zugriff ist praktisch Root. Keine sudo-Rechte; Secrets, Verzeichnisse usw. legt ein Admin an.
 - **Einrichtung:**
   1. Key-Paar nur für CI erzeugen (lokal): `ssh-keygen -t ed25519 -N '' -C nfv-deploy -f nfv-deploy`.
-  2. GHCR-Token (die Images sind privat): Personal Access Token (classic) mit nur `read:packages`, von einem Konto mit Lesezugriff auf `kehrbros/vacantagent`, in eine Datei schreiben, z. B. `ghcr-token`.
+  2. GHCR-Token (die Images sind privat): Personal Access Token (classic) mit nur `read:packages`, von einem Konto mit Lesezugriff auf `kehrbros/nofrustrationvacation`, in eine Datei schreiben, z. B. `ghcr-token`.
   3. `nfv-deploy.pub`, `ghcr-token` und `deploy/setup-deploy-user.sh` auf den Server kopieren und dort ausführen: `sudo bash setup-deploy-user.sh nfv-deploy.pub <github-user> ghcr-token`, danach `ghcr-token` löschen. Ohne GHCR-Teil: `sudo bash setup-deploy-user.sh nfv-deploy.pub`, Login später mit `sudo -iu deploy docker login ghcr.io -u <github-user>`.
   4. Gibt es `AllowUsers`/`AllowGroups` in der SSH-Konfiguration, `deploy` dort ergänzen.
   5. Datenverzeichnis anlegen und Extrakt kopieren: `sudo mkdir -p /home/deploy/data/osm /home/deploy/data/graphs`, Extrakt nach `/home/deploy/data/osm/`.
@@ -132,7 +132,7 @@
   | `PAYPAL_ENVIRONMENT` | `Test` | `sandbox` (Standard) oder `live` |
 
 - Die App-Secrets (PayPal, OpenAI, LiteAPI, Signaturschlüssel, Postgres-Passwort) liegen nicht in GitHub, sondern als Docker Secrets `nfv_*` auf dem Server.
-- Das Image-Push nutzt `GITHUB_TOKEN` (`packages: write`), dafür muss das Repository Schreibzugriff auf die Packages `vacantagent/backend` und `vacantagent/frontend` haben (Package settings → Manage Actions access), ab dem ersten Lauf auch für `vacantagent/caddy`.
+- Das Image-Push nutzt `GITHUB_TOKEN` (`packages: write`), dafür muss das Repository Schreibzugriff auf die Packages `nofrustrationvacation/backend` und `nofrustrationvacation/frontend` haben (Package settings → Manage Actions access), ab dem ersten Lauf auch für `nofrustrationvacation/caddy`.
 
 ## Offen
 
