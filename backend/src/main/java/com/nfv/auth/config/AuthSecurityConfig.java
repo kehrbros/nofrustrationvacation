@@ -100,7 +100,7 @@ public class AuthSecurityConfig {
                                         p.setAuthenticationValidator(validator);
                                     }
                                 })))
-                        // MCP clients are public clients and refresh their tokens with client_id only
+                        // MCP clients and the frontend are public clients and refresh (and revoke) their tokens with client_id only
                         .clientAuthentication(authentication -> authentication
                                 .authenticationConverter(new PublicClientRefreshAuthenticationConverter())
                                 .authenticationProvider(new PublicClientRefreshAuthenticationProvider(clients)))

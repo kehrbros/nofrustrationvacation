@@ -90,7 +90,8 @@ public class TripController {
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Delete a trip", description = "With its stops, routes, waypoints, title photo and incidents.")
+    @Operation(summary = "Delete a trip", description = "With its stops, routes, waypoints, bookings, title photo and "
+            + "incidents. 409 STOP_IN_USE while an alternative accommodation is being paid at one of its stops.")
     @DeleteMapping("/{tripId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deleteTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
@@ -126,7 +127,9 @@ public class TripController {
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Delete a stop", description = "Its neighbours get a new route, which is planned.")
+    @Operation(summary = "Delete a stop", description = "With its bookings and the routes to and from it; its "
+            + "neighbours get a new route, which is planned. 409 STOP_IN_USE while an alternative accommodation is "
+            + "being paid at the stop.")
     @DeleteMapping("/{tripId}/stops/{stopId}")
     public TripDetailDto removeStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
                                     @PathVariable long stopId) {

@@ -3,6 +3,9 @@
 export type TripPhase = 'UPCOMING' | 'CURRENT' | 'PAST';
 export type IncidentType = 'CLOSURE' | 'CONGESTION' | 'ROADWORKS' | 'ACCIDENT' | 'OTHER';
 export type Impact = 'BLOCKED' | 'DELAYED';
+/** Effect of a consequence on the arrival at the target stop, see Docs/consequence-assessment.md. */
+export type Category = 'TOO_LATE' | 'DELAYED' | 'NO_IMPACT';
+export type MatchKind = 'DIRECT' | 'BY_SHIFT' | 'MARGINAL';
 
 export interface TripSummary {
   id: number;
@@ -64,6 +67,33 @@ export interface TripIncident {
   validTo: string | null;
   detectedAt: string;
   updatedAt: string;
+  /** null: not assessed yet. */
+  category: Category | null;
+  match: MatchKind;
+  /** Own delay on this route in minutes, null: not passable. */
+  assessedDelayMinutes: number | null;
+  /** assessedDelayMinutes is an assumption of the source, show as estimated. */
+  delayAssumed: boolean;
+  /** Arrival at the target stop after this incident, null if not passable or not planned. */
+  expectedArrival: string | null;
+  /** Arrival of the target stop, null without. */
+  deadline: string | null;
+  timesUnconfirmed: boolean;
+  /** Stretch of the route the incident covers, empty if unknown. */
+  geometry: LinePoint[];
+}
+
+/** Situation of one route with its incidents, against the arrival at its target stop. */
+export interface RouteIncidentSummary {
+  routeId: number;
+  worstCategory: Category | null;
+  plannedArrival: string | null;
+  expectedArrival: string | null;
+  deadline: string | null;
+  /** Deadline minus expected arrival in minutes, negative: too late. */
+  slackMinutes: number | null;
+  unpassable: boolean;
+  plannedTooLate: boolean;
 }
 
 export interface NewTrip {

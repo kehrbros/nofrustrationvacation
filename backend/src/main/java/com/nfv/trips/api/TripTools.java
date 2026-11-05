@@ -135,8 +135,8 @@ public class TripTools {
         return tripDtos.detail(appUserId, tripId);
     }
 
-    @McpTool(name = "remove_stop", description = "Deletes a stop with the routes and waypoints to and from it; its "
-            + "neighbours get a new route." + PLANNING,
+    @McpTool(name = "remove_stop", description = "Deletes a stop with its bookings and the routes and "
+            + "waypoints to and from it; its neighbours get a new route." + PLANNING,
             annotations = @McpTool.McpAnnotations(readOnlyHint = false, destructiveHint = true, idempotentHint = false,
                     openWorldHint = false))
     public TripDetailDto removeStop(@McpToolParam(description = "Id of the trip") long tripId,

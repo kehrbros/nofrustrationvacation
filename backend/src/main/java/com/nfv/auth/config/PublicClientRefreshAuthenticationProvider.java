@@ -13,7 +13,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 
 /**
  * Accepts the public client of {@link PublicClientRefreshAuthenticationConverter} if it is a public client with the
- * refresh token grant. That the refresh token belongs to this client is checked by the refresh token grant.
+ * refresh token grant. That the token belongs to this client is checked by the refresh token grant and the revocation.
  */
 class PublicClientRefreshAuthenticationProvider implements AuthenticationProvider {
     private final RegisteredClientRepository clients;

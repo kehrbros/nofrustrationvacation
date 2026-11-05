@@ -72,9 +72,12 @@ export default defineConfig({
     }),
   ],
   server: {
+    // uncommon port so that other projects can keep the Vite default 5173, see README.md
+    port: 18173,
+    strictPort: true,
     allowedHosts: frontendUrl ? [new URL(frontendUrl).hostname] : [],
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': 'http://localhost:18180',
     },
   },
   test: {

@@ -138,12 +138,19 @@ public class TripLogic {
         return trip;
     }
 
-    /** Deletes the trip with its routes, waypoints and stops; title photo and consequences by the database. */
+    /**
+     * Deletes the trip with its routes, waypoints and stops; the bookings at the stops via {@link StopsDeleting}, title
+     * photo and consequences by the database.
+     */
     @Transactional
     public void delete(long appUserId, long tripId) {
         Trip trip = get(appUserId, tripId);
+        List<Stop> stops = stopRepository.findByTripIdOrderByPosition(tripId);
+        if (!stops.isEmpty()) {
+            events.publishEvent(new StopsDeleting(tripId, stops.stream().map(Stop::getId).toList()));
+        }
         deleteRoutes(routeRepository.findByTripId(tripId));
-        stopRepository.deleteAll(stopRepository.findByTripIdOrderByPosition(tripId));
+        stopRepository.deleteAll(stops);
         tripRepository.delete(trip);
     }
 
@@ -220,6 +227,7 @@ public class TripLogic {
         Trip trip = get(appUserId, tripId);
         List<Stop> stops = new ArrayList<>(stopRepository.findByTripIdOrderByPosition(tripId));
         Stop stop = find(stops, stopId);
+        events.publishEvent(new StopsDeleting(tripId, List.of(stopId)));
         stops.remove(stop);
         Set<Long> created = syncRoutes(trip, stops);
         stopRepository.delete(stop);

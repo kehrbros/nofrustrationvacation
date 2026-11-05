@@ -37,7 +37,7 @@ class LiteApiTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         liteApi = new LiteApi(builder.build(), new AlternativesProperties("sand_key", SEARCH, BOOK, BigDecimal.TEN,
-                5000, 20, "DE", "http://localhost:5173", Duration.ofSeconds(5), 30));
+                5000, 20, "DE", "http://localhost:18173", Duration.ofSeconds(5), 30));
     }
 
     @Test

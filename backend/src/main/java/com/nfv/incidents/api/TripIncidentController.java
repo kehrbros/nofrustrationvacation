@@ -5,8 +5,11 @@ import com.nfv.incidents.dto.TripIncidentCountDto;
 import com.nfv.incidents.dto.TripIncidentDto;
 import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Incident;
+import com.nfv.incidents.logic.ConsequenceLines;
 import com.nfv.incidents.logic.RouteIncidentSummary;
 import com.nfv.incidents.logic.TripIncidents;
+import com.nfv.network.logic.GeoPoint;
+import com.nfv.trips.dto.RouteLineDto;
 import com.nfv.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,18 +22,22 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "Incidents", description = "Incidents affecting the trips of the authenticated user")
 @RestController
 @RequiredArgsConstructor
 public class TripIncidentController {
     private final TripIncidents tripIncidents;
+    private final ConsequenceLines consequenceLines;
 
     @Operation(summary = "Current incidents of a trip", description = "Incidents not ended yet, ranked: TOO_LATE by "
             + "lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage.")
     @GetMapping("/api/v1/trips/{tripId}/incidents")
     public List<TripIncidentDto> getTripIncidents(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
-        return tripIncidents.active(user.appUserId(), tripId).stream().map(TripIncidentController::toDto).toList();
+        List<Consequence> active = tripIncidents.active(user.appUserId(), tripId);
+        Map<Long, List<GeoPoint>> lines = consequenceLines.of(active);
+        return active.stream().map(c -> toDto(c, lines.getOrDefault(c.getId(), List.of()))).toList();
     }
 
     @Operation(summary = "Situation of the routes of a trip", description = "Per planned route: worst category of "
@@ -50,7 +57,7 @@ public class TripIncidentController {
                 .map(entry -> new TripIncidentCountDto(entry.getKey(), entry.getValue())).toList();
     }
 
-    private static TripIncidentDto toDto(Consequence consequence) {
+    private static TripIncidentDto toDto(Consequence consequence, List<GeoPoint> line) {
         Incident incident = consequence.getIncident();
         return new TripIncidentDto(incident.getId(), consequence.getRouteId(), incident.getType(),
                 incident.getDescription(), consequence.getImpact(), minutes(consequence.getDelay()),
@@ -58,7 +65,8 @@ public class TripIncidentController {
                 consequence.getCategory(), consequence.getMatch(), minutes(consequence.getAssessedDelay()),
                 consequence.isDelayAssumed(), consequence.getPassageAt(), consequence.getExpectedArrival(),
                 consequence.getDeadline(), consequence.getWindowStart(), consequence.getWindowEnd(),
-                incident.isTimesUnconfirmed());
+                incident.isTimesUnconfirmed(),
+                line.stream().map(p -> new RouteLineDto.LinePointDto(p.lat(), p.lon())).toList());
     }
 
     private static RouteIncidentSummaryDto toDto(RouteIncidentSummary summary) {

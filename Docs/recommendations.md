@@ -159,7 +159,7 @@ flowchart LR
 ## Frontend
 
 - **`RouteSheet`** (`/reisen/{tripId}/routen/{routeId}`): lädt bei jedem Öffnen bis zu drei Vorschläge (`routesApi.fetchSuggestions`), Radio-Liste mit Titel aus Labels und `via` („Schnellste · über SH 1“, „Alternative über SH 7“), Fahrzeit, km, Ankunft (nicht bei Ersatz-Abfahrt), Abstand zur schnellsten („+18 min“), Chips „Aktuell geplant“/„Umfährt Hinweis“, Warnzeile je Konflikt. Texte in `trips/routeOptionText.ts`.
-  - „Diese Strecke nehmen“ ruft `choice` mit den `waypoints` der Option, lädt die Reise neu. Nur eine Option: ohne Radio, „Strecke bestätigen“.
+  - „Diese Strecke nehmen“ ruft `choice` mit den `waypoints` der Option, lädt die Reise neu. Ist `planOutcome` nicht `PLANNED` (z. B. `MISSING_DEPARTURE`: Start-Stop ohne Abfahrt, Vorschläge kamen von der Ersatz-Abfahrt), bleibt das Sheet offen mit „Strecke gespeichert, aber noch nicht geplant“ und dem Grund. Die Waypoints sind gespeichert, geplant wird, sobald die Abfahrt eingetragen ist. Nur eine Option: ohne Radio, „Strecke bestätigen“.
   - Zustände: Skeleton beim Laden, `MISSING_COORDINATES`, `NO_ROUTE`, `503` mit „Erneut versuchen“.
   - Schalter „Zwischenziele berücksichtigen“ nur, wenn die Route Waypoints des Nutzers (`USER`) hat, aus = Standard; dann Hinweis „Deine Zwischenziele werden entfernt“.
   - Sheet ohne Maske (60 % Höhe), die Karte darüber zeigt alle Optionen (`RoutePreview` im `TripContext`), die gewählte schwarz, die übrigen grau; Antippen einer Linie wählt sie.

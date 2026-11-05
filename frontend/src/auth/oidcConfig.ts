@@ -13,7 +13,7 @@ const configuredAuthority = import.meta.env.VITE_OIDC_AUTHORITY;
  * see Docs/deployment.md#tls-caddy.
  */
 const oidcAuthority =
-  configuredAuthority === 'same-origin' ? window.location.origin : (configuredAuthority ?? 'http://localhost:8080');
+  configuredAuthority === 'same-origin' ? window.location.origin : (configuredAuthority ?? 'http://localhost:18180');
 
 export const userManager = new UserManager({
   authority: oidcAuthority,
@@ -22,6 +22,8 @@ export const userManager = new UserManager({
   post_logout_redirect_uri: window.location.origin + '/',
   scope: 'openid profile email',
   userStore: new WebStorageStateStore({ store: window.sessionStorage }),
-  // public clients get no refresh token, an expired session restarts the login
-  automaticSilentRenew: false,
+  // renews the access token with the refresh token (rotated by the IdP) shortly before it expires, see session.ts
+  automaticSilentRenew: true,
+  // logout revokes the refresh token, the access token expires after 15 minutes
+  revokeTokenTypes: ['refresh_token'],
 });

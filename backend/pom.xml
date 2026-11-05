@@ -245,6 +245,8 @@
                     <outputDir>${project.basedir}/../frontend</outputDir>
                     <outputFileName>openapi.json</outputFileName>
                     <failOnError>true</failOnError>
+                    <!-- server.port of application.properties, the start goal above uses it as well -->
+                    <apiDocsUrl>http://localhost:18180/v3/api-docs</apiDocsUrl>
                 </configuration>
             </plugin>
         </plugins>

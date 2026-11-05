@@ -34,13 +34,13 @@
 
 - Signaturschlüssel: `nfv.auth.signing-key` (PEM, PKCS#8 RSA, Secret `NFV_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
 - Autorisierungen (Codes, Access und Refresh Tokens) und Consents liegen in der Datenbank (`JdbcOAuth2AuthorizationService`).
-- Client `nfv-frontend`: öffentlich, Authorization Code + PKCE, Redirect `http://localhost:5173/auth/callback`, kein Consent-Screen.
+- Client `nfv-frontend`: öffentlich, Authorization Code + PKCE + Refresh Token, Redirect `http://localhost:18173/auth/callback`, kein Consent-Screen. Access Token 15 min, Refresh Token 14 Tage, bei jeder Nutzung rotiert (`…client.nfv-frontend.token.*`). Refresh und Widerruf (`/oauth2/revoke`) nur mit `client_id`, wie bei den MCP-Clients.
 - MCP-Clients: nicht vorregistriert, sondern über ihre `client_id`-URL, siehe unten.
 
 ## Konfiguration
 
 ```properties
-spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8080
+spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:18180
 nfv.security.username-claim=sub      # Keycloak: preferred_username
 nfv.security.roles-claim=roles       # Keycloak: realm_access.roles
 spring.security.oauth2.authorizationserver.*  # nur eigener IdP
@@ -55,12 +55,13 @@ nfv.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools b
 
 ## Frontend
 
-- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:8080`, `nfv-frontend`).
+- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:18180`, `nfv-frontend`).
 - `RequireAuth` schützt das Dashboard: nicht angemeldet → `signinRedirect` → Login-Seite des IdP.
-- `/auth/callback` (`AuthCallback`): Code-Tausch durch den `AuthProvider`, danach Weiterleitung auf die Dashboard-Startseite `/`.
-- Tokens im `sessionStorage`. Kein Refresh Token (öffentlicher Client): bei Ablauf des Access Tokens oder einer 401 der API wird der Nutzer entfernt und der Login neu gestartet; solange die IdP-Session besteht, ohne erneute Passworteingabe.
+- `/auth/callback` (`AuthCallback`): Code-Tausch durch den `AuthProvider`, danach zurück auf die Seite, auf der der Login begann (`state.returnTo`, nur eigene Pfade).
+- Tokens im `sessionStorage`. `frontend/src/auth/session.ts` hält die Anmeldung still am Leben: `automaticSilentRenew` erneuert das Access Token kurz vor Ablauf per Refresh Token, API-Requests erneuern vorher, wenn es weniger als 30 s gilt, eine 401 erneuert und wiederholt den Request einmal. Netzwerkfehler beenden die Sitzung nicht.
+- Ein abgelaufenes Access Token entfernt den Nutzer nicht mehr, die Seite bleibt gemountet. Erst wenn der IdP das Refresh Token ablehnt (abgelaufen, widerrufen), erscheint `SessionExpiredDialog` über der Seite: Login im Popup (Seite und Eingaben bleiben erhalten), falls das Popup nicht geht, Login im selben Fenster mit Rückkehr auf dieselbe Seite (nicht gespeicherte Eingaben gehen dabei verloren).
 - `frontend/src/api/apiClient.ts`: generierter API-Client mit `Authorization: Bearer …`, relative URLs (`/api` wird vom Vite-Dev-Server an das Backend weitergeleitet, `VITE_API_BASE_URL` überschreibt).
-- Abmelden: `signoutRedirect` (OIDC-Logout des IdP, zurück auf `/`, von dort wieder zum Login).
+- Abmelden: Refresh Token widerrufen, dann `signoutRedirect` (OIDC-Logout des IdP, zurück auf `/`, von dort wieder zum Login).
 
 ## Workflows
 
@@ -136,8 +137,8 @@ MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization S
 ### Lokal testen
 
 - Automatisiert: `McpAuthorizationFlowTest` spielt den kompletten Ablauf mit einem Stub für die Metadata Documents durch (Discovery, Consent, Token, Scopes pro Tool, Refresh, Loopback, Revoke). Unit-Tests: `ClientMetadataValidatorTest`, `RedirectUrisTest`, `AddressPolicyTest`, `CimdClientResolverTest`.
-- Manuell mit Claude Code (Loopback, also nur lesend): Backend starten, `claude mcp add --transport http nfv http://localhost:8080/mcp`, in Claude Code `/mcp` → Authentifizieren. Dafür `nfv.backend-url` unverändert lassen (`http://localhost:8080`).
-- Manuell mit Claude Web/ChatGPT: Die Clients erreichen nur öffentliche HTTPS-URLs, also einen Tunnel nutzen (z. B. `cloudflared tunnel --url http://localhost:8080`) und `NFV_BACKEND_URL` auf die Tunnel-URL setzen, dann in Claude unter „Connectors“ `https://<tunnel>/mcp` hinzufügen.
+- Manuell mit Claude Code (Loopback, also nur lesend): Backend starten, `claude mcp add --transport http nfv http://localhost:18180/mcp`, in Claude Code `/mcp` → Authentifizieren. Dafür `nfv.backend-url` unverändert lassen (`http://localhost:18180`).
+- Manuell mit Claude Web/ChatGPT: Die Clients erreichen nur öffentliche HTTPS-URLs, also einen Tunnel nutzen (z. B. `cloudflared tunnel --url http://localhost:18180`) und `NFV_BACKEND_URL` auf die Tunnel-URL setzen, dann in Claude unter „Connectors“ `https://<tunnel>/mcp` hinzufügen.
 - MCP Inspector (`npx @modelcontextprotocol/inspector`) ist nicht auf der Allowlist und wird abgewiesen.
 
 ## Wechsel zu Keycloak

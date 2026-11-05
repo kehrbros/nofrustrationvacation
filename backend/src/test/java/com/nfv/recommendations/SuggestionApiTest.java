@@ -242,6 +242,53 @@ class SuggestionApiTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void choiceOnTheLastRouteOfARoundTripIsPlanned() throws Exception {
+        // last stop at the same place as the first, report of 2026-11-05
+        long[] routes = roundTrip(DEPARTURE.plusDays(2));
+        for (long routeId : routes) {
+            routePlanning.plan(routeId);
+        }
+        long last = routes[1];
+        String body = suggest(last, "{}").andReturn().getResponse().getContentAsString();
+        String waypoints = JsonPath.parse(JsonPath.<Object>read(body, "$.options[-1:][0].waypoints")).jsonString();
+
+        choose(user, last, waypoints)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planOutcome").value("PLANNED"));
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(last)).isNotEmpty();
+    }
+
+    @Test
+    void choiceWithoutDepartureIsStoredButNotPlanned() throws Exception {
+        long last = roundTrip(null)[1];
+        String body = suggest(last, "{\"departureAt\":\"" + DEPARTURE.plusDays(2) + "\"}").andReturn().getResponse()
+                .getContentAsString();
+        String waypoints = JsonPath.parse(JsonPath.<Object>read(body, "$.options[-1:][0].waypoints")).jsonString();
+
+        // the frontend shows that the route is planned once the stop has a departure
+        choose(user, last, waypoints)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.planOutcome").value("MISSING_DEPARTURE"));
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(last)).isEmpty();
+        assertThat(waypointRepository.findByRouteIdOrderByPosition(last))
+                .hasSize(JsonPath.<List<Object>>read(waypoints, "$").size());
+    }
+
+    /** Newtown → Kelburn → Newtown, departure at Kelburn as given; ids of both routes. */
+    private long[] roundTrip(OffsetDateTime departureAtKelburn) {
+        return inTransaction(() -> {
+            Trip trip = tripRepository.save(new Trip(userId, "Rundreise", DEPARTURE, DEPARTURE.plusDays(7),
+                    DEPARTURE.minusDays(2)));
+            Stop home = stopRepository.save(new Stop(trip, 0, "Newtown", NEWTOWN[0], NEWTOWN[1], null, DEPARTURE));
+            Stop kelburn = stopRepository.save(new Stop(trip, 1, "Kelburn", KELBURN[0], KELBURN[1],
+                    DEPARTURE.plusHours(1), departureAtKelburn));
+            Stop back = stopRepository.save(new Stop(trip, 2, "Newtown", NEWTOWN[0], NEWTOWN[1], null, null));
+            return new long[]{routeRepository.save(new Route(trip, home, kelburn)).getId(),
+                    routeRepository.save(new Route(trip, kelburn, back)).getId()};
+        });
+    }
+
     private org.springframework.test.web.servlet.ResultActions suggest(long routeId, String json) throws Exception {
         var request = post("/api/v1/routes/{id}/suggestions", routeId).with(user).with(csrf());
         return mockMvc.perform(json == null ? request

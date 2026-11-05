@@ -82,7 +82,7 @@ class PayPalClientTest {
                 .andExpect(jsonPath("$.purchase_units[0].custom_id").value("top-up-1"))
                 .andExpect(jsonPath("$.purchase_units[0].amount.currency_code").value("EUR"))
                 .andExpect(jsonPath("$.purchase_units[0].amount.value").value("25.00"))
-                .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url").value("http://localhost:5173/consumer/guthaben/paypal"))
+                .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url").value("http://localhost:18173/consumer/guthaben/paypal"))
                 .andRespond(withSuccess("""
                         {"id":"O-1","status":"PAYER_ACTION_REQUIRED","links":[
                           {"href":"https://api-m.sandbox.paypal.com/v2/checkout/orders/O-1","rel":"self"},
@@ -102,7 +102,7 @@ class PayPalClientTest {
         server.expect(requestTo(API + "/v2/checkout/orders"))
                 .andExpect(jsonPath("$.intent").value("AUTHORIZE"))
                 .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url")
-                        .value("http://localhost:5173/reisen/1/buchungen/2/alternativen?reservierung=3"))
+                        .value("http://localhost:18173/reisen/1/buchungen/2/alternativen?reservierung=3"))
                 .andRespond(withSuccess("""
                         {"id":"O-2","status":"PAYER_ACTION_REQUIRED","links":[
                           {"href":"https://www.sandbox.paypal.com/checkoutnow?token=O-2","rel":"payer-action"}]}""",
@@ -110,8 +110,8 @@ class PayPalClientTest {
 
         PayPalCheckout.CheckoutOrder order = checkout.createOrder("stay-3", new PayPalAmount("EUR", new BigDecimal("180.00")),
                 "Hotel", PayPalCheckout.Intent.AUTHORIZE,
-                URI.create("http://localhost:5173/reisen/1/buchungen/2/alternativen?reservierung=3"),
-                URI.create("http://localhost:5173/reisen/1/buchungen/2/alternativen?abgebrochen=1"));
+                URI.create("http://localhost:18173/reisen/1/buchungen/2/alternativen?reservierung=3"),
+                URI.create("http://localhost:18173/reisen/1/buchungen/2/alternativen?abgebrochen=1"));
 
         assertThat(order.orderId()).isEqualTo("O-2");
         server.verify();
@@ -241,7 +241,7 @@ class PayPalClientTest {
                 .contains("response_type=code")
                 .contains("state=state-1")
                 .contains("scope=openid%20email%20https://uri.paypal.com/services/paypalattributes")
-                .contains("redirect_uri=http://localhost:5173/paypal/connected");
+                .contains("redirect_uri=http://localhost:18173/paypal/connected");
     }
 
     @Test
@@ -322,9 +322,9 @@ class PayPalClientTest {
 
     private static PayPalProperties properties(String clientId, String secret) {
         return new PayPalProperties(PayPalProperties.Environment.SANDBOX, clientId, secret,
-                URI.create("http://localhost:5173/paypal/connected"),
-                URI.create("http://localhost:5173/consumer/guthaben/paypal"),
-                URI.create("http://localhost:5173/consumer/guthaben/paypal?abgebrochen=1"),
+                URI.create("http://localhost:18173/paypal/connected"),
+                URI.create("http://localhost:18173/consumer/guthaben/paypal"),
+                URI.create("http://localhost:18173/consumer/guthaben/paypal?abgebrochen=1"),
                 "Nfv", Duration.ofSeconds(5));
     }
 }

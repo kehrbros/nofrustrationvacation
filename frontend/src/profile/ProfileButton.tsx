@@ -13,6 +13,15 @@ export default function ProfileButton() {
   const name = profile?.name ?? profile?.preferred_username ?? profile?.sub ?? '';
   const initial = name.charAt(0).toUpperCase();
 
+  async function logout() {
+    try {
+      await auth.revokeTokens();
+    } catch {
+      // the refresh token expires on its own, logging out must not fail because of it
+    }
+    await auth.signoutRedirect();
+  }
+
   return (
     <>
       <button
@@ -31,7 +40,7 @@ export default function ProfileButton() {
         title={name}
         eyebrow={profile?.email}
         footer={
-          <button type="button" className="va-button va-button-outline va-block" onClick={() => void auth.signoutRedirect()}>
+          <button type="button" className="va-button va-button-outline va-block" onClick={() => void logout()}>
             Abmelden
           </button>
         }

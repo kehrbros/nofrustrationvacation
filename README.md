@@ -6,17 +6,17 @@ Travel incident app: users store their trip routes and are informed about events
 
 ## Getting Started
 
-Running the frontend locally on port 5173:
+Running the frontend locally on port 18173:
 
 1. ``npm i`` (before first start and after changes in dependencies)
 2. ``npm run dev``
-3. Visit [http://localhost:5173/](http://localhost:5173/) in browser
+3. Visit [http://localhost:18173/](http://localhost:18173/) in browser
 4. Log in via the identity provider of the backend (must be running). On startup the backend creates the account `test` / `test` if no account exists yet.
 
 Running the backend from `backend/` requires Java 25 and Maven:
 
 1. Run `mvn spring-boot:test-run` (starts a PostGIS container, Docker required), or start PostgreSQL via `docker-compose.local.yml` and run `mvn spring-boot:run`.
-2. Open the live OpenAPI document at [http://localhost:8080/v3/api-docs](http://localhost:8080/v3/api-docs).
+2. Open the live OpenAPI document at [http://localhost:18180/v3/api-docs](http://localhost:18180/v3/api-docs).
 
 The backend uses PostgreSQL with PostGIS, tests start it via Testcontainers. Flyway migrations belong in `backend/src/main/resources/db/migration` as `V1__description.sql`, `V2__description.sql`, and so on. Hibernate validates the schema and does not create tables. Run `mvn verify` in `backend/` to regenerate `frontend/openapi.json`. The spec is committed as the API contract for the frontend, and the backend CI fails if it is outdated, so commit it together with API changes.
 

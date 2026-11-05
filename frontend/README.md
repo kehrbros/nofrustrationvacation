@@ -17,7 +17,7 @@ Das Spring-Boot-Projekt liegt unter `../backend`. Die Generierung liest die eing
 npm run generate:api
 ```
 
-Für einen anderen Dateipfad oder eine URL `OPENAPI_SPEC` setzen (unter PowerShell zum Beispiel `$env:OPENAPI_SPEC = 'http://localhost:8080/v3/api-docs'`). Die generierten Typen und Fetch-Clients landen unter `src/generated/api` und werden nicht eingecheckt. Vor einem Build, der sie importiert, muss die Generierung ausgeführt werden. Der Vite-Entwicklungsserver leitet `/api` an `http://localhost:8080` weiter.
+Für einen anderen Dateipfad oder eine URL `OPENAPI_SPEC` setzen (unter PowerShell zum Beispiel `$env:OPENAPI_SPEC = 'http://localhost:18180/v3/api-docs'`). Die generierten Typen und Fetch-Clients landen unter `src/generated/api` und werden nicht eingecheckt. Vor einem Build, der sie importiert, muss die Generierung ausgeführt werden. Der Vite-Entwicklungsserver leitet `/api` an `http://localhost:18180` weiter.
 
 ## CI und Docker
 

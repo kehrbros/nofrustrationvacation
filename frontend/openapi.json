@@ -1,7 +1,7 @@
 {
   "openapi" : "3.1.0",
   "servers" : [ {
-    "url" : "http://localhost:8080",
+    "url" : "http://localhost:18180",
     "description" : "Generated server url"
   } ],
   "security" : [ {
@@ -1061,7 +1061,7 @@
     },
     "/api/v1/trips/{tripId}" : {
       "delete" : {
-        "description" : "With its stops, routes, waypoints, title photo and incidents.",
+        "description" : "With its stops, routes, waypoints, bookings, title photo and incidents. 409 STOP_IN_USE while an alternative accommodation is being paid at one of its stops.",
         "operationId" : "deleteTrip",
         "parameters" : [ {
           "in" : "path",
@@ -1536,7 +1536,7 @@
     },
     "/api/v1/trips/{tripId}/stops/{stopId}" : {
       "delete" : {
-        "description" : "Its neighbours get a new route, which is planned.",
+        "description" : "With its bookings and the routes to and from it; its neighbours get a new route, which is planned. 409 STOP_IN_USE while an alternative accommodation is being paid at the stop.",
         "operationId" : "removeStop",
         "parameters" : [ {
           "in" : "path",
@@ -3311,6 +3311,13 @@
             "format" : "date-time",
             "description" : "Arrival at the target stop after this incident, null if not passable or not planned"
           },
+          "geometry" : {
+            "type" : "array",
+            "description" : "Stretch of the route the incident covers, points in WGS84 in driving order, for the map; empty if unknown",
+            "items" : {
+              "$ref" : "#/components/schemas/LinePointDto"
+            }
+          },
           "impact" : {
             "type" : "string",
             "enum" : [ "BLOCKED", "DELAYED" ]
@@ -3516,11 +3523,11 @@
       "oauth2" : {
         "flows" : {
           "authorizationCode" : {
-            "authorizationUrl" : "http://localhost:8080/oauth2/authorize",
+            "authorizationUrl" : "http://localhost:18180/oauth2/authorize",
             "scopes" : {
               "openid" : ""
             },
-            "tokenUrl" : "http://localhost:8080/oauth2/token"
+            "tokenUrl" : "http://localhost:18180/oauth2/token"
           }
         },
         "type" : "oauth2"

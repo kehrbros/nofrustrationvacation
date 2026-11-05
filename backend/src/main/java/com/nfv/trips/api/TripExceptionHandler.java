@@ -3,6 +3,7 @@ package com.nfv.trips.api;
 import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.trips.logic.InvalidTripInputException;
+import com.nfv.trips.logic.StopInUseException;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
 import org.springframework.core.Ordered;
@@ -37,6 +38,11 @@ public class TripExceptionHandler {
     @ExceptionHandler(InvalidTripInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidTripInputException exception) {
         return problem(HttpStatus.BAD_REQUEST, "INVALID_TRIP_INPUT", exception.getMessage());
+    }
+
+    @ExceptionHandler(StopInUseException.class)
+    public ResponseEntity<ProblemDetail> handleStopInUse(StopInUseException exception) {
+        return problem(HttpStatus.CONFLICT, "STOP_IN_USE", exception.getMessage());
     }
 
     @ExceptionHandler(AssistantUnavailableException.class)

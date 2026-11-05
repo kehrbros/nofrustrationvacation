@@ -4,10 +4,12 @@ import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.entities.MatchKind;
+import com.nfv.trips.dto.RouteLineDto;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.annotation.Nullable;
 
 import java.time.OffsetDateTime;
+import java.util.List;
 
 @Schema(description = "Incident affecting a route of a trip, one entry per incident and route")
 public record TripIncidentDto(
@@ -39,5 +41,7 @@ public record TripIncidentDto(
         @Nullable OffsetDateTime windowStart,
         @Nullable OffsetDateTime windowEnd,
         @Schema(description = "Closure whose times are only in the description and could not be read yet: "
-                + "show as \"check times\"") boolean timesUnconfirmed) {
+                + "show as \"check times\"") boolean timesUnconfirmed,
+        @Schema(description = "Stretch of the route the incident covers, points in WGS84 in driving order, for the "
+                + "map; empty if unknown") List<RouteLineDto.LinePointDto> geometry) {
 }

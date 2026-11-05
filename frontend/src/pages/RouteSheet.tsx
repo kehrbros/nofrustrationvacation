@@ -5,7 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
-import type { RouteOption, RouteSuggestions } from '../trips/model';
+import type { PlanOutcome, RouteOption, RouteSuggestions } from '../trips/model';
 import { formatDistance, formatDuration, optionTitle, slowerBy, substituteDeparture } from '../trips/routeOptionText';
 import { chooseRoute, fetchSuggestions, fetchUserWaypointCount } from '../trips/routesApi';
 import { routeName, useTripContext } from '../trips/tripContext';
@@ -35,6 +35,8 @@ export default function RouteSheet() {
   const [selected, setSelected] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // stored, but planning failed: the sheet stays open and says why the route is not drawn yet
+  const [notPlanned, setNotPlanned] = useState<PlanOutcome | null>(null);
 
   useEffect(() => {
     if (!route) {
@@ -107,9 +109,14 @@ export default function RouteSheet() {
     setSaving(true);
     setError(null);
     try {
-      await chooseRoute(route.id, chosen.waypoints);
+      const outcome = await chooseRoute(route.id, chosen.waypoints);
       reload();
-      close();
+      if (outcome === null || outcome === 'PLANNED') {
+        close();
+      } else {
+        setNotPlanned(outcome);
+        setSaving(false);
+      }
     } catch {
       setError('Die Strecke konnte nicht gespeichert werden.');
       setSaving(false);
@@ -126,10 +133,16 @@ export default function RouteSheet() {
       title={routeName(route, stopById)}
       footer={
         <div className="va-column va-gap">
-          <button type="button" className="va-button va-button-accent va-block" disabled={!chosen || saving} onClick={save}>
-            {saving ? 'Wird gespeichert …' : options.length === 1 ? 'Strecke bestätigen' : 'Diese Strecke nehmen'}
-          </button>
-          {isNew && (
+          {notPlanned ? (
+            <button type="button" className="va-button va-button-accent va-block" onClick={close}>
+              Schließen
+            </button>
+          ) : (
+            <button type="button" className="va-button va-button-accent va-block" disabled={!chosen || saving} onClick={save}>
+              {saving ? 'Wird gespeichert …' : options.length === 1 ? 'Strecke bestätigen' : 'Diese Strecke nehmen'}
+            </button>
+          )}
+          {isNew && !notPlanned && (
             <button type="button" className="va-text-button" onClick={close}>
               Später
             </button>
@@ -210,9 +223,24 @@ export default function RouteSheet() {
         )}
       </fieldset>
       {hasWaypoints && !includeWaypoints && chosen && <p className="va-note">Deine Zwischenziele werden entfernt.</p>}
+      {notPlanned && <Alert type="info" showIcon message="Strecke gespeichert, aber noch nicht geplant" description={notPlannedText(notPlanned, from?.name)} />}
       {error && <Alert type="error" showIcon message={error} />}
     </Sheet>
   );
+}
+
+/** Why a chosen route is stored but not planned (no line on the map yet), see Docs/recommendations.md#auswahl-speichern. */
+function notPlannedText(outcome: PlanOutcome, fromName: string | undefined): string {
+  switch (outcome) {
+    case 'MISSING_DEPARTURE':
+      return `Trag am Stop ${fromName ?? ''} eine Abfahrt ein. Dann wird die Strecke über deine Wahl geplant und auf der Karte gezeigt.`;
+    case 'MISSING_COORDINATES':
+      return 'Beide Stops brauchen einen Ort auf der Karte.';
+    case 'ROUTING_UNAVAILABLE':
+      return 'Die Streckensuche ist gerade nicht verfügbar. Versuch es später noch einmal.';
+    default:
+      return 'Für diese Wahl wurde keine Straßenverbindung gefunden. Wähl eine andere Strecke.';
+  }
 }
 
 function ProblemText({

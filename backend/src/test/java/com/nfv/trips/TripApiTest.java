@@ -392,7 +392,10 @@ class TripApiTest {
                 .andExpect(jsonPath("$[0].assessedDelayMinutes").value(240))
                 .andExpect(jsonPath("$[0].delayAssumed").value(false))
                 .andExpect(jsonPath("$[0].expectedArrival").isNotEmpty())
-                .andExpect(jsonPath("$[0].deadline").doesNotExist());
+                .andExpect(jsonPath("$[0].deadline").doesNotExist())
+                // the affected stretch for the map: the one section on the test segment
+                .andExpect(jsonPath("$[0].geometry", hasSize(2)))
+                .andExpect(jsonPath("$[0].geometry[0].latitude").value(47.2));
         mockMvc.perform(get("/api/v1/trips/{id}/incidents/routes", tripId).with(user))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))

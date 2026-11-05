@@ -14,8 +14,8 @@ import org.springframework.context.annotation.Configuration;
 @OpenAPIDefinition(security = @SecurityRequirement(name = "oauth2"))
 @SecurityScheme(name = "oauth2", type = SecuritySchemeType.OAUTH2,
         flows = @OAuthFlows(authorizationCode = @OAuthFlow(
-                authorizationUrl = "http://localhost:8080/oauth2/authorize",
-                tokenUrl = "http://localhost:8080/oauth2/token",
+                authorizationUrl = "http://localhost:18180/oauth2/authorize",
+                tokenUrl = "http://localhost:18180/oauth2/token",
                 scopes = @OAuthScope(name = "openid"))))
 public class OpenApiConfig {
 }

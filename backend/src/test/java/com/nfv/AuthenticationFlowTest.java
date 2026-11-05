@@ -22,6 +22,7 @@ import java.security.MessageDigest;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -38,7 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class AuthenticationFlowTest {
     private static final String CLIENT_ID = "nfv-frontend";
-    private static final String REDIRECT_URI = "http://localhost:5173/auth/callback";
+    private static final String REDIRECT_URI = "http://localhost:18173/auth/callback";
+    private static final JsonMapper JSON = JsonMapper.builder().build();
 
     @Autowired
     private MockMvc mockMvc;
@@ -88,6 +90,36 @@ class AuthenticationFlowTest {
                 .andExpect(jsonPath("$.username").value("test"));
     }
 
+    /**
+     * The frontend renews its access token silently, the refresh token is rotated and revoked on logout.
+     */
+    @Test
+    void frontendRefreshesAndRevokesTokens() throws Exception {
+        JsonNode tokens = tokens("test", "test");
+        String refreshToken = tokens.get("refresh_token").asString();
+
+        JsonNode refreshed = JSON.readTree(mockMvc.perform(refreshRequest(refreshToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString());
+        String rotated = refreshed.get("refresh_token").asString();
+        assertNotEquals(refreshToken, rotated, "refresh tokens are rotated");
+        assertNotNull(refreshed.get("id_token"));
+        mockMvc.perform(get("/api/v1/users/me").header("Authorization", "Bearer " + refreshed.get("access_token").asString()))
+                .andExpect(status().isOk());
+        mockMvc.perform(refreshRequest(refreshToken))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+
+        mockMvc.perform(post("/oauth2/revoke")
+                        .param("token", rotated)
+                        .param("token_type_hint", "refresh_token")
+                        .param("client_id", CLIENT_ID))
+                .andExpect(status().isOk());
+        mockMvc.perform(refreshRequest(rotated))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+    }
+
     @Test
     void duplicateUsernameIsRejected() throws Exception {
         mockMvc.perform(post("/register").with(csrf()).param("username", "bob").param("password", "secret-password"))
@@ -101,6 +133,10 @@ class AuthenticationFlowTest {
      * Authorization Code flow with PKCE as the frontend runs it.
      */
     private String login(String username, String password) throws Exception {
+        return tokens(username, password).get("access_token").asString();
+    }
+
+    private JsonNode tokens(String username, String password) throws Exception {
         MvcResult loginResult = mockMvc.perform(post("/login").with(csrf())
                         .param("username", username).param("password", password))
                 .andExpect(status().is3xxRedirection())
@@ -135,8 +171,14 @@ class AuthenticationFlowTest {
                         .param("code_verifier", codeVerifier))
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
-        JsonNode token = JsonMapper.builder().build().readTree(tokenResponse);
-        return token.get("access_token").asString();
+        return JSON.readTree(tokenResponse);
+    }
+
+    private static org.springframework.test.web.servlet.RequestBuilder refreshRequest(String refreshToken) {
+        return post("/oauth2/token")
+                .param("grant_type", "refresh_token")
+                .param("refresh_token", refreshToken)
+                .param("client_id", CLIENT_ID);
     }
 
     private int countAppUsers(String username) {

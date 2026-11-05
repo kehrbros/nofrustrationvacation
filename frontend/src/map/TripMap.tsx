@@ -19,7 +19,8 @@ export interface TripMapProps {
   preview: RoutePreview | null;
   incidentsByRoute: Map<number, TripIncident[]>;
   onRouteClick: (routeId: number) => void;
-  onIncidentClick: (incident: TripIncident) => void;
+  /** A consequence was tapped, its chip or its stretch: opens the TripAlternatives. */
+  onConsequenceClick: (consequence: TripIncident) => void;
   /** Space the bottom sheet covers, kept free when fitting the stops. */
   bottomPadding: number;
 }
@@ -34,11 +35,30 @@ const WARNING_ICON =
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const coordinates = (line: LinePoint[]) => line.map((point) => [point.longitude, point.latitude]);
+const consequenceKey = (consequence: TripIncident) => `${consequence.routeId}:${consequence.incidentId}`;
+/** Point halfway along the line by length, so the chip sits on the stretch even with uneven points. */
+function middleOf(line: LinePoint[]): LinePoint {
+  const lengths = line.slice(1).map((point, index) => Math.hypot(point.longitude - line[index].longitude, point.latitude - line[index].latitude));
+  let rest = lengths.reduce((sum, length) => sum + length, 0) / 2;
+  for (let index = 0; index < lengths.length; index++) {
+    if (rest <= lengths[index] && lengths[index] > 0) {
+      const share = rest / lengths[index];
+      const [a, b] = [line[index], line[index + 1]];
+      return { latitude: a.latitude + (b.latitude - a.latitude) * share, longitude: a.longitude + (b.longitude - a.longitude) * share };
+    }
+    rest -= lengths[index];
+  }
+  return line[Math.floor(line.length / 2)];
+}
+/** Chip look per category: too late in ink, delayed in the accent, no impact plain. */
+const chipClass = (consequence: TripIncident) =>
+  `va-map-incident va-map-incident-${(consequence.category ?? 'open').toLowerCase().replace('_', '-')}`;
 
 /**
  * Map of a trip with MapLibre GL: numbered stops, routes on their planned way (dashed straight line until planned),
- * affected routes highlighted, incidents as chips that open the incident dialog. While a route sheet is open, the
- * suggestions of that route are drawn instead, the selected one on top.
+ * consequences as the stretch of the route their incident covers plus a chip; tapping either opens the
+ * TripAlternatives. A route whose consequences have no stretch (yet) is highlighted as a whole. While a route sheet
+ * is open, the suggestions of that route are drawn instead, the selected one on top.
  */
 export default function TripMap({
   stops,
@@ -47,7 +67,7 @@ export default function TripMap({
   preview,
   incidentsByRoute,
   onRouteClick,
-  onIncidentClick,
+  onConsequenceClick,
   bottomPadding,
 }: TripMapProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -55,8 +75,9 @@ export default function TripMap({
   const loaded = useRef(false);
   const markers = useRef<maplibregl.Marker[]>([]);
   const fitted = useRef<LinePoint[][] | undefined>(undefined);
-  const callbacks = useRef({ onRouteClick, onIncidentClick, onPreviewSelect: preview?.onSelect });
-  callbacks.current = { onRouteClick, onIncidentClick, onPreviewSelect: preview?.onSelect };
+  const consequences = useRef(new Map<string, TripIncident>());
+  const callbacks = useRef({ onRouteClick, onConsequenceClick, onPreviewSelect: preview?.onSelect });
+  callbacks.current = { onRouteClick, onConsequenceClick, onPreviewSelect: preview?.onSelect };
 
   useEffect(() => {
     if (!container.current) {
@@ -73,6 +94,7 @@ export default function TripMap({
     instance.on('load', () => {
       instance.addSource('routes', { type: 'geojson', data: EMPTY });
       instance.addSource('route-preview', { type: 'geojson', data: EMPTY });
+      instance.addSource('consequences', { type: 'geojson', data: EMPTY });
       instance.addLayer({
         id: 'routes-affected',
         type: 'line',
@@ -96,6 +118,31 @@ export default function TripMap({
         filter: ['==', ['get', 'planned'], false],
         paint: { 'line-color': '#111111', 'line-width': 3, 'line-dasharray': [2, 2] },
       });
+      // the stretch an incident covers, on top of the route: ink casing, filling by category
+      instance.addLayer({
+        id: 'consequences-casing',
+        type: 'line',
+        source: 'consequences',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: { 'line-color': '#111111', 'line-width': 12 },
+      });
+      instance.addLayer({
+        id: 'consequences-line',
+        type: 'line',
+        source: 'consequences',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+          'line-color': ['match', ['get', 'category'], 'NO_IMPACT', '#ffffff', '#f2b705'],
+          'line-width': 7,
+        },
+      });
+      instance.addLayer({
+        id: 'consequences-too-late',
+        type: 'line',
+        source: 'consequences',
+        filter: ['==', ['get', 'category'], 'TOO_LATE'],
+        paint: { 'line-color': '#111111', 'line-width': 3, 'line-dasharray': [1, 1.5] },
+      });
       instance.addLayer({
         id: 'route-preview-other',
         type: 'line',
@@ -115,8 +162,20 @@ export default function TripMap({
       for (const layer of ['routes-line', 'routes-unplanned']) {
         instance.on('click', layer, (event) => {
           const routeId = event.features?.[0]?.properties?.routeId;
-          if (typeof routeId === 'number') {
+          const onConsequence = instance.queryRenderedFeatures(event.point, { layers: ['consequences-casing'] }).length > 0;
+          if (typeof routeId === 'number' && !onConsequence) {
             callbacks.current.onRouteClick(routeId);
+          }
+        });
+      }
+      for (const layer of ['consequences-casing', 'consequences-line']) {
+        instance.on('click', layer, (event) => {
+          const consequence = consequences.current.get(String(event.features?.[0]?.properties?.key));
+          if (consequence) {
+            // the route line below would open the route sheet as well
+            event.originalEvent.stopPropagation();
+            event.preventDefault();
+            callbacks.current.onConsequenceClick(consequence);
           }
         });
       }
@@ -128,7 +187,7 @@ export default function TripMap({
           }
         });
       }
-      for (const layer of ['routes-line', 'routes-unplanned', 'route-preview-other', 'route-preview-selected']) {
+      for (const layer of ['routes-line', 'routes-unplanned', 'consequences-casing', 'route-preview-other', 'route-preview-selected']) {
         instance.on('mouseenter', layer, () => (instance.getCanvas().style.cursor = 'pointer'));
         instance.on('mouseleave', layer, () => (instance.getCanvas().style.cursor = ''));
       }
@@ -159,7 +218,9 @@ export default function TripMap({
         if (!located(from) || !located(to)) {
           return [];
         }
-        return [{ route, from, to, affected: (incidentsByRoute.get(route.id)?.length ?? 0) > 0 }];
+        // highlighted as a whole only while none of its consequences has a stretch to draw
+        const onRoute = incidentsByRoute.get(route.id) ?? [];
+        return [{ route, from, to, affected: onRoute.length > 0 && onRoute.every((c) => c.geometry.length < 2) }];
       });
       (instance.getSource('routes') as GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',
@@ -191,27 +252,47 @@ export default function TripMap({
         markers.current.push(new maplibregl.Marker({ element, anchor: 'left', offset: [-14, 0] }).setLngLat([stop.longitude, stop.latitude]).addTo(instance));
       });
 
-      lines.forEach(({ route, from, to }) => {
-        const incident = incidentsByRoute.get(route.id)?.[0];
-        if (!incident) {
-          return;
-        }
+      const all = [...incidentsByRoute.values()].flat();
+      consequences.current = new Map(all.map((consequence) => [consequenceKey(consequence), consequence]));
+      const stretches = all.filter((consequence) => consequence.geometry.length > 1);
+      (instance.getSource('consequences') as GeoJSONSource | undefined)?.setData({
+        type: 'FeatureCollection',
+        features: stretches.map((consequence) => ({
+          type: 'Feature',
+          properties: { key: consequenceKey(consequence), routeId: consequence.routeId, category: consequence.category ?? 'OPEN' },
+          geometry: { type: 'LineString', coordinates: coordinates(consequence.geometry) },
+        })),
+      });
+
+      const addChip = (consequence: TripIncident, at: LngLatLike) => {
         const chip = document.createElement('button');
         chip.type = 'button';
-        chip.className = 'va-map-incident';
+        chip.className = chipClass(consequence);
         chip.innerHTML = `${WARNING_ICON}<span></span>`;
-        chip.querySelector('span')!.textContent = incidentTitle(incident);
-        chip.setAttribute('aria-label', `Hinweis öffnen: ${incidentTitle(incident)}`);
+        chip.querySelector('span')!.textContent = incidentTitle(consequence);
+        chip.setAttribute('aria-label', `Alternativen ansehen: ${incidentTitle(consequence)}`);
         chip.addEventListener('click', (event) => {
           event.stopPropagation();
-          callbacks.current.onIncidentClick(incident);
+          callbacks.current.onConsequenceClick(consequence);
         });
+        markers.current.push(new maplibregl.Marker({ element: chip, anchor: 'right', offset: [-12, 0] }).setLngLat(at).addTo(instance));
+      };
+      // a chip at each stretch; consequences without one share a chip in the middle of their route
+      stretches.forEach((consequence) => {
+        const middle = middleOf(consequence.geometry);
+        addChip(consequence, [middle.longitude, middle.latitude]);
+      });
+      lines.forEach(({ route, from, to }) => {
+        const consequence = incidentsByRoute.get(route.id)?.find((candidate) => candidate.geometry.length < 2);
+        if (!consequence) {
+          return;
+        }
         const planned = routeLines.get(route.id)?.geometry ?? [];
-        const center = planned.length > 1 ? planned[Math.floor(planned.length / 2)] : null;
-        const middle: LngLatLike = center
-          ? [center.longitude, center.latitude]
-          : [(from.longitude + to.longitude) / 2, (from.latitude + to.latitude) / 2];
-        markers.current.push(new maplibregl.Marker({ element: chip, anchor: 'right', offset: [-12, 0] }).setLngLat(middle).addTo(instance));
+        const center = planned.length > 1 ? middleOf(planned) : null;
+        addChip(
+          consequence,
+          center ? [center.longitude, center.latitude] : [(from.longitude + to.longitude) / 2, (from.latitude + to.latitude) / 2],
+        );
       });
 
       const points = stops.filter(located);
@@ -248,6 +329,9 @@ export default function TripMap({
       instance.setFilter('routes-line', ['all', ['==', ['get', 'planned'], true], routeFilter]);
       instance.setFilter('routes-unplanned', ['all', ['==', ['get', 'planned'], false], routeFilter]);
       instance.setFilter('routes-affected', ['all', ['==', ['get', 'affected'], true], routeFilter]);
+      instance.setFilter('consequences-casing', routeFilter);
+      instance.setFilter('consequences-line', routeFilter);
+      instance.setFilter('consequences-too-late', ['all', ['==', ['get', 'category'], 'TOO_LATE'], routeFilter]);
       const lines = (previewLines ?? []).filter((line) => line.length > 1);
       (instance.getSource('route-preview') as GeoJSONSource | undefined)?.setData({
         type: 'FeatureCollection',

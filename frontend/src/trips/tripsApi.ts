@@ -1,12 +1,15 @@
 import {
   addStop as addStopRequest,
   createTrip as createTripRequest,
+  deleteTrip as deleteTripRequest,
   generateCoverImage as generateCoverImageRequest,
   getCoverImage,
+  getRouteSummaries,
   getTrip,
   getTripIncidentCounts,
   getTripIncidents,
   listTrips,
+  removeStop as removeStopRequest,
   uploadCoverImage as uploadCoverImageRequest,
 } from '../generated/api';
 import type {
@@ -16,7 +19,7 @@ import type {
   TripIncidentDto,
   TripSummaryDto,
 } from '../generated/api';
-import type { NewStop, NewTrip, Route, Stop, TripDetail, TripIncident, TripSummary } from './model';
+import type { NewStop, NewTrip, Route, RouteIncidentSummary, Stop, TripDetail, TripIncident, TripSummary } from './model';
 
 /** Error of a trips API call, with the problem code of the backend if there is one. */
 export class TripsApiError extends Error {
@@ -86,6 +89,14 @@ function toIncident(dto: TripIncidentDto): TripIncident {
     validTo: dto.validTo ?? null,
     detectedAt: dto.detectedAt!,
     updatedAt: dto.updatedAt!,
+    category: dto.category ?? null,
+    match: dto.match ?? 'DIRECT',
+    assessedDelayMinutes: dto.assessedDelayMinutes ?? null,
+    delayAssumed: dto.delayAssumed ?? false,
+    expectedArrival: dto.expectedArrival ?? null,
+    deadline: dto.deadline ?? null,
+    timesUnconfirmed: dto.timesUnconfirmed ?? false,
+    geometry: (dto.geometry ?? []).map((point) => ({ latitude: point.latitude!, longitude: point.longitude! })),
   };
 }
 
@@ -114,6 +125,20 @@ export async function fetchTripIncidents(tripId: number): Promise<TripIncident[]
   return (await unwrap(getTripIncidents({ path: { tripId } }))).map(toIncident);
 }
 
+/** Situation of the planned routes of the trip, in the order of the stops. */
+export async function fetchRouteSummaries(tripId: number): Promise<RouteIncidentSummary[]> {
+  return (await unwrap(getRouteSummaries({ path: { tripId } }))).map((dto) => ({
+    routeId: dto.routeId!,
+    worstCategory: dto.worstCategory ?? null,
+    plannedArrival: dto.plannedArrival ?? null,
+    expectedArrival: dto.expectedArrival ?? null,
+    deadline: dto.deadline ?? null,
+    slackMinutes: dto.slackMinutes ?? null,
+    unpassable: dto.unpassable ?? false,
+    plannedTooLate: dto.plannedTooLate ?? false,
+  }));
+}
+
 export async function createTrip(trip: NewTrip): Promise<TripDetail> {
   return toDetail(await unwrap(createTripRequest({ body: trip })));
 }
@@ -121,6 +146,16 @@ export async function createTrip(trip: NewTrip): Promise<TripDetail> {
 /** Appends the stop; the response is the whole trip, since routes are created and planned with it. */
 export async function addStop(tripId: number, stop: NewStop): Promise<TripDetail> {
   return toDetail(await unwrap(addStopRequest({ path: { tripId }, body: stop })));
+}
+
+/** Deletes the stop with its bookings; its neighbours get a new route. 409 STOP_IN_USE while a payment runs. */
+export async function removeStop(tripId: number, stopId: number): Promise<TripDetail> {
+  return toDetail(await unwrap(removeStopRequest({ path: { tripId, stopId } })));
+}
+
+/** Deletes the trip with stops, routes and bookings. */
+export async function deleteTrip(tripId: number): Promise<void> {
+  await unwrap(deleteTripRequest({ path: { tripId } }));
 }
 
 export async function uploadCoverImage(tripId: number, file: File): Promise<void> {

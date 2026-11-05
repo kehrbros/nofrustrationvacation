@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined, HomeOutlined, PlusOutlined } from '@ant-design/icons';
-import { Alert, Spin } from 'antd';
+import { ArrowLeftOutlined, DeleteOutlined, HomeOutlined, PlusOutlined } from '@ant-design/icons';
+import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
@@ -8,13 +8,14 @@ import { fetchTripBookings } from '../bookings/bookingsApi';
 import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
 import ProfileButton from '../profile/ProfileButton';
+import { stopDeletionText, tripDeletionText } from '../trips/deletion';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
 import type { RouteLine, TripIncident } from '../trips/model';
 import { formatDuration } from '../trips/routeOptionText';
 import { fetchRouteLines } from '../trips/routesApi';
 import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
 import { formatDateTime, formatPeriod } from '../trips/time';
-import { fetchTrip, fetchTripIncidents, TripsApiError } from '../trips/tripsApi';
+import { deleteTrip, fetchTrip, fetchTripIncidents, removeStop, TripsApiError } from '../trips/tripsApi';
 
 // MapLibre needs the browser (WebGL), load it only there
 const TripMap = lazy(() => import('../map/TripMap'));
@@ -54,11 +55,38 @@ export default function TripPage() {
     return byRoute;
   }, [incidents]);
   const close = useCallback(() => navigate(`/reisen/${id}`), [navigate, id]);
-  const openIncident = useCallback(
-    (incident: TripIncident) => navigate(`/reisen/${id}/hinweise/${incident.routeId}/${incident.incidentId}`),
+  const openAlternatives = useCallback(
+    (consequence: TripIncident) => navigate(`/reisen/${id}/alternativen/${consequence.routeId}/${consequence.incidentId}`),
     [navigate, id],
   );
   const openRoute = useCallback((routeId: number) => navigate(`/reisen/${id}/routen/${routeId}`), [navigate, id]);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const deleteStop = async (stopId: number) => {
+    setDeleteError(null);
+    try {
+      await removeStop(id, stopId);
+      reload();
+    } catch (failure) {
+      setDeleteError(
+        failure instanceof TripsApiError && failure.code === 'STOP_IN_USE'
+          ? 'Am Stop wird gerade eine Unterkunft gebucht. Bitte versuche es gleich noch einmal.'
+          : 'Der Stop konnte nicht gelöscht werden.',
+      );
+    }
+  };
+  const removeTrip = async () => {
+    setDeleteError(null);
+    try {
+      await deleteTrip(id);
+      navigate('/reisen');
+    } catch (failure) {
+      setDeleteError(
+        failure instanceof TripsApiError && failure.code === 'STOP_IN_USE'
+          ? 'In der Reise wird gerade eine Unterkunft gebucht. Bitte versuche es gleich noch einmal.'
+          : 'Die Reise konnte nicht gelöscht werden.',
+      );
+    }
+  };
 
   if (error !== undefined) {
     const notFound = error instanceof TripsApiError && error.status === 404;
@@ -102,6 +130,19 @@ export default function TripPage() {
           <h1 className="va-trip-title">{trip.name}</h1>
           <span className="va-muted">{formatPeriod(trip.startAt, trip.endAt)}</span>
         </div>
+        <Popconfirm
+          title="Reise löschen?"
+          description={tripDeletionText(trip, bookings)}
+          okText="Löschen"
+          okButtonProps={{ danger: true }}
+          cancelText="Abbrechen"
+          placement="bottomRight"
+          onConfirm={() => removeTrip()}
+        >
+          <button type="button" className="va-icon-button" aria-label="Reise löschen">
+            <DeleteOutlined />
+          </button>
+        </Popconfirm>
         <ProfileButton />
       </header>
 
@@ -114,7 +155,7 @@ export default function TripPage() {
             preview={routePreview}
             incidentsByRoute={incidentsByRoute}
             onRouteClick={openRoute}
-            onIncidentClick={openIncident}
+            onConsequenceClick={openAlternatives}
             bottomPadding={SHEET_COLLAPSED}
           />
         </Suspense>
@@ -141,6 +182,8 @@ export default function TripPage() {
             </span>
           </button>
 
+          {deleteError && <Alert type="error" showIcon closable message={deleteError} onClose={() => setDeleteError(null)} />}
+
           {stopCount === 0 && <p className="va-empty">Noch keine Stops. Füge mit + den ersten Stop hinzu.</p>}
 
           {!expanded &&
@@ -154,7 +197,7 @@ export default function TripPage() {
                   <li key={stop.id}>
                     <div className="va-row va-gap">
                       <span className="va-stop-number">{index + 1}</span>
-                      <span className="va-column">
+                      <span className="va-column va-grow">
                         <span className="va-strong">{stop.name}</span>
                         <span className="va-small va-muted">
                           {[stop.arrivalAt && `an ${formatDateTime(stop.arrivalAt)}`, stop.departureAt && `ab ${formatDateTime(stop.departureAt)}`]
@@ -163,6 +206,19 @@ export default function TripPage() {
                           {stop.latitude == null && ' · nicht auf der Karte'}
                         </span>
                       </span>
+                      <Popconfirm
+                        title={`${stop.name} löschen?`}
+                        description={stopDeletionText(trip, stop.id, bookingsByStop.get(stop.id) ?? [])}
+                        okText="Löschen"
+                        okButtonProps={{ danger: true }}
+                        cancelText="Abbrechen"
+                        placement="topRight"
+                        onConfirm={() => deleteStop(stop.id)}
+                      >
+                        <button type="button" className="va-icon-button va-plain" aria-label={`Stop ${stop.name} löschen`}>
+                          <DeleteOutlined />
+                        </button>
+                      </Popconfirm>
                     </div>
                     <StopBookings bookings={bookingsByStop.get(stop.id) ?? []} stopId={stop.id} />
                     {next && <RouteRow context={context} routeId={next.id} />}

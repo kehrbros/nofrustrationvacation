@@ -13,6 +13,7 @@ import IncidentSheet from './pages/IncidentSheet';
 import NewTripPage from './pages/NewTripPage';
 import RouteSheet from './pages/RouteSheet';
 import StopSheet from './pages/StopSheet';
+import TripAlternativesSheet from './pages/TripAlternativesSheet';
 import TripPage from './pages/TripPage';
 import TripsPage from './pages/TripsPage';
 
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="buchungen/:bookingId" element={<BookingSheet />} />
         <Route path="buchungen/:bookingId/alternativen" element={<AlternativesSheet />} />
         <Route path="hinweise/:routeId/:incidentId" element={<IncidentSheet />} />
+        <Route path="alternativen/:routeId/:incidentId" element={<TripAlternativesSheet />} />
         <Route path="routen/:routeId" element={<RouteSheet />} />
       </Route>
       <Route

@@ -673,6 +673,19 @@ a {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* chip per category of the consequence: too late in ink, delayed in the accent (default), no impact plain */
+.va-map-incident-too-late {
+  color: #ffffff;
+  background: var(--ink);
+  box-shadow: 0 3px 0 var(--accent);
+}
+.va-map-incident-too-late svg path:first-child {
+  fill: var(--accent);
+}
+.va-map-incident-no-impact {
+  background: #ffffff;
+  font-weight: 600;
+}
 
 /* ---------- bottom sheets (antd Drawer) ---------- */
 .va-sheet .ant-drawer-content-wrapper {
@@ -1096,4 +1109,45 @@ a.va-button {
   flex: none;
   border-radius: 8px;
   object-fit: cover;
+}
+
+/* ---------- TripAlternatives (dialog of a consequence) ---------- */
+.va-impact-too-late {
+  background: var(--ink);
+  color: #ffffff;
+}
+.va-impact-too-late .va-eyebrow,
+.va-impact-too-late .va-muted {
+  color: #d8d8d2;
+}
+.va-impact-no-impact {
+  background: #ffffff;
+}
+.va-alternatives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.va-alternative {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--ink);
+  background: #ffffff;
+}
+.va-alternative-off {
+  border-style: dashed;
+  border-color: var(--line);
+}
+.va-alternative-off .va-booking-icon {
+  background: #ffffff;
+  border-color: var(--line);
 }

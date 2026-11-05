@@ -3,9 +3,10 @@
 #
 #   docker compose -f docker-compose.local.yml up --build
 #
-# Frontend http://localhost:5173 (port of the Vite dev server, so the registered redirect URIs and the PayPal
-# return URL fit), backend http://localhost:8080, login test/test. Reset the database with "down -v".
-# For the PayPal sandbox, which rejects localhost as return URL, tunnel the frontend with ngrok (ngrok http 5173), set
+# Frontend http://localhost:18173 (port of the Vite dev server, so the registered redirect URIs and the PayPal
+# return URL fit), backend http://localhost:18180 (uncommon ports so that other projects can keep 5173 and 8080, LOCAL_FRONTEND_PORT and
+# LOCAL_BACKEND_PORT in .env change them), login test/test. Reset the database with "down -v".
+# For the PayPal sandbox, which rejects localhost as return URL, tunnel the frontend with ngrok (ngrok http 18173), set
 # LOCAL_FRONTEND_URL to the ngrok URL in .env and open the frontend there, see Docs/paypal.md.
 # Secrets come from the git-ignored .env (copy .env.example): database password required, PayPal, IdP signing key
 # and OpenAI API key optional.
@@ -40,8 +41,8 @@ services:
       POSTGRES_DB: nfv
       POSTGRES_USER: nfv
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env, see .env.example}
-      NFV_BACKEND_URL: http://localhost:8080
-      NFV_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
+      NFV_BACKEND_URL: http://localhost:${LOCAL_BACKEND_PORT:-18180}
+      NFV_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:${LOCAL_FRONTEND_PORT:-18173}}
       PAYPAL_ENVIRONMENT: ${PAYPAL_ENVIRONMENT:-sandbox}
       # Empty: the app starts, PayPal features answer 503
       PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
@@ -62,7 +63,7 @@ services:
       # GraphHopper graph built on the first start, kept between container rebuilds
       - ${NFV_HOST_DATA_DIR:-${HOME}/data}/graphs:/data/graphs
     ports:
-      - "8080:8080"
+      - "${LOCAL_BACKEND_PORT:-18180}:8080"
     depends_on:
       postgres:
         condition: service_healthy
@@ -73,13 +74,13 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_OIDC_AUTHORITY: http://localhost:8080
+        VITE_OIDC_AUTHORITY: http://localhost:${LOCAL_BACKEND_PORT:-18180}
     environment:
-      # Requests under another origin (e.g. http://localhost:5173 with LOCAL_FRONTEND_URL set) are redirected there,
+      # Requests under another origin (e.g. http://localhost:18173 with LOCAL_FRONTEND_URL set) are redirected there,
       # the backend accepts only this origin for CORS and the OIDC redirect URI, see frontend/nginx.conf
-      CANONICAL_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:5173}
+      CANONICAL_FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:${LOCAL_FRONTEND_PORT:-18173}}
     ports:
-      - "5173:80"
+      - "${LOCAL_FRONTEND_PORT:-18173}:80"
     depends_on:
       backend:
         condition: service_started

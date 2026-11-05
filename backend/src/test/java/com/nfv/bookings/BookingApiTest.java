@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Accommodation bookings: time zone of the place, ownership, validation, reading confirmations. */
+/** Accommodation bookings: time zone of the place, ownership, validation, reading confirmations, deletion with stops. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class BookingApiTest {
@@ -127,6 +127,34 @@ class BookingApiTest {
                 .andExpect(status().isNoContent());
         mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
                 .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void deletingAStopDeletesItsBookingsAndConnectsItsNeighbours() throws Exception {
+        long middle = addStop("Florenz");
+        long last = addStop("Venedig");
+        createBooking(middle, booking("Hotel Adler", null, null, "Europe/Rome"));
+        long kept = createBooking(last, booking("Hotel Sole", null, null, "Europe/Rome"));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, middle).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stops", hasSize(2)))
+                .andExpect(jsonPath("$.routes", hasSize(1)))
+                .andExpect(jsonPath("$.routes[0].fromStopId").value(stopId))
+                .andExpect(jsonPath("$.routes[0].toStopId").value(last));
+        mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(kept));
+    }
+
+    @Test
+    void deletingATripDeletesTheBookingsAtItsStops() throws Exception {
+        createBooking(stopId, booking("Hotel Adler", "41.9028", "12.4964", null));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -213,6 +241,15 @@ class BookingApiTest {
                         .with(user).with(csrf()))
                 .andExpect(status().isServiceUnavailable())
                 .andExpect(jsonPath("$.code").value("ASSISTANT_UNAVAILABLE"));
+    }
+
+    /** Appends a stop without coordinates, returns its id. */
+    private long addStop(String name) throws Exception {
+        String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        List<Number> ids = JsonPath.read(trip, "$.stops[*].id");
+        return ids.getLast().longValue();
     }
 
     private long createBooking(long stop, String json) throws Exception {

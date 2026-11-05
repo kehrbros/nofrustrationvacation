@@ -9,11 +9,13 @@ import { configureApiClient } from './api/apiClient';
 import App from './App';
 import { userManager } from './auth/oidcConfig';
 import { CALLBACK_PATH } from './auth/paths';
+import { configureSession } from './auth/session';
 import './index.css';
 import { listenForInstallPrompt } from './pwa/install';
 import { theme } from './theme';
 
-configureApiClient(userManager);
+configureSession(userManager);
+configureApiClient();
 listenForInstallPrompt();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

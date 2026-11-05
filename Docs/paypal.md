@@ -24,7 +24,7 @@
   nfv.paypal.checkout-cancel-url=${nfv.frontend-url}/consumer/guthaben/paypal?abgebrochen=1
   ```
 
-- Alle Return-URLs hängen an `nfv.frontend-url` (Env `NFV_FRONTEND_URL`, Standard `http://localhost:5173`), ebenso Login-Redirect-URIs und CORS. Die Frontend-Seiten hinter den PayPal-URLs (`/paypal/connected`, `/consumer/guthaben/paypal`) sind entfernt.
+- Alle Return-URLs hängen an `nfv.frontend-url` (Env `NFV_FRONTEND_URL`, Standard `http://localhost:18173`), ebenso Login-Redirect-URIs und CORS. Die Frontend-Seiten hinter den PayPal-URLs (`/paypal/connected`, `/consumer/guthaben/paypal`) sind entfernt.
 
 - **Lokal:** Umgebungsvariablen in der IntelliJ-Run-Configuration setzen, oder `backend/config/application-local.properties` anlegen und mit Profil `local` starten (`mvn spring-boot:run -Dspring-boot.run.profiles=local`). `backend/config/` und `.env` sind in `.gitignore`.
 - **Produktion:** Docker Secrets `nfv_paypal_client_id`/`nfv_paypal_client_secret`, im Container als `/run/secrets/PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` und per `configtree` eingelesen, dazu `PAYPAL_ENVIRONMENT=live`, siehe [deployment.md](deployment.md).
@@ -41,12 +41,12 @@
 ## Lokal ohne localhost (Sandbox)
 
 - PayPal akzeptiert `localhost` nicht als Return URL, deshalb das Frontend über einen ngrok-Tunnel aufrufen.
-- **Docker Compose:** `ngrok http 5173` starten, die HTTPS-URL als `LOCAL_FRONTEND_URL` in die `.env` eintragen, Stack neu starten und die App unter der ngrok-URL öffnen. Die Return URL in der PayPal-App auf `https://<ngrok-host>/paypal/connected` setzen; ohne festen ngrok-Host ändert sich beides bei jedem Tunnelstart.
+- **Docker Compose:** `ngrok http 18173` starten, die HTTPS-URL als `LOCAL_FRONTEND_URL` in die `.env` eintragen, Stack neu starten und die App unter der ngrok-URL öffnen. Die Return URL in der PayPal-App auf `https://<ngrok-host>/paypal/connected` setzen; ohne festen ngrok-Host ändert sich beides bei jedem Tunnelstart.
 - ngrok terminiert TLS, nginx erkennt das Schema des Browsers über `X-Forwarded-Proto` (`frontend/nginx.conf`).
-- Das Backend akzeptiert nur diesen Origin (CORS, OIDC-Redirect-URI), deshalb leitet nginx `http://localhost:5173` dann auf `LOCAL_FRONTEND_URL` um (`CANONICAL_FRONTEND_URL`, `frontend/nginx.conf`).
-- Das Backend leitet aus `NFV_FRONTEND_URL` Login-Redirect-URIs, CORS und alle PayPal-URLs ab. Es bleibt `http://localhost:8080`; Browser erlauben Aufrufe an `http://localhost` auch von HTTPS-Seiten. Der Tunnel taugt deshalb nur für den Browser auf diesem Rechner.
+- Das Backend akzeptiert nur diesen Origin (CORS, OIDC-Redirect-URI), deshalb leitet nginx `http://localhost:18173` dann auf `LOCAL_FRONTEND_URL` um (`CANONICAL_FRONTEND_URL`, `frontend/nginx.conf`).
+- Das Backend leitet aus `NFV_FRONTEND_URL` Login-Redirect-URIs, CORS und alle PayPal-URLs ab. Es bleibt `http://localhost:18180`; Browser erlauben Aufrufe an `http://localhost` auch von HTTPS-Seiten. Der Tunnel taugt deshalb nur für den Browser auf diesem Rechner.
 - Login-Session (sessionStorage) und PayPal-Rückkehr müssen im selben Origin landen, also nicht zwischen localhost und der ngrok-URL wechseln.
-- `npm run dev`: `ngrok http 5173` auf den Vite-Server, `NFV_FRONTEND_URL` setzen (`server.allowedHosts`).
+- `npm run dev`: `ngrok http 18173` auf den Vite-Server, `NFV_FRONTEND_URL` setzen (`server.allowedHosts`).
 
 ## Offen
 
