@@ -60,6 +60,23 @@ public class StructuredExtraction {
         if (webSearch) {
             request.putArray("tools").addObject().put("type", "web_search");
         }
+        return send(request);
+    }
+
+    /**
+     * Like {@link #extract(long, String, String, JsonNode, List)} for background work without a user, counted against
+     * the system quota ({@code nfv.assistant.system-requests-per-hour}).
+     */
+    public JsonNode extractForSystem(String instructions, String schemaName, JsonNode schema,
+                                     List<ExtractionInput> inputs) {
+        if (!isAvailable()) {
+            throw new AssistantUnavailableException("assistant is not configured");
+        }
+        rateLimiter.acquireSystem();
+        return send(request(instructions, schemaName, schema, inputs));
+    }
+
+    private JsonNode send(ObjectNode request) {
         String body;
         try {
             body = openAiRestClient.post().uri("/responses")
