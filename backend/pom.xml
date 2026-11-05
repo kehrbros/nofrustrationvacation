@@ -121,6 +121,12 @@
             <artifactId>graphhopper-core</artifactId>
             <version>${graphhopper.version}</version>
         </dependency>
+        <!-- Lines of traffic events onto road segments (SegmentMatching), see Docs/network.md -->
+        <dependency>
+            <groupId>com.graphhopper</groupId>
+            <artifactId>graphhopper-map-matching</artifactId>
+            <version>${graphhopper.version}</version>
+        </dependency>
         <!-- Time zone of a coordinate (check-in/-out of accommodations), offline from OpenStreetMap data, see
              Docs/domain.md#bookings -->
         <dependency>

@@ -385,7 +385,23 @@ class TripApiTest {
                 .andExpect(jsonPath("$[0].routeId").value(routeId))
                 .andExpect(jsonPath("$[0].type").value("CLOSURE"))
                 .andExpect(jsonPath("$[0].impact").value("BLOCKED"))
-                .andExpect(jsonPath("$[0].description").value("Vollsperrung A22"));
+                .andExpect(jsonPath("$[0].description").value("Vollsperrung A22"))
+                // closed until 4 h after departure: wait 4 h, Verona has no arrival → DELAYED, never TOO_LATE
+                .andExpect(jsonPath("$[0].category").value("DELAYED"))
+                .andExpect(jsonPath("$[0].match").value("DIRECT"))
+                .andExpect(jsonPath("$[0].assessedDelayMinutes").value(240))
+                .andExpect(jsonPath("$[0].delayAssumed").value(false))
+                .andExpect(jsonPath("$[0].expectedArrival").isNotEmpty())
+                .andExpect(jsonPath("$[0].deadline").doesNotExist());
+        mockMvc.perform(get("/api/v1/trips/{id}/incidents/routes", tripId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].routeId").value(routeId))
+                .andExpect(jsonPath("$[0].worstCategory").value("DELAYED"))
+                .andExpect(jsonPath("$[0].unpassable").value(false))
+                .andExpect(jsonPath("$[0].slackMinutes").doesNotExist());
+        mockMvc.perform(get("/api/v1/trips/{id}/incidents/routes", tripId).with(otherUser))
+                .andExpect(status().isNotFound());
         mockMvc.perform(get("/api/v1/incidents/trip-counts").with(user))
                 .andExpect(jsonPath("$[0].tripId").value(tripId))
                 .andExpect(jsonPath("$[0].count").value(1));

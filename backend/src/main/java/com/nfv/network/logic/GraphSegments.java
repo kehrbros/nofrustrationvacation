@@ -6,6 +6,7 @@ import com.graphhopper.routing.ev.EnumEncodedValue;
 import com.graphhopper.routing.ev.IntEncodedValue;
 import com.graphhopper.routing.ev.OSMWayID;
 import com.graphhopper.routing.ev.RoadClass;
+import com.graphhopper.routing.ev.RoadClassLink;
 import com.graphhopper.routing.ev.RoadEnvironment;
 import com.graphhopper.routing.ev.VehicleAccess;
 import com.graphhopper.routing.util.AllEdgesIterator;
@@ -29,7 +30,7 @@ final class GraphSegments {
 
     record Row(int edgeKey, long osmWayId, int fromLat, int fromLon, int toLat, int toLon, int geometryHash,
                @Nullable String ref, @Nullable String name, String roadClass, boolean bridge, boolean tunnel,
-               double lengthMeters, String wkt) {
+               boolean link, double lengthMeters, String wkt) {
     }
 
     private GraphSegments() {
@@ -41,7 +42,8 @@ final class GraphSegments {
         Attributes attributes = new Attributes(
                 hopper.getEncodingManager().getIntEncodedValue(OSMWayID.KEY),
                 hopper.getEncodingManager().getEnumEncodedValue(RoadClass.KEY, RoadClass.class),
-                hopper.getEncodingManager().getEnumEncodedValue(RoadEnvironment.KEY, RoadEnvironment.class));
+                hopper.getEncodingManager().getEnumEncodedValue(RoadEnvironment.KEY, RoadEnvironment.class),
+                hopper.getEncodingManager().getBooleanEncodedValue(RoadClassLink.KEY));
         AllEdgesIterator edges = graph.getAllEdges();
         while (edges.next()) {
             if (edges.get(access)) {
@@ -54,7 +56,7 @@ final class GraphSegments {
     }
 
     private record Attributes(IntEncodedValue wayId, EnumEncodedValue<RoadClass> roadClass,
-                              EnumEncodedValue<RoadEnvironment> environment) {
+                              EnumEncodedValue<RoadEnvironment> environment, BooleanEncodedValue link) {
     }
 
     private static void row(EdgeIteratorState edge, Attributes attributes, Consumer<Row> rows) {
@@ -81,7 +83,8 @@ final class GraphSegments {
         rows.accept(new Row(edge.getEdgeKey(), edge.get(attributes.wayId()), fromLat, fromLon, toLat, toLon, hash,
                 text(edge.getValue(Parameters.Details.STREET_REF)), text(edge.getName()),
                 edge.get(attributes.roadClass()).name(), environment == RoadEnvironment.BRIDGE,
-                environment == RoadEnvironment.TUNNEL, edge.getDistance(), wkt.toString()));
+                environment == RoadEnvironment.TUNNEL, edge.get(attributes.link()), edge.getDistance(),
+                wkt.toString()));
     }
 
     @Nullable

@@ -38,13 +38,14 @@ class SegmentWriter {
                 CREATE TEMP TABLE road_segment_staging (
                     edge_key INTEGER, osm_way_id BIGINT, from_lat INTEGER, from_lon INTEGER, to_lat INTEGER,
                     to_lon INTEGER, geometry_hash INTEGER, ref VARCHAR(255), name VARCHAR(255),
-                    road_class VARCHAR(32), bridge BOOLEAN, tunnel BOOLEAN, length_m DOUBLE PRECISION, wkt TEXT
+                    road_class VARCHAR(32), bridge BOOLEAN, tunnel BOOLEAN, link BOOLEAN, length_m DOUBLE PRECISION,
+                    wkt TEXT
                 ) ON COMMIT DROP""");
         List<Object[]> batch = new ArrayList<>(BATCH);
         GraphSegments.forEach(hopper, row -> {
             batch.add(new Object[]{row.edgeKey(), row.osmWayId(), row.fromLat(), row.fromLon(), row.toLat(),
                     row.toLon(), row.geometryHash(), row.ref(), row.name(), row.roadClass(), row.bridge(),
-                    row.tunnel(), row.lengthMeters(), row.wkt()});
+                    row.tunnel(), row.link(), row.lengthMeters(), row.wkt()});
             if (batch.size() == BATCH) {
                 insertStaging(batch);
                 batch.clear();
@@ -54,14 +55,15 @@ class SegmentWriter {
 
         // DISTINCT ON: identical duplicate edges become one segment
         int segments = jdbc.update("""
-                INSERT INTO road_segment (region, %1$s, ref, name, road_class, bridge, tunnel, length_m, geometry,
+                INSERT INTO road_segment (region, %1$s, ref, name, road_class, bridge, tunnel, link, length_m, geometry,
                                           first_seen_version_id, last_seen_version_id)
-                SELECT DISTINCT ON (%1$s) ?, %1$s, ref, name, road_class, bridge, tunnel, length_m,
+                SELECT DISTINCT ON (%1$s) ?, %1$s, ref, name, road_class, bridge, tunnel, link, length_m,
                        ST_GeomFromText(wkt, 4326), ?, ?
                 FROM road_segment_staging
                 ON CONFLICT (%1$s) DO UPDATE SET
                     ref = EXCLUDED.ref, name = EXCLUDED.name, road_class = EXCLUDED.road_class,
-                    bridge = EXCLUDED.bridge, tunnel = EXCLUDED.tunnel, length_m = EXCLUDED.length_m,
+                    bridge = EXCLUDED.bridge, tunnel = EXCLUDED.tunnel, link = EXCLUDED.link,
+                    length_m = EXCLUDED.length_m,
                     geometry = EXCLUDED.geometry, last_seen_version_id = EXCLUDED.last_seen_version_id,
                     retired_at = NULL""".formatted(KEY), region, versionId, versionId);
         jdbc.update("""
@@ -76,6 +78,13 @@ class SegmentWriter {
                 WHERE region = ? AND last_seen_version_id <> ? AND retired_at IS NULL""",
                 Timestamp.from(clock.instant()), region, versionId);
         return segments;
+    }
+
+    /** Whether any segment of the region is marked as a link, false for segments written before V37. */
+    @Transactional(readOnly = true)
+    public boolean hasLinks(String region) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "SELECT EXISTS (SELECT 1 FROM road_segment WHERE region = ? AND link)", Boolean.class, region));
     }
 
     /** {@code edge_key} to {@code road_segment.id} of a version, 0 for edges without segment. */
@@ -130,9 +139,9 @@ class SegmentWriter {
     private void insertStaging(List<Object[]> rows) {
         if (!rows.isEmpty()) {
             jdbc.batchUpdate("""
-                    INSERT INTO road_segment_staging (edge_key, %s, ref, name, road_class, bridge, tunnel, length_m,
-                                                      wkt)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""".formatted(KEY), rows);
+                    INSERT INTO road_segment_staging (edge_key, %s, ref, name, road_class, bridge, tunnel, link,
+                                                      length_m, wkt)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""".formatted(KEY), rows);
         }
     }
 }

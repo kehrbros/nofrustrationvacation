@@ -24,7 +24,8 @@ public class ActiveIncidents {
         }
         return incidentRepository.findActiveOnSegments(segmentIds, from).stream()
                 .map(incident -> new ActiveIncident(incident.getId(), incident.impact(), incident.getExpectedDelay(),
-                        incident.getValidFrom(), incident.getValidTo(), Set.copyOf(incident.getSegmentIds())))
+                        incident.getValidFrom(), incident.getValidTo(), Set.copyOf(incident.getSegmentIds()),
+                        incident.timeWindows()))
                 .toList();
     }
 }

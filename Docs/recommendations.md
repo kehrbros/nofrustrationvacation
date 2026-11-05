@@ -1,6 +1,6 @@
 # Streckenvorschläge (`recommendations`)
 
-- **Status:** Planung umgesetzt (Szenario, `ALTERNATIVES`, Bewertung, Ranking, Via-Punkte, Auswahl speichern) und im Frontend angebunden (`RouteSheet`, Karte). Seit `V32__drop_suggestion_sets.sql` werden Vorschläge nicht mehr gespeichert, nur die gewählte Option als Waypoints. Offen: Incidents (`forConsequence`, `KEEP_ROUTE`, `DEPARTURE_SHIFT`, `ConsequenceChanged`, `reroutedLegs`).
+- **Status:** Planung umgesetzt (Szenario, `ALTERNATIVES`, Bewertung, Ranking, Via-Punkte, Auswahl speichern) und im Frontend angebunden (`RouteSheet`, Karte). Seit `V38__drop_suggestion_sets.sql` werden Vorschläge nicht mehr gespeichert, nur die gewählte Option als Waypoints. Offen: Incidents (`forConsequence`, `KEEP_ROUTE`, `DEPARTURE_SHIFT`, `ConsequenceChanged`, `reroutedLegs`).
 - **Ziel:** Für eine Route bekommt der Nutzer bis zu `n` Vorschläge, wie er fahren kann. Dieselbe Logik liefert Vorschläge, wenn ein Incident die geplante Route trifft (Umfahrung, spätere Abfahrt, Verzögerung hinnehmen).
 - **Grundidee:** Ein Vorschlag entsteht immer aus einem **Szenario** (Ausgangslage: Punkte, Abfahrt, Einschränkungen im Netz, Referenzroute). Planung und Incident unterscheiden sich nur darin, wie das Szenario gebaut wird. Erzeugen, Bewerten, Aussortieren, API und Frontend sind gemeinsam.
 - **Vorschläge sind flüchtig:** Sie werden bei jeder Anfrage neu berechnet und nicht gespeichert (Entscheidung Philipp 2026-11-05). Gespeichert wird nur, was der Nutzer wählt, als Waypoints der Route. Das gilt auch für Incidents: Zustand wie „benachrichtigt am“ gehört an die Consequence bzw. die Benachrichtigung, nicht an einen Vorschlag.
@@ -86,7 +86,7 @@ flowchart LR
 
 - **Bewertung** je Kandidat (`CandidateEvaluator`):
   - Durchfahrt je Segment wie in `RoutePlanning.sections` (Abfahrt plus Dauern davor), dazu Verzögerungen aus `delayedSegments` und aus Incidents auf dem Weg, fortgeschrieben auf alle folgenden Segmente (löst für Vorschläge den offenen Punkt „Verzögerung fortschreiben“).
-  - Aktive Incidents auf den Segmenten mit Überschneidung → `conflicts` (Incident, Impact, Verzögerung). Gleiche Regel wie `ConsequenceMatcher`, dafür eine reine Funktion `IncidentOverlap` in `incidents.logic`, die beide nutzen.
+  - Aktive Incidents auf den Segmenten mit Überschneidung → `conflicts` (Incident, Impact, Verzögerung). Gleiche Regel wie `ConsequenceMatcher`, dafür eine reine Funktion `IncidentOverlap` in `incidents.logic`, die beide nutzen. Hat der Incident Zeitfenster, muss die Durchfahrt zusätzlich in einem Fenster liegen (`ActiveIncident.windows`).
   - Ergebnis: Ankunft, Distanz, Fahrzeit, Wartezeit, Verzögerung, Anteil gemeinsamer Strecke mit der Referenz, `BLOCKED` ja/nein.
 - **Aussortieren:**
   - Kandidat führt über eine Sperrung zur Zeit der Durchfahrt → raus.
@@ -97,7 +97,7 @@ flowchart LR
 
 ## Datenmodell
 
-- **Keine eigenen Tabellen:** `V29__recommendations.sql` hatte `suggestion_set`, `route_option` und Untertabellen angelegt, `V32__drop_suggestion_sets.sql` löscht sie wieder. Vorschläge sind Records in `recommendations.logic` (`SuggestionResult`, `SuggestedOption` mit `Point` und `Conflict`), die Geometrie als `List<GeoPoint>` (kein JTS in `recommendations`).
+- **Keine eigenen Tabellen:** `V29__recommendations.sql` hatte `suggestion_set`, `route_option` und Untertabellen angelegt, `V38__drop_suggestion_sets.sql` löscht sie wieder. Vorschläge sind Records in `recommendations.logic` (`SuggestionResult`, `SuggestedOption` mit `Point` und `Conflict`), die Geometrie als `List<GeoPoint>` (kein JTS in `recommendations`).
 - `SuggestedOption`: `rank` (1 = beste), `kind`, `labels`, `via`, `departureAt`, `arrivalAt`, `distanceMeters`, `duration`, `waiting`, `delay`, `sharedRatio`, `geometry`, `points`, `conflicts`.
   - `points`: Via-Punkte (Koordinate, `roadHint`, optional `waypointId`), die beim Wählen Waypoints werden. Bei `FOLLOW` steht an den bestehenden Waypoints des Nutzers ihre Id, sie bleiben beim Wählen erhalten.
 - Bleibt aus V29: `waypoint.origin` (`USER`, `SUGGESTION`, `VARCHAR(16)`, Standard `USER`, auch in `waypoint_aud`). Das Frontend zeigt erzeugte Waypoints anders, „zurück zur schnellsten“ entfernt nur `SUGGESTION`-Waypoints.

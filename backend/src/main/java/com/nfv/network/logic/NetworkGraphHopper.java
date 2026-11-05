@@ -38,7 +38,7 @@ final class NetworkGraphHopper extends GraphHopper {
     static final String DELAYED_EDGE_KEYS = "delayed_edge_keys";
     /** Changing these needs a new import of every region. */
     private static final String ENCODED_VALUES = "car_access|block_private=false, car_average_speed, road_access, "
-            + "road_class, road_environment, osm_way_id, max_speed, surface";
+            + "road_class, road_class_link, road_environment, osm_way_id, max_speed, surface";
     /**
      * Not drivable by car, skipped during the import: roads are then only split at junctions with other roads, which
      * keeps segments stable. Not {@code pedestrian}, some pedestrian zones allow cars.
