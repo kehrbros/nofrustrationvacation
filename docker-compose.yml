@@ -91,6 +91,9 @@ services:
       timeout: 5s
       retries: 5
     deploy:
+      # DNS round robin instead of a virtual IP (IPVS): one replica needs no load balancing, and the VIP was
+      # unreachable from the backend on the server ("No route to host") while the task itself was healthy
+      endpoint_mode: dnsrr
       replicas: 1
       # The volume is local to a node, keep the database on the node that holds its data
       placement:
