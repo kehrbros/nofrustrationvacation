@@ -1,6 +1,6 @@
 package com.nfv.trips.entities;
 
-/** Who set a {@link Waypoint}, see Docs/recommendations.md#datenmodell-v29__recommendationssql. */
+/** Who set a {@link Waypoint}, see Docs/recommendations.md#datenmodell__recommendationssql. */
 public enum WaypointOrigin {
     /** Chosen by the user. */
     USER,

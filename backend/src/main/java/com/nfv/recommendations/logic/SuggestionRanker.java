@@ -3,7 +3,6 @@ package com.nfv.recommendations.logic;
 import com.nfv.network.logic.RoutedSegment;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.recommendations.config.RecommendationProperties;
-import com.nfv.recommendations.entities.OptionLabel;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;

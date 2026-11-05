@@ -15,16 +15,19 @@ interface SheetProps {
   footer?: ReactNode;
   /** Height on phones, e.g. "auto" or "85vh". */
   height?: string;
+  /** false: no dark layer, the map above the sheet stays visible and can be used. */
+  mask?: boolean;
 }
 
 /** Bottom sheet as in the UI concept: modal dialog sliding up from the bottom, centered column on large screens. */
-export default function Sheet({ open, onClose, eyebrow, title, icon, children, footer, height = 'auto' }: SheetProps) {
+export default function Sheet({ open, onClose, eyebrow, title, icon, children, footer, height = 'auto', mask = true }: SheetProps) {
   return (
     <Drawer
       open={open}
       onClose={onClose}
       placement="bottom"
       height={height}
+      mask={mask}
       closable={false}
       rootClassName="va-sheet"
       title={

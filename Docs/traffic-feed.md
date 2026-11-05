@@ -130,12 +130,12 @@ public interface TrafficSource {
 
 ## Anreicherung (`MessageEnrichment`)
 
-- **Umgesetzt (`V38`):** `input.logic.AssistantEnrichmentModel` fragt das Modell über `StructuredExtraction.extractForSystem` (Systemkontingent), `input.logic.MessageEnrichment` speichert die Antwort (`message_enrichment`, Entity `StoredEnrichment`, unverändert) und prüft sie bei jeder Verwendung. Tests mocken `EnrichmentModel`.
+- **Umgesetzt (`V39`):** `input.logic.AssistantEnrichmentModel` fragt das Modell über `StructuredExtraction.extractForSystem` (Systemkontingent), `input.logic.MessageEnrichment` speichert die Antwort (`message_enrichment`, Entity `StoredEnrichment`, unverändert) und prüft sie bei jeder Verwendung. Tests mocken `EnrichmentModel`.
   - **Abweichung: Aufruf außerhalb der Transaktion.** Ein Aufruf kann bis zu 90 s dauern und soll keine Datenbankverbindung halten. `TrafficEventProcessor` fragt vor der Transaktion des Events, die Transaktion liest nur die gespeicherte Antwort.
   - **Keine Antwort jetzt** (`EnrichmentDeferredException`: Kontingent erschöpft, Modell nicht erreichbar, Antwort unbrauchbar): Das Event wird ohne Anreicherung verarbeitet und `enrichment_pending`. Bis zum nächsten Lauf wird das Modell nicht mehr gefragt, weitere Events werden ebenfalls `enrichment_pending`.
   - **Nachholen:** Am Ende jedes Laufs, wenige Fehlversuche zuerst, dann die ältesten; Fehlversuch beendet das Nachholen für diesen Lauf. Danach gleiches Event erneut gemeldet, gleicher Incident. Überholte Versionen und beendete Ereignisse werden nicht nachgeholt. Nach 20 Fehlversuchen (`enrichment_attempts`) bleibt das Event ohne Anreicherung, ein erschöpftes Kontingent zählt nicht als Fehlversuch.
   - **Ohne Key oder mit `nfv.input.enrichment.enabled=false`:** kein Aufruf, kein `enrichment_pending`. Kommt später ein Key dazu, werden bereits verarbeitete Events erst mit neuer Version angereichert.
-  - **Bestand:** `V38` setzt `enrichment_pending` für alle bereits verarbeiteten `TrafficEvent`s mit Text, damit auch Ereignisse mit unverändertem Text gelesen werden (Terrace Tunnel). Überholte Versionen und beendete Ereignisse gehen ohne Aufruf ab.
+  - **Bestand:** `V39` setzt `enrichment_pending` für alle bereits verarbeiteten `TrafficEvent`s mit Text, damit auch Ereignisse mit unverändertem Text gelesen werden (Terrace Tunnel). Überholte Versionen und beendete Ereignisse gehen ohne Aufruf ab.
   - **Ablage geschätzter Werte (beschlossen 2026-11-05):** Eine Verzögerung aus dem Text ersetzt `assumedDelay` und gilt damit als geschätzt, keine eigene Spalte. `expectedDelay` bleibt der Zahl der Quelle vorbehalten.
   - **Lesen:** `closedDuringWindows` hebt `OTHER`, `ROADWORKS`, `CONGESTION` auf `CLOSURE` (nur `HIGH`, `ACCIDENT` bleibt). `expectedReopening` wird `validTo`. `direction` geht an die Verortung. Ungültige Einzelwerte (Wiedereröffnung, Verzögerung) werden ignoriert, die übrige Antwort gilt. `evidence` wird ohne Unterschiede im Leerraum verglichen.
   - **Nicht geprüft:** Qualität des Modells an echten Texten, siehe [Offen](#offen). `events.json` enthält die Fälle, ein Lauf mit Key zeigt sie.
@@ -146,7 +146,7 @@ public interface TrafficSource {
   - `vehicleScope` geht an `Incident.vehicleScope` (für die Bewertung, [consequence-assessment.md](consequence-assessment.md)), ungeprüft bis auf den Wertebereich.
 
 - **Wofür:** Freitext der Meldung, den `read` nicht deterministisch lesen kann, z. B. „expected to reopen around 3pm“, „allow an extra 30 minutes“, „northbound only“.
-- **Nur bei geändertem Text oder geänderter Gültigkeit (Gültigkeit beschlossen 2026-11-05, `V39`):** Der Agent wird aufgerufen, wenn es für `messageText` und `validFrom`–`validTo` desselben Ereignisses (`subjectId`) noch keine Antwort gibt. Die Gültigkeit gehört dazu, weil die Antwort datierte Fenster enthält: Verlängert die Quelle eine Sperrung bei gleichem Text, endeten die Fenster sonst beim alten Ende und spätere Durchfahrten wären nicht betroffen. Fehlversuche werden wiederholt, siehe oben.
+- **Nur bei geändertem Text oder geänderter Gültigkeit (Gültigkeit beschlossen 2026-11-05, `V40`):** Der Agent wird aufgerufen, wenn es für `messageText` und `validFrom`–`validTo` desselben Ereignisses (`subjectId`) noch keine Antwort gibt. Die Gültigkeit gehört dazu, weil die Antwort datierte Fenster enthält: Verlängert die Quelle eine Sperrung bei gleichem Text, endeten die Fenster sonst beim alten Ende und spätere Durchfahrten wären nicht betroffen. Fehlversuche werden wiederholt, siehe oben.
   - `message_hash` = SHA-256 über den normalisierten `messageText` (Leerraum zusammengefasst, Groß-/Kleinschreibung beibehalten).
   - Erste Version eines Ereignisses → Aufruf.
   - Neue Version mit gleichem Hash und gleicher Gültigkeit (z. B. nur Zeitstempel, Geometrie oder Status geändert) → kein Aufruf, gespeicherte Antwort verwenden.
@@ -203,9 +203,9 @@ public interface TrafficSource {
 - **`V34` (Zeitfenster, umgesetzt):** Tabellen `incident_window` (`incident_id`, `starts_at`, `ends_at`) und `incident_window_aud` (mit `setordinal`); `consequence.window_start`, `consequence.window_end`.
 - **`V36` (Übergangsregel, umgesetzt):** `incident.times_unconfirmed BOOLEAN` und `incident_aud.times_unconfirmed`.
 - **`V37` (Auf- und Abfahrten, umgesetzt):** `road_segment.link BOOLEAN`, siehe [network.md](network.md#datenmodell).
-- **`V38` (Anreicherung, umgesetzt):** Tabelle `message_enrichment`, siehe oben; `input_event.enrichment_attempts SMALLINT`.
-- **`V39` (umgesetzt):** `message_enrichment.validity`, Teil des eindeutigen Schlüssels.
-- **`V40` (umgesetzt):** `revtype` im Primärschlüssel von `incident_window_aud`: Envers nummeriert die Elemente des Sets nach Position, ein Fenster kann in einer Revision entfernt und hinzugefügt werden. `IncidentWindow` vergleicht Zeitpunkte, nicht Offsets (die Datenbank liefert einen anderen als die Quelle), `Incident.change` ändert nur die Differenz der Fenster.
+- **`V39` (Anreicherung, umgesetzt):** Tabelle `message_enrichment`, siehe oben; `input_event.enrichment_attempts SMALLINT`.
+- **`V40` (umgesetzt):** `message_enrichment.validity`, Teil des eindeutigen Schlüssels.
+- **`V41` (umgesetzt):** `revtype` im Primärschlüssel von `incident_window_aud`: Envers nummeriert die Elemente des Sets nach Position, ein Fenster kann in einer Revision entfernt und hinzugefügt werden. `IncidentWindow` vergleicht Zeitpunkte, nicht Offsets (die Datenbank liefert einen anderen als die Quelle), `Incident.change` ändert nur die Differenz der Fenster.
 
 ## Erste Quelle: NZTA
 
@@ -405,7 +405,7 @@ nfv.input.sources.nz-nzta.assumed-delay.vehicle-restrictions=0m
 1. **Umgesetzt:** `TrafficSource`, Records, `TrafficSources`, `TrafficPolling`, `FeedDiff`, `V32`, `NztaSource.fetch`. Sammelt echte Payloads.
 2. **Umgesetzt:** `NztaSource.read`, `IncidentReporting` mit `SegmentMatching` (Punkt, Linie), Incident anlegen und ändern (inkl. Typ), `assumedDelay` (`V33`), `TrafficEventProcessor`, Ruhepause beim Abruf, wenn niemand in der Region unterwegs ist. Beenden (`Resolved`, entfallen) gleich mit umgesetzt, weil `ReportedIncident` „beendet“ ohnehin trägt.
 3. Frontend (Quelle, Stand, nicht aktuell).
-4. **Umgesetzt:** Zeitfenster am Incident und an der Consequence (`V34`), Bewertung ([consequence-assessment.md](consequence-assessment.md)), Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, alle Felder der Anreicherung (`V38`). Ohne verwertbare Antwort Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
+4. **Umgesetzt:** Zeitfenster am Incident und an der Consequence (`V34`), Bewertung ([consequence-assessment.md](consequence-assessment.md)), Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, alle Felder der Anreicherung (`V39`). Ohne verwertbare Antwort Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
 5. Webhook-Endpunkt, zweite Quelle (z. B. Auckland Transport), Flächenereignisse, Verzögerung fortschreiben, Benachrichtigung.
 
 ## Offen

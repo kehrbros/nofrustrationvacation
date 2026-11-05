@@ -1,6 +1,7 @@
 import { CloseOutlined, EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 
 import AddBookingSheet from '../bookings/AddBookingSheet';
 import { createAccommodationBooking } from '../bookings/bookingsApi';
@@ -19,6 +20,7 @@ import { addStop } from '../trips/tripsApi';
  */
 export default function StopSheet() {
   const { trip, bookings, reload, close } = useTripContext();
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
   const [place, setPlace] = useState<Place | null>(null);
@@ -72,13 +74,16 @@ export default function StopSheet() {
     setSaving(true);
     setError(null);
     try {
-      const stop = await addStop(trip.id, {
+      const updated = await addStop(trip.id, {
         name,
         latitude: place?.latitude ?? null,
         longitude: place?.longitude ?? null,
         arrivalAt,
         departureAt,
       });
+      // appended: the new stop is the last one, the new route leads to it
+      const stop = updated.stops.at(-1)!;
+      const newRoute = updated.routes.find((route) => route.toStopId === stop.id);
       if (booking) {
         try {
           await createAccommodationBooking(stop.id, toInput(booking.form, booking.source));
@@ -91,7 +96,13 @@ export default function StopSheet() {
         }
       }
       reload();
-      close();
+      // choose the way to the new stop right away, if both stops are on the map
+      const previousStop = newRoute ? updated.stops.find((candidate) => candidate.id === newRoute.fromStopId) : undefined;
+      if (newRoute && stop.latitude != null && previousStop?.latitude != null) {
+        navigate(`/reisen/${trip.id}/routen/${newRoute.id}?neu=1`);
+      } else {
+        close();
+      }
     } catch {
       setError('Der Stop konnte nicht gespeichert werden.');
       setSaving(false);

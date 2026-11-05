@@ -6,8 +6,6 @@ import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.IncidentLogic;
 import com.nfv.network.logic.RegionImport;
 import com.nfv.network.logic.RegionStatus;
-import com.nfv.recommendations.data.SuggestionSetRepository;
-import com.nfv.recommendations.entities.SuggestionStatus;
 import com.nfv.trips.data.RouteRepository;
 import com.nfv.trips.data.RouteSectionRepository;
 import com.nfv.trips.data.StopRepository;
@@ -49,10 +47,11 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Suggestions API: suggest, read, apply, stale sets, foreign routes, see Docs/recommendations.md#api. */
+/** Suggestions API: suggest, choose, route lines, foreign routes, see Docs/recommendations.md#api. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class SuggestionApiTest {
@@ -71,8 +70,6 @@ class SuggestionApiTest {
     private IncidentLogic incidentLogic;
     @Autowired
     private ConsequenceRepository consequenceRepository;
-    @Autowired
-    private SuggestionSetRepository setRepository;
     @Autowired
     private TripRepository tripRepository;
     @Autowired
@@ -104,25 +101,22 @@ class SuggestionApiTest {
     }
 
     @Test
-    void suggestionsAreComputedOnceAndCanBeRead() throws Exception {
+    void suggestionsAreComputedWithoutStoring() throws Exception {
         long routeId = plannedRoute();
 
-        String body = suggest(routeId, "{}")
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CURRENT"))
-                .andExpect(jsonPath("$.waypointMode").value("IGNORE"))
-                .andExpect(jsonPath("$.options[0].rank").value(1))
-                .andExpect(jsonPath("$.options[0].labels[0]").value("FASTEST"))
-                .andExpect(jsonPath("$.options[0].geometry[0].latitude").isNumber())
-                .andExpect(jsonPath("$.reference.arrivalAt").isString())
-                .andReturn().getResponse().getContentAsString();
-        int setId = JsonPath.read(body, "$.id");
-
-        suggest(routeId, null).andExpect(jsonPath("$.id").value(setId));
-        mockMvc.perform(get("/api/v1/suggestion-sets/{id}", setId).with(user))
+        suggest(routeId, "{}")
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.routeId").value(routeId))
-                .andExpect(jsonPath("$.options").isNotEmpty());
+                .andExpect(jsonPath("$.id").doesNotExist())
+                .andExpect(jsonPath("$.waypointMode").value("IGNORE"))
+                .andExpect(jsonPath("$.departureAt").isString())
+                .andExpect(jsonPath("$.options[0].rank").value(1))
+                .andExpect(jsonPath("$.options[0].id").doesNotExist())
+                .andExpect(jsonPath("$.options[0].labels[0]").value("FASTEST"))
+                .andExpect(jsonPath("$.options[0].geometry[0].latitude").isNumber())
+                .andExpect(jsonPath("$.options[0].waypoints").isArray())
+                .andExpect(jsonPath("$.reference.arrivalAt").isString());
+        suggest(routeId, null).andExpect(status().isOk()).andExpect(jsonPath("$.options").isNotEmpty());
     }
 
     @Test
@@ -131,8 +125,12 @@ class SuggestionApiTest {
 
         suggest(routeId, "{}")
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").doesNotExist())
+                .andExpect(jsonPath("$.options").isEmpty())
                 .andExpect(jsonPath("$.problem").value("MISSING_DEPARTURE"));
+        suggest(routeId, "{\"departureAt\":\"" + DEPARTURE + "\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.problem").doesNotExist())
+                .andExpect(jsonPath("$.options").isNotEmpty());
     }
 
     @Test
@@ -143,68 +141,66 @@ class SuggestionApiTest {
     }
 
     @Test
-    void foreignRoutesAndSetsAreNotFound() throws Exception {
+    void foreignRoutesAreNotFound() throws Exception {
         long routeId = plannedRoute();
-        int setId = JsonPath.read(suggest(routeId, "{}").andReturn().getResponse().getContentAsString(), "$.id");
-        int optionId = JsonPath.read(mockMvc.perform(get("/api/v1/suggestion-sets/{id}", setId).with(user))
-                .andReturn().getResponse().getContentAsString(), "$.options[0].id");
 
         mockMvc.perform(post("/api/v1/routes/{id}/suggestions", routeId).with(otherUser).with(csrf()))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
-        mockMvc.perform(get("/api/v1/suggestion-sets/{id}", setId).with(otherUser))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
-        apply(otherUser, setId, optionId)
+        choose(otherUser, routeId, "[]")
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
     }
 
-    /** IGNORE: the waypoint of the user is replaced by the via points of the suggestion, the route planned again. */
+    /** IGNORE: the waypoint of the user is replaced by the waypoints of the chosen suggestion, the route planned. */
     @Test
-    void applyReplacesWaypointsAndPlansTheRoute() throws Exception {
+    void chooseReplacesWaypointsAndPlansTheRoute() throws Exception {
         long routeId = newRoute(DEPARTURE);
         long kelburn = inTransaction(() -> waypointRepository.save(new Waypoint(routeRepository.findById(routeId)
                 .orElseThrow(), 0, KELBURN[0], KELBURN[1], "Kelburn", null, WaypointOrigin.USER)).getId());
         routePlanning.plan(routeId);
         String body = suggest(routeId, "{}").andReturn().getResponse().getContentAsString();
-        int setId = JsonPath.read(body, "$.id");
-        int optionId = JsonPath.read(body, "$.options[-1].id");
-        List<?> viaPoints = JsonPath.read(body, "$.options[-1].viaPoints");
+        List<?> chosen = JsonPath.read(body, "$.options[-1].waypoints");
+        String waypoints = tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(chosen);
 
-        apply(user, setId, optionId)
+        choose(user, routeId, waypoints)
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.routeId").value(routeId))
                 .andExpect(jsonPath("$.planOutcome").value("PLANNED"));
 
-        List<Waypoint> waypoints = waypointRepository.findByRouteIdOrderByPosition(routeId);
-        assertThat(waypoints).extracting(Waypoint::getId).doesNotContain(kelburn);
-        assertThat(waypoints).hasSize(viaPoints.size())
+        List<Waypoint> stored = waypointRepository.findByRouteIdOrderByPosition(routeId);
+        assertThat(stored).extracting(Waypoint::getId).doesNotContain(kelburn);
+        assertThat(stored).hasSize(chosen.size())
                 .allSatisfy(w -> assertThat(w.getOrigin()).isEqualTo(WaypointOrigin.SUGGESTION));
-        assertThat(setRepository.findById((long) setId).orElseThrow().getStatus())
-                .isEqualTo(SuggestionStatus.APPLIED);
-        apply(user, setId, optionId)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("SUGGESTION_STALE"));
     }
 
+    /** FOLLOW: the waypoint of the user stays with its id, name and origin. */
     @Test
-    void applyOnStaleSetIsRejected() throws Exception {
-        long routeId = plannedRoute();
-        String body = suggest(routeId, "{}").andReturn().getResponse().getContentAsString();
-        int setId = JsonPath.read(body, "$.id");
-        int optionId = JsonPath.read(body, "$.options[0].id");
-
+    void chooseKeepsWaypointsOfTheUser() throws Exception {
+        long routeId = newRoute(DEPARTURE);
+        long kelburn = inTransaction(() -> waypointRepository.save(new Waypoint(routeRepository.findById(routeId)
+                .orElseThrow(), 0, KELBURN[0], KELBURN[1], "Kelburn", null, WaypointOrigin.USER)).getId());
         routePlanning.plan(routeId);
 
-        apply(user, setId, optionId)
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("SUGGESTION_STALE"));
+        choose(user, routeId, "[{\"latitude\":0,\"longitude\":0,\"waypointId\":" + kelburn + "}]")
+                .andExpect(status().isOk());
+
+        assertThat(waypointRepository.findByRouteIdOrderByPosition(routeId)).singleElement().satisfies(w -> {
+            assertThat(w.getId()).isEqualTo(kelburn);
+            assertThat(w.getName()).isEqualTo("Kelburn");
+            assertThat(w.getLatitude()).isEqualTo(KELBURN[0]);
+            assertThat(w.getOrigin()).isEqualTo(WaypointOrigin.USER);
+        });
+        choose(user, routeId, "[{\"latitude\":0,\"longitude\":0,\"waypointId\":999999}]")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_SUGGESTION_INPUT"));
+        choose(user, routeId, "[{\"latitude\":91,\"longitude\":0}]")
+                .andExpect(status().isBadRequest());
     }
 
-    /** A suggestion around a closure: after applying, the consequence of the closure is gone. */
+    /** Choosing a suggestion around a closure: afterwards the consequence of the closure is gone. */
     @Test
-    void applyAroundClosureRemovesTheConsequence() throws Exception {
+    void chooseAroundClosureRemovesTheConsequence() throws Exception {
         long routeId = plannedRoute();
         long closed = middleSegment(routeId);
         inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "closed", DEPARTURE.minusHours(1),
@@ -213,14 +209,37 @@ class SuggestionApiTest {
         String body = suggest(routeId, "{}")
                 .andExpect(jsonPath("$.reference.blocked").value(true))
                 .andReturn().getResponse().getContentAsString();
-        int setId = JsonPath.read(body, "$.id");
-        int optionId = JsonPath.read(body, "$.options[0].id");
+        List<?> chosen = JsonPath.read(body, "$.options[0].waypoints");
 
-        apply(user, setId, optionId).andExpect(jsonPath("$.planOutcome").value("PLANNED"));
+        choose(user, routeId, tools.jackson.databind.json.JsonMapper.builder().build().writeValueAsString(chosen))
+                .andExpect(jsonPath("$.planOutcome").value("PLANNED"));
 
         assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId))
                 .extracting(RouteSection::getSegmentId).doesNotContain(closed);
         assertThat(consequenceRepository.findByRouteId(routeId)).isEmpty();
+    }
+
+    @Test
+    void routeLinesShowThePlannedWays() throws Exception {
+        long routeId = plannedRoute();
+        long tripId = routeRepository.findById(routeId).orElseThrow().getTrip().getId();
+        long unplanned = inTransaction(() -> {
+            Trip trip = tripRepository.findById(tripId).orElseThrow();
+            Stop end = stopRepository.findByTripIdOrderByPosition(tripId).getLast();
+            Stop next = stopRepository.save(new Stop(trip, 2, "Kelburn", KELBURN[0], KELBURN[1], null, null));
+            return routeRepository.save(new Route(trip, end, next)).getId();
+        });
+
+        mockMvc.perform(get("/api/v1/trips/{id}/route-lines", tripId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].routeId").value(routeId))
+                .andExpect(jsonPath("$[0].geometry.length()").value(org.hamcrest.Matchers.greaterThan(10)))
+                .andExpect(jsonPath("$[0].distanceMeters").value(org.hamcrest.Matchers.greaterThan(3000.0)))
+                .andExpect(jsonPath("$[0].durationSeconds").value(org.hamcrest.Matchers.greaterThan(60)));
+        assertThat(unplanned).isPositive();
+        mockMvc.perform(get("/api/v1/trips/{id}/route-lines", tripId).with(otherUser))
+                .andExpect(status().isNotFound());
     }
 
     private org.springframework.test.web.servlet.ResultActions suggest(long routeId, String json) throws Exception {
@@ -229,10 +248,10 @@ class SuggestionApiTest {
                 : request.contentType(MediaType.APPLICATION_JSON).content(json));
     }
 
-    private org.springframework.test.web.servlet.ResultActions apply(RequestPostProcessor who, int setId,
-                                                                     int optionId) throws Exception {
-        return mockMvc.perform(post("/api/v1/suggestion-sets/{setId}/options/{optionId}/apply", setId, optionId)
-                .with(who).with(csrf()));
+    private org.springframework.test.web.servlet.ResultActions choose(RequestPostProcessor who, long routeId,
+                                                                      String waypoints) throws Exception {
+        return mockMvc.perform(put("/api/v1/routes/{id}/choice", routeId).with(who).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content("{\"waypoints\":" + waypoints + "}"));
     }
 
     private long plannedRoute() {

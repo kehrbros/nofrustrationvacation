@@ -3,7 +3,6 @@ package com.nfv.recommendations.logic;
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.RouteResult;
 import com.nfv.network.logic.RoutedSegment;
-import com.nfv.recommendations.entities.OptionKind;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;

@@ -431,6 +431,27 @@ a {
   border-color: var(--ink);
   background: var(--accent-soft);
 }
+.va-option-skeleton {
+  min-height: 64px;
+  cursor: default;
+  background: linear-gradient(90deg, var(--line) 0%, transparent 50%, var(--line) 100%);
+  background-size: 200% 100%;
+  animation: va-skeleton 1.4s ease-in-out infinite;
+  opacity: 0.5;
+}
+@keyframes va-skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-option-skeleton {
+    animation: none;
+  }
+}
 .va-option-title {
   font-size: 16px;
   font-weight: 700;

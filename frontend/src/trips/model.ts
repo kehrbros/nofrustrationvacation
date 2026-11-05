@@ -80,3 +80,64 @@ export interface NewStop {
   arrivalAt: string | null;
   departureAt: string | null;
 }
+
+export type OptionLabel =
+  | 'FASTEST'
+  | 'SHORTEST'
+  | 'CURRENT'
+  | 'AVOIDS_INCIDENT'
+  | 'HAS_INCIDENT'
+  | 'LATER_DEPARTURE'
+  | 'EARLIER_DEPARTURE'
+  | 'FERRY';
+
+export interface LinePoint {
+  latitude: number;
+  longitude: number;
+}
+
+/** Point of a suggestion that becomes a waypoint when it is chosen; waypointId keeps a waypoint of the user. */
+export interface ChoicePoint {
+  latitude: number;
+  longitude: number;
+  roadHint: string | null;
+  waypointId: number | null;
+}
+
+export interface RouteConflict {
+  incidentId: number;
+  impact: Impact;
+  delaySeconds: number | null;
+}
+
+/** One way between two stops, computed per request and not stored; choosing it stores its waypoints. */
+export interface RouteOption {
+  rank: number;
+  labels: OptionLabel[];
+  /** Main road of the part that differs from the fastest way, e.g. "SH 2". */
+  via: string | null;
+  departureAt: string;
+  arrivalAt: string;
+  distanceMeters: number;
+  durationSeconds: number;
+  delaySeconds: number;
+  geometry: LinePoint[];
+  waypoints: ChoicePoint[];
+  conflicts: RouteConflict[];
+}
+
+export type SuggestionProblem = 'MISSING_COORDINATES' | 'MISSING_DEPARTURE' | 'NO_ROUTE';
+
+export interface RouteSuggestions {
+  options: RouteOption[];
+  problem: SuggestionProblem | null;
+}
+
+/** Planned way of a route for the map. */
+export interface RouteLine {
+  routeId: number;
+  geometry: LinePoint[];
+  distanceMeters: number;
+  durationSeconds: number;
+  via: string | null;
+}

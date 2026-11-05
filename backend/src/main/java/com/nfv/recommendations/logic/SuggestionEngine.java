@@ -5,14 +5,9 @@ import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.network.logic.SegmentQueries;
-import com.nfv.recommendations.entities.RouteOption;
 import com.nfv.trips.logic.PlannedSection;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
-import org.locationtech.jts.geom.Coordinate;
-import org.locationtech.jts.geom.GeometryFactory;
-import org.locationtech.jts.geom.LineString;
-import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -30,8 +25,6 @@ import java.util.stream.Collectors;
 @Component
 @RequiredArgsConstructor
 class SuggestionEngine {
-    private static final GeometryFactory WGS84 = new GeometryFactory(new PrecisionModel(), 4326);
-
     private final List<CandidateGenerator> generators;
     private final SegmentQueries segmentQueries;
     private final ActiveIncidents activeIncidents;
@@ -42,7 +35,7 @@ class SuggestionEngine {
      * @param options   the suggestions, best first
      * @param reference the planned route evaluated the same way, {@code null} if not planned
      */
-    record Result(List<RouteOption.Values> options, @Nullable CandidateEvaluator.Outcome reference) {
+    record Result(List<SuggestedOption> options, @Nullable CandidateEvaluator.Outcome reference) {
     }
 
     /**
@@ -75,25 +68,16 @@ class SuggestionEngine {
                 })
                 .toList();
         Candidate base = candidates.getFirst();
-        List<RouteOption.Values> options = new ArrayList<>();
+        List<SuggestedOption> options = new ArrayList<>();
         for (SuggestionRanker.Ranked ranked : ranker.rank(evaluated, scenario.count(), reference, base, segments)) {
             Candidate candidate = ranked.evaluated().candidate();
             CandidateEvaluator.Outcome outcome = ranked.evaluated().outcome();
-            options.add(new RouteOption.Values(candidate.kind(), ranked.labels(), ranked.via(),
+            options.add(new SuggestedOption(options.size() + 1, candidate.kind(), ranked.labels(), ranked.via(),
                     outcome.departure(), outcome.arrival(), outcome.distanceMeters(), outcome.duration(),
                     Duration.ZERO, outcome.delay(), ranked.evaluated().sharedRatio(), line(candidate.geometry()),
                     viaPointExtractor.extract(scenario, candidate, base, segments), outcome.conflicts()));
         }
         return new Result(options, reference);
-    }
-
-    /** Only the planned route, e.g. when a stored set is read again; incidents as of now. */
-    @Nullable
-    CandidateEvaluator.Outcome reference(Scenario scenario) {
-        Set<Long> segmentIds = scenario.reference().stream().map(PlannedSection::segmentId)
-                .collect(Collectors.toSet());
-        return reference(scenario, segmentQueries.segments(segmentIds),
-                activeIncidents.onSegments(segmentIds, scenario.departure()));
     }
 
     /** Planned route from the departure of the scenario, distances from the segment lengths. */
@@ -115,12 +99,8 @@ class SuggestionEngine {
         return CandidateEvaluator.evaluate(steps, scenario.departure(), scenario.constraints(), incidents);
     }
 
-    static LineString line(List<GeoPoint> points) {
-        Coordinate[] coordinates = points.stream().map(p -> new Coordinate(p.lon(), p.lat()))
-                .toArray(Coordinate[]::new);
-        if (coordinates.length == 1) {
-            coordinates = new Coordinate[]{coordinates[0], coordinates[0]};
-        }
-        return WGS84.createLineString(coordinates);
+    /** Line for the map, a single point twice so it stays a line. */
+    static List<GeoPoint> line(List<GeoPoint> points) {
+        return points.size() == 1 ? List.of(points.getFirst(), points.getFirst()) : points;
     }
 }

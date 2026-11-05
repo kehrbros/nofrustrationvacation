@@ -1,4 +1,4 @@
-package com.nfv.recommendations.entities;
+package com.nfv.recommendations.logic;
 
 /** How suggestions treat the waypoints of the user. */
 public enum WaypointMode {
