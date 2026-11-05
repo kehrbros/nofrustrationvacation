@@ -82,7 +82,7 @@ class RegionImportTest {
         long imported = regionImport.importRegion(REGION).extractVersionId();
         List<Long> idsBefore = segmentIds(imported);
         assertThat(count("SELECT COUNT(*) FROM road_segment WHERE region = ? AND link", REGION)).isPositive();
-        // as after V35: the graph is there, the flag is not filled
+        // as after V37: the graph is there, the flag is not filled
         jdbc.update("UPDATE road_segment SET link = FALSE WHERE region = ?", REGION);
 
         RegionStatus status = regionImport.loadOrImport(REGION);

@@ -121,7 +121,7 @@ public interface TrafficSource {
   - Auslöser: `FeedDiff` veröffentlicht nach **jedem** erfolgreichen Abruf `SourcePolled` (auch ohne neue Events, damit offene wie `ROUTING_UNAVAILABLE` nachgeholt werden). `TrafficEventProcessor.processPending()` verarbeitet alle offenen `TrafficEvent`s aller Quellen, älteste zuerst, je Event eine Transaktion, nie zwei Läufe gleichzeitig. Abschaltbar über `nfv.input.processing.after-poll` (Tests rufen `processPending` selbst auf).
   - Fehler beim Verarbeiten (Ausnahme) → Event mit `processing_note` `FAILED: …` abgeschlossen, damit es nicht jeden Lauf erneut scheitert. Nicht lesbarer Payload → `UNREADABLE: …`, unbekannte Quelle → `UNKNOWN_SOURCE`.
   - **Übergangsregel ohne Zeitfenster:** Liefert die Anreicherung keine verwertbaren Fenster und nennt `messageText` Uhrzeiten oder Nächte (`9pm`, `4:30am`, `21:00`, `night(s)`, `overnight`), wird das Ereignis als `OTHER` gemeldet (keine Sperre), `processing_note` `TIMES_IN_TEXT: …`. Betrifft z. B. `566003` (Terrace Tunnel, nur nachts gesperrt).
-    - **Sperrungen darunter (beschlossen 2026-11-05, `V34`):** `Incident.timesUnconfirmed` (historisiert, auch in `TripIncidentDto`). Bewertung `DELAYED` mit Verzögerung 0 statt `NO_IMPACT`, Hinweis „Zeiten prüfen“, keine Verschiebung, nie `TOO_LATE`. Grund: Auch rund um die Uhr gesperrte Strecken nennen Uhrzeiten (`561819`, `565813`), 9 der 20 aktiven Sperrungen der Stichprobe wären sonst nicht gezählt worden. Nimmt in Kauf, dass nächtliche Sperrungen bis zur Anreicherung auch tagsüber warnen.
+    - **Sperrungen darunter (beschlossen 2026-11-05, `V36`):** `Incident.timesUnconfirmed` (historisiert, auch in `TripIncidentDto`). Bewertung `DELAYED` mit Verzögerung 0 statt `NO_IMPACT`, Hinweis „Zeiten prüfen“, keine Verschiebung, nie `TOO_LATE`. Grund: Auch rund um die Uhr gesperrte Strecken nennen Uhrzeiten (`561819`, `565813`), 9 der 20 aktiven Sperrungen der Stichprobe wären sonst nicht gezählt worden. Nimmt in Kauf, dass nächtliche Sperrungen bis zur Anreicherung auch tagsüber warnen.
     - Sperrungen, die nur im Text stehen (`566353`, `Caution`), bleiben bis zur Anreicherung `NO_IMPACT`.
   - **Abgelaufenes Ende (beschlossen 2026-11-05):** Meldet die Quelle eine Sperrung ohne Fenster weiter als nicht beendet, obwohl `validTo` schon vorbei ist (`541001`, `expectedResolution` 19.5.2026), gilt das Datum als veraltet: `validTo` leer (bis auf Weiteres, also nicht passierbar). Geprüft nur beim Verarbeiten einer Version: Läuft das Ende ab, während das Ereignis unverändert im Feed steht, entfällt der Incident weiter zu diesem Datum, siehe [Offen](#offen).
   - Beschreibung des Incidents: `title` und `description` des `TrafficReport` (gekürzt auf 2000 Zeichen).
@@ -177,7 +177,7 @@ public interface TrafficSource {
   - `validFrom`–`validTo` bleibt die Hülle für die Vorauswahl in `findPassing`/`findActiveOnSegments`.
   - `IncidentOverlap.overlaps` prüft zusätzlich: mindestens ein Fenster überschneidet die Durchfahrt. Die Bewertung ([consequence-assessment.md](consequence-assessment.md)) nutzt dieselbe Prüfung.
   - `Consequence` bekommt das erste getroffene Fenster (`windowStart`, `windowEnd`) für die Anzeige („gesperrt 21:00–04:30“).
-- **Umgesetzt (`V32`):**
+- **Umgesetzt (`V34`):**
   - `IncidentWindow` als `@Embeddable` in `Set` (`incident_window`, PK `incident_id, starts_at, ends_at`); Envers braucht in `incident_window_aud` zusätzlich `setordinal`.
   - Logik-Record `incidents.logic.TimeWindow` (Ende nach Beginn), `Incident.timeWindows()` sortiert, `Incident.firstWindow(start, end)`.
   - `IncidentOverlap.overlaps(validFrom, validTo, windows, start, end)` und `firstWindow`; genutzt von `Incident.overlaps`, `ActiveIncident.overlaps` (damit auch Streckenvorschläge) und `ConsequenceMatcher`.
@@ -187,14 +187,14 @@ public interface TrafficSource {
 
 ## Schema
 
-- **`V30` (Stufe 1, umgesetzt):**
+- **`V32` (Stufe 1, umgesetzt):**
   - `input_event`: `subject_id VARCHAR(255)`, Index `ix_input_event_subject (source_id, subject_id)`; `message_hash VARCHAR(64)`; `processing_note VARCHAR(500)`; `enrichment_pending BOOLEAN NOT NULL DEFAULT FALSE`.
   - `event_source`: `last_success_at TIMESTAMP(6) WITH TIME ZONE`, `etag VARCHAR(255)`, `last_modified VARCHAR(64)`.
   - Neue Tabelle `source_subject` (`source_id`, `subject_id`, `version`, `message_hash`, `missing_polls`, `last_seen_at`, `cleared_at`, eindeutig über `source_id, subject_id`): Zustand von `FeedDiff`.
-- **`V31` (Stufe 2, umgesetzt):** `incident.assumed_delay BIGINT` und `incident_aud.assumed_delay` (Dauer in Nanosekunden wie `expected_delay`).
-- **`V32` (Zeitfenster, umgesetzt):** Tabellen `incident_window` (`incident_id`, `starts_at`, `ends_at`) und `incident_window_aud` (mit `setordinal`); `consequence.window_start`, `consequence.window_end`.
-- **`V34` (Übergangsregel, umgesetzt):** `incident.times_unconfirmed BOOLEAN` und `incident_aud.times_unconfirmed`.
-- **`V35` (Auf- und Abfahrten, umgesetzt):** `road_segment.link BOOLEAN`, siehe [network.md](network.md#datenmodell).
+- **`V33` (Stufe 2, umgesetzt):** `incident.assumed_delay BIGINT` und `incident_aud.assumed_delay` (Dauer in Nanosekunden wie `expected_delay`).
+- **`V34` (Zeitfenster, umgesetzt):** Tabellen `incident_window` (`incident_id`, `starts_at`, `ends_at`) und `incident_window_aud` (mit `setordinal`); `consequence.window_start`, `consequence.window_end`.
+- **`V36` (Übergangsregel, umgesetzt):** `incident.times_unconfirmed BOOLEAN` und `incident_aud.times_unconfirmed`.
+- **`V37` (Auf- und Abfahrten, umgesetzt):** `road_segment.link BOOLEAN`, siehe [network.md](network.md#datenmodell).
 - **Später, eigene Migration:** Tabelle `message_enrichment`, siehe oben (Stufe 4).
 
 ## Erste Quelle: NZTA
@@ -375,10 +375,10 @@ nfv.input.sources.nz-nzta.assumed-delay.vehicle-restrictions=0m
 
 ## Stufen
 
-1. **Umgesetzt:** `TrafficSource`, Records, `TrafficSources`, `TrafficPolling`, `FeedDiff`, `V30`, `NztaSource.fetch`. Sammelt echte Payloads.
-2. **Umgesetzt:** `NztaSource.read`, `IncidentReporting` mit `SegmentMatching` (Punkt, Linie), Incident anlegen und ändern (inkl. Typ), `assumedDelay` (`V31`), `TrafficEventProcessor`, Ruhepause beim Abruf, wenn niemand in der Region unterwegs ist. Beenden (`Resolved`, entfallen) gleich mit umgesetzt, weil `ReportedIncident` „beendet“ ohnehin trägt.
+1. **Umgesetzt:** `TrafficSource`, Records, `TrafficSources`, `TrafficPolling`, `FeedDiff`, `V32`, `NztaSource.fetch`. Sammelt echte Payloads.
+2. **Umgesetzt:** `NztaSource.read`, `IncidentReporting` mit `SegmentMatching` (Punkt, Linie), Incident anlegen und ändern (inkl. Typ), `assumedDelay` (`V33`), `TrafficEventProcessor`, Ruhepause beim Abruf, wenn niemand in der Region unterwegs ist. Beenden (`Resolved`, entfallen) gleich mit umgesetzt, weil `ReportedIncident` „beendet“ ohnehin trägt.
 3. Frontend (Quelle, Stand, nicht aktuell).
-4. **Teilweise umgesetzt:** Zeitfenster am Incident und an der Consequence (`V32`), Prüfung der Fenster in `MessageEnrichment` hinter `EnrichmentModel`. Offen: Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, übrige Felder der Anreicherung, Bewertung ([consequence-assessment.md](consequence-assessment.md)). Ohne Fenster Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
+4. **Teilweise umgesetzt:** Zeitfenster am Incident und an der Consequence (`V34`), Prüfung der Fenster in `MessageEnrichment` hinter `EnrichmentModel`. Offen: Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, übrige Felder der Anreicherung, Bewertung ([consequence-assessment.md](consequence-assessment.md)). Ohne Fenster Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
 5. Webhook-Endpunkt, zweite Quelle (z. B. Auckland Transport), Flächenereignisse, Verzögerung fortschreiben, Benachrichtigung.
 
 ## Offen

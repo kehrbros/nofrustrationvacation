@@ -1,6 +1,6 @@
 # Bewertung von Consequences – Entwurf
 
-- **Status:** Backend umgesetzt (`V33`, siehe [Umsetzung](#umsetzung)), Frontend noch offen. Ergänzt die Zuordnung (`ConsequenceMatcher`, [domain.md](domain.md#zuordnungslogik-consequencematcher)) um eine Bewertung gegen die Stops.
+- **Status:** Backend umgesetzt (`V35`, siehe [Umsetzung](#umsetzung)), Frontend noch offen. Ergänzt die Zuordnung (`ConsequenceMatcher`, [domain.md](domain.md#zuordnungslogik-consequencematcher)) um eine Bewertung gegen die Stops.
 - **Ziel:** Jede Consequence bekommt eine Kategorie, damit der Nutzer sieht, was für seine Reise zählt:
   - `TOO_LATE`: Mit dem Incident kommt der Nutzer nach der Ankunftszeit am Ziel-Stop an (oder kommt gar nicht durch).
   - `DELAYED`: spürbare Verzögerung, die Ankunftszeit wird trotzdem gehalten.
@@ -65,9 +65,9 @@
   - `match` (`DIRECT`, `BY_SHIFT`, `MARGINAL`, Spalte `match_kind`)
   - `passageAt` (verschobene Durchfahrt der getroffenen Section, für Rangfolge und Hinweis „knapp“)
   - `assessedAt`
-- `Incident` zusätzlich `assumedDelay` (Annahme der Quelle ohne Zahl, historisiert, `V31`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historisiert, `V33`) und `timesUnconfirmed` (historisiert, `V34`)
+- `Incident` zusätzlich `assumedDelay` (Annahme der Quelle ohne Zahl, historisiert, `V33`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historisiert, `V35`) und `timesUnconfirmed` (historisiert, `V36`)
 - `impact` (`BLOCKED`, `DELAYED`) bleibt: beschreibt den Incident an der Stelle, die Kategorie beschreibt die Folge für die Reise. `delay` bleibt die Angabe des Incidents.
-- Schema: eigene Migration `V33` (statt mit den Zeitfenstern, die schon in `V32` kamen).
+- Schema: eigene Migration `V35` (statt mit den Zeitfenstern, die schon in `V34` kamen).
 
 ## Wann bewertet wird
 

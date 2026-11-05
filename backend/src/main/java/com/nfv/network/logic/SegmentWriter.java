@@ -80,7 +80,7 @@ class SegmentWriter {
         return segments;
     }
 
-    /** Whether any segment of the region is marked as a link, false for segments written before V35. */
+    /** Whether any segment of the region is marked as a link, false for segments written before V37. */
     @Transactional(readOnly = true)
     public boolean hasLinks(String region) {
         return Boolean.TRUE.equals(jdbc.queryForObject(

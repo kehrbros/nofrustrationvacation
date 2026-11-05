@@ -11,7 +11,7 @@
 - `RoadSegment`: eine befahrbare Richtung einer GraphHopper-Kante (von Kreuzung zu Kreuzung).
   - Stabile Id über Aktualisierungen, darauf zeigen `route_section` und `incident_segment` per Fremdschlüssel.
   - Fachlicher Schlüssel, eindeutig: `osm_way_id`, Start- und Endkoordinate (1e-7 Grad), Hash der Geometrie. GraphHopper liefert keine OSM-Knoten-Ids an den Kanten, daher Koordinaten.
-  - Attribute: `ref`, Name, Straßenklasse, Brücke, Tunnel, `link` (Auf- oder Abfahrt, OSM `highway=*_link`, `V35`), Länge, Geometrie `geometry(LineString, 4326)` mit GIST-Index.
+  - Attribute: `ref`, Name, Straßenklasse, Brücke, Tunnel, `link` (Auf- oder Abfahrt, OSM `highway=*_link`, `V37`), Länge, Geometrie `geometry(LineString, 4326)` mit GIST-Index.
   - `first_seen_version`, `last_seen_version`, `retired_at` (nicht mehr im aktuellen Extrakt).
 - `edge_mapping`: `edge_key` (Kante + Richtung) des aktuellen Graphen → `road_segment.id`.
   - n:1: identische Doppelkanten (Weg nutzt dasselbe Knotenpaar mehrfach) teilen ein Segment.
@@ -33,7 +33,7 @@
 - Graph-Verzeichnis je Version: `graph-dir/<extractVersionId>`, das alte wird nach dem Umschalten gelöscht. Schlägt ein Import fehl, bleibt der alte Graph in Gebrauch (Status `FAILED`).
 - Start: `RegionImport.loadOrImport` je Region auf einem eigenen virtuellen Thread. Graph der aktuellen Version wird geladen (`data-access=MMAP`: außerhalb des Heaps). Fehlt er oder passt er nicht (z. B. Profile), neuer Import. Routing antwortet bis `READY` mit 503.
   - **Geprüft 2026-11-05:** Eine geänderte Liste `graph.encoded_values` erzwingt in GraphHopper 11.1 keinen Import, und `road_class_link` steckt auch in Graphen, die ohne diesen Eintrag gebaut wurden. Beim Laden läuft `SegmentWriter` nicht, ein vorhandener Graph füllt `road_segment.link` also nicht.
-  - **Nach `V35`:** Hat keines der Segmente der Region `link` (`SegmentWriter.hasLinks`), lädt `loadOrImport` den Graphen nicht, sondern importiert einmal neu; die Segment-Ids bleiben. Grenzen: Eine Region ganz ohne Auf- und Abfahrten importiert bei jedem Start. Schlägt dieser Import fehl, hat die Region bis zum nächsten Start keinen Graphen (503), weil der alte nicht geladen war. Das alte Graph-Verzeichnis und sein `edge_mapping` bleiben liegen, weil beim Start kein vorheriger Graph bekannt ist.
+  - **Nach `V37`:** Hat keines der Segmente der Region `link` (`SegmentWriter.hasLinks`), lädt `loadOrImport` den Graphen nicht, sondern importiert einmal neu; die Segment-Ids bleiben. Grenzen: Eine Region ganz ohne Auf- und Abfahrten importiert bei jedem Start. Schlägt dieser Import fehl, hat die Region bis zum nächsten Start keinen Graphen (503), weil der alte nicht geladen war. Das alte Graph-Verzeichnis und sein `edge_mapping` bleiben liegen, weil beim Start kein vorheriger Graph bekannt ist.
 - Rhythmus: geplant wöchentlich (`refresh-cron`). Im Spike blieben in Wellington-Zentrum nach 6 Monaten 87,8 % der Segmente erhalten, fast alle Abgänge durch neue oder verschobene Kreuzungen. Die Neuplanung nach `NetworkRefreshed` ist daher Pflicht.
 - Erster Umsetzungsschritt: nur Erstimport, Aktualisierung folgt.
 
