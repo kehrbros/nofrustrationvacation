@@ -1,9 +1,11 @@
 name: Frontend
 
+# main is tested by "Build and deploy" (build.yml), which calls this workflow before building the images.
 on:
   push:
-    branches: ['**']
+    branches-ignore: [main]
   pull_request:
+  workflow_call:
 
 jobs:
   test:
@@ -21,29 +23,3 @@ jobs:
       - run: npm ci
       - run: npm run generate:api
       - run: npm test
-
-  publish:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
-    needs: test
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set image name
-        id: image
-        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}/frontend" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ${{ steps.image.outputs.name }}:dev
-            ${{ steps.image.outputs.name }}:sha-${{ github.sha }}

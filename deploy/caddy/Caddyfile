@@ -1,0 +1,19 @@
+# Reverse proxy of the Swarm stack, see Docs/deployment.md#tls-caddy.
+# Caddy obtains and renews the Let's Encrypt certificate for DOMAIN itself (ports 80 and 443 reachable from the
+# internet, DNS record of DOMAIN pointing to the server) and redirects http to https.
+# Frontend and backend share the one origin https://DOMAIN, Caddy routes by path.
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Backend: REST API, MCP endpoint, IdP (OAuth2/OIDC endpoints, metadata, login, registration, consent and the
+	# connected applications of the user) and the OpenAPI document/Swagger UI. Frontend routes must not use these paths.
+	@backend path /api/* /mcp /mcp/* /oauth2/* /.well-known/* /userinfo /connect/* /login /logout /register /account/* /error /swagger-ui* /v3/api-docs*
+	handle @backend {
+		reverse_proxy backend:8080
+	}
+
+	# Everything else: frontend (nginx with the Vite build and the PWA)
+	handle {
+		reverse_proxy frontend:80
+	}
+}

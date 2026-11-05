@@ -6,7 +6,7 @@ import Sheet from '../components/Sheet';
 import AccommodationFields from './AccommodationFields';
 import { isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
-import { emptyForm, validateForm, type AccommodationForm, type FormField } from './form';
+import { emptyForm, validateForm, withStayDefaults, type AccommodationForm, type FormField, type StayDefaults } from './form';
 import type { BookingSource } from './model';
 import { readConfirmation } from './readConfirmation';
 import { clearShared, readShared, type SharedContent } from './shareTarget';
@@ -22,6 +22,10 @@ interface Props {
   /** Edit an existing booking: starts with the filled form. */
   initialForm?: AccommodationForm;
   submitLabel?: string;
+  /** Dates of the stay at the stop and travelers of the trip, fill what is still empty. */
+  defaults?: StayDefaults;
+  /** The stop: name suggestions near it come first. */
+  near?: { latitude: number; longitude: number } | null;
 }
 
 /**
@@ -29,9 +33,9 @@ interface Props {
  * assistant, together with content shared to the app and not yet saved), manual input. Every way ends in the same
  * form the user checks before saving.
  */
-export default function AddBookingSheet({ onClose, onSubmit, context, initialForm, submitLabel }: Props) {
+export default function AddBookingSheet({ onClose, onSubmit, context, initialForm, submitLabel, defaults, near }: Props) {
   const [step, setStep] = useState<Step>(initialForm ? 'review' : 'choose');
-  const [form, setForm] = useState<AccommodationForm>(initialForm ?? emptyForm());
+  const [form, setForm] = useState<AccommodationForm>(initialForm ?? withStayDefaults(emptyForm(), defaults));
   const [filled, setFilled] = useState<Set<FormField>>(new Set());
   const [uncertain, setUncertain] = useState<Set<FormField>>(new Set());
   const [source, setSource] = useState<BookingSource>('MANUAL');
@@ -52,6 +56,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
   }, [initialForm]);
 
   const manual = () => {
+    setForm(withStayDefaults(emptyForm(), defaults));
     setSource('MANUAL');
     setFilled(new Set());
     setUncertain(new Set());
@@ -67,7 +72,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
       setReadError(result.message);
       return;
     }
-    setForm(result.filled.form);
+    setForm(withStayDefaults(result.filled.form, defaults));
     setFilled(result.filled.filled);
     setUncertain(result.filled.uncertain);
     setSource(shared ? 'SHARE' : 'DOCUMENT');
@@ -139,7 +144,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
               <EditOutlined aria-hidden="true" />
               <span className="va-column">
                 <span className="va-option-title">Manuell eingeben</span>
-                <span className="va-small va-muted">Name, Zeitraum und Buchungsnummer selbst eintragen.</span>
+                <span className="va-small va-muted">Namen eintippen und Vorschlag wählen, den Rest ergänzen wir.</span>
               </span>
             </button>
             <div className="va-choice va-choice-off" aria-disabled="true">
@@ -175,7 +180,14 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
               <span className="va-ai-mark">✦</span> aus der Bestätigung gelesen. <strong>Gelb markierte Felder bitte prüfen.</strong>
             </p>
           )}
-          <AccommodationFields form={form} onChange={setForm} filled={filled} uncertain={uncertain} autoLocate={source !== 'MANUAL'} />
+          <AccommodationFields
+            form={form}
+            onChange={setForm}
+            filled={filled}
+            uncertain={uncertain}
+            autoLocate={source !== 'MANUAL'}
+            near={near}
+          />
           {error && <Alert type="error" showIcon message={error} />}
         </>
       )}

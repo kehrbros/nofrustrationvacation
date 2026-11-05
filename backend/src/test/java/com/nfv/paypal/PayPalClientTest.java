@@ -97,6 +97,54 @@ class PayPalClientTest {
     }
 
     @Test
+    void authorizeOrderHasItsOwnReturnUrl() {
+        expectAppToken();
+        server.expect(requestTo(API + "/v2/checkout/orders"))
+                .andExpect(jsonPath("$.intent").value("AUTHORIZE"))
+                .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url")
+                        .value("http://localhost:5173/reisen/1/buchungen/2/alternativen?reservierung=3"))
+                .andRespond(withSuccess("""
+                        {"id":"O-2","status":"PAYER_ACTION_REQUIRED","links":[
+                          {"href":"https://www.sandbox.paypal.com/checkoutnow?token=O-2","rel":"payer-action"}]}""",
+                        MediaType.APPLICATION_JSON));
+
+        PayPalCheckout.CheckoutOrder order = checkout.createOrder("stay-3", new PayPalAmount("EUR", new BigDecimal("180.00")),
+                "Hotel", PayPalCheckout.Intent.AUTHORIZE,
+                URI.create("http://localhost:5173/reisen/1/buchungen/2/alternativen?reservierung=3"),
+                URI.create("http://localhost:5173/reisen/1/buchungen/2/alternativen?abgebrochen=1"));
+
+        assertThat(order.orderId()).isEqualTo("O-2");
+        server.verify();
+    }
+
+    @Test
+    void authorizationIsCapturedOrVoidedAndCapturesRefunded() {
+        expectAppToken();
+        server.expect(requestTo(API + "/v2/checkout/orders/O-2/authorize"))
+                .andExpect(header("PayPal-Request-Id", "authorize-3"))
+                .andRespond(withSuccess("""
+                        {"id":"O-2","status":"COMPLETED","purchase_units":[{"payments":{"authorizations":[
+                          {"id":"A-1","status":"CREATED","amount":{"currency_code":"EUR","value":"180.00"}}]}}]}""",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "/v2/payments/authorizations/A-1/capture"))
+                .andExpect(jsonPath("$.final_capture").value(true))
+                .andRespond(withSuccess("{\"id\":\"C-9\",\"status\":\"COMPLETED\"}", MediaType.APPLICATION_JSON));
+        server.expect(requestTo(API + "/v2/payments/authorizations/A-1/void"))
+                .andRespond(withStatus(HttpStatus.UNPROCESSABLE_CONTENT).contentType(MediaType.APPLICATION_JSON).body("""
+                        {"name":"UNPROCESSABLE_ENTITY","details":[{"issue":"AUTHORIZATION_ALREADY_VOIDED"}]}"""));
+        server.expect(requestTo(API + "/v2/payments/captures/C-9/refund"))
+                .andRespond(withSuccess("{\"id\":\"R-1\",\"status\":\"COMPLETED\"}", MediaType.APPLICATION_JSON));
+
+        PayPalCheckout.Payment authorization = checkout.authorize("O-2", "authorize-3");
+        assertThat(authorization.id()).isEqualTo("A-1");
+        assertThat(authorization.amount()).isEqualTo(new PayPalAmount("EUR", new BigDecimal("180.00")));
+        assertThat(checkout.captureAuthorization("A-1", "capture-3").isCompleted()).isTrue();
+        checkout.voidAuthorization("A-1", "void-3");
+        assertThat(checkout.refundCapture("C-9", "refund-3").isCompleted()).isTrue();
+        server.verify();
+    }
+
+    @Test
     void captureReturnsTheCapturedAmount() {
         expectAppToken();
         server.expect(requestTo(API + "/v2/checkout/orders/O-1/capture"))

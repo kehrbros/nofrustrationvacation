@@ -3,6 +3,9 @@ package com.nfv.bookings.api;
 import com.nfv.bookings.dto.AccommodationBookingInputDto;
 import com.nfv.bookings.dto.AccommodationDraftDto;
 import com.nfv.bookings.dto.AccommodationDto;
+import com.nfv.bookings.dto.AccommodationFactsDto;
+import com.nfv.bookings.dto.AccommodationQueryDto;
+import com.nfv.bookings.dto.AccommodationSuggestionDto;
 import com.nfv.bookings.dto.AssistantStatusDto;
 import com.nfv.bookings.dto.BookingDto;
 import com.nfv.bookings.entities.AccommodationDetails;
@@ -10,6 +13,9 @@ import com.nfv.bookings.entities.Booking;
 import com.nfv.bookings.entities.BookingSource;
 import com.nfv.bookings.logic.AccommodationDraft;
 import com.nfv.bookings.logic.AccommodationExtractor;
+import com.nfv.bookings.logic.AccommodationFacts;
+import com.nfv.bookings.logic.AccommodationLookup;
+import com.nfv.bookings.logic.AccommodationQuery;
 import com.nfv.bookings.logic.BookingLogic;
 import com.nfv.bookings.logic.BookingView;
 import com.nfv.bookings.logic.NewAccommodationBooking;
@@ -28,6 +34,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,6 +50,7 @@ import java.util.List;
 public class BookingController {
     private final BookingLogic bookingLogic;
     private final AccommodationExtractor extractor;
+    private final AccommodationLookup lookup;
 
     @Operation(summary = "Bookings of a trip", description = "All bookings at the stops of the trip, ascending by start.")
     @GetMapping("/trips/{tripId}/bookings")
@@ -98,6 +106,34 @@ public class BookingController {
                 draft.price(), draft.currency(), draft.cancellationDeadline(), draft.uncertainFields());
     }
 
+    @Operation(summary = "Suggest accommodations by name",
+            description = "LiteAPI hotels whose name contains the query (at least 3 characters). With latitude and "
+                    + "longitude (the stop) those within 30 km come first, nearest first. Empty if LiteAPI is not "
+                    + "configured or not reachable.")
+    @GetMapping("/bookings/accommodation-suggestions")
+    public List<AccommodationSuggestionDto> suggestAccommodations(@RequestParam String query,
+                                                                  @RequestParam(required = false) @Nullable Double latitude,
+                                                                  @RequestParam(required = false) @Nullable Double longitude) {
+        return lookup.suggest(query, latitude, longitude).stream()
+                .map(s -> new AccommodationSuggestionDto(s.hotelId(), s.name(), s.addressLine(), s.countryCode(),
+                        s.latitude(), s.longitude(), s.stars()))
+                .toList();
+    }
+
+    @Operation(summary = "Look up contact and house rules of an accommodation",
+            description = "From the LiteAPI hotel data (with hotelId); missing fields are looked up on the web by the "
+                    + "assistant (OpenAI web search, only name, address and coordinates of the accommodation are "
+                    + "sent). Counts towards the assistant's rate limit when it is asked.")
+    @PostMapping("/bookings/accommodation-facts")
+    public AccommodationFactsDto lookUpAccommodation(@AuthenticationPrincipal CurrentUser user,
+                                                     @RequestBody AccommodationQueryDto query) {
+        AccommodationFacts facts = lookup.facts(user.appUserId(), new AccommodationQuery(query.hotelId(), query.name(),
+                query.addressLine(), query.countryCode(), query.latitude(), query.longitude()));
+        return new AccommodationFactsDto(facts.addressLine(), facts.countryCode(), facts.phone(), facts.email(),
+                facts.website(), facts.checkInFrom(), facts.checkInUntil(), facts.checkOutUntil(), facts.fromLiteApi(),
+                facts.fromAssistant(), facts.researched(), facts.sources());
+    }
+
     private static NewAccommodationBooking toInput(AccommodationBookingInputDto dto) {
         return new NewAccommodationBooking(dto.source() == null ? BookingSource.MANUAL : dto.source(), dto.name(),
                 dto.addressLine(), dto.countryCode(), dto.latitude(), dto.longitude(), dto.placeRef(), dto.phone(),
@@ -106,7 +142,7 @@ public class BookingController {
                 dto.guests(), dto.rooms(), dto.price(), dto.currency(), dto.cancellationDeadline(), dto.notes());
     }
 
-    private static BookingDto toDto(BookingView view) {
+    static BookingDto toDto(BookingView view) {
         Booking booking = view.booking();
         AccommodationDetails details = view.accommodation();
         AccommodationDto accommodation = details == null ? null : new AccommodationDto(details.getName(),

@@ -67,6 +67,7 @@ function toDetail(dto: TripDetailDto): TripDetail {
     startAt: dto.startAt!,
     endAt: dto.endAt!,
     phase: dto.phase ?? 'UPCOMING',
+    travelers: dto.travelers ?? null,
     hasCoverImage: dto.hasCoverImage ?? false,
     stops: (dto.stops ?? []).map(toStop).sort((a, b) => a.position - b.position),
     routes: (dto.routes ?? []).map(toRoute),

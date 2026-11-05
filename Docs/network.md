@@ -94,7 +94,7 @@
 - **Ablage auf jedem Host** (Entwicklerrechner, Server) außerhalb des Repos unter `~/data`:
   - `~/data/osm/new-zealand-latest.osm.pbf`: Extrakt, von Hand kopiert.
   - `~/data/graphs/nz/<extractVersionId>`: GraphHopper-Graph, entsteht beim ersten Start (einige Minuten), danach nur geladen.
-  - Ohne Docker (`mvn spring-boot:run`, IDE) gilt `${user.home}/data`. Docker bindet `~/data/osm` (nur lesend) und `~/data/graphs` nach `/data` ein und setzt `NFV_DATA_DIR=/data`. Anderer Host-Pfad über `NFV_HOST_DATA_DIR`, siehe [deployment.md](deployment.md).
+  - Ohne Docker (`mvn spring-boot:run`, IDE) gilt `${user.home}/data`. Docker bindet `~/data/osm` (nur lesend) und `~/data/graphs` nach `/data` ein und setzt `NFV_DATA_DIR=/data`. Anderer Host-Pfad über `NFV_HOST_DATA_DIR`; im Swarm-Stack ist er Pflicht (auf dem Server `/home/deploy/data`), siehe [deployment.md](deployment.md).
 - Bis `ExtractSource` von Geofabrik lädt, Extrakt von Hand holen oder kopieren:
 
   ```bash

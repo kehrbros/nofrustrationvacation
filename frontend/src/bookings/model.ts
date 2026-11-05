@@ -103,3 +103,31 @@ export interface AccommodationBookingInput {
   cancellationDeadline: string | null;
   notes: string | null;
 }
+
+/** Accommodation found by name in the LiteAPI hotel data. */
+export interface AccommodationSuggestion {
+  hotelId: string;
+  name: string;
+  addressLine: string | null;
+  countryCode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  stars: number | null;
+}
+
+/** Contact and house rules of an accommodation; times as HH:MM:SS, local at the place. */
+export interface AccommodationFacts {
+  addressLine: string | null;
+  countryCode: string | null;
+  phone: string | null;
+  email: string | null;
+  website: string | null;
+  checkInFrom: string | null;
+  checkInUntil: string | null;
+  checkOutUntil: string | null;
+  /** Field names by origin: LiteAPI hotel data or found on the web by the assistant. */
+  fromLiteApi: string[];
+  fromAssistant: string[];
+  researched: boolean;
+  sources: string[];
+}

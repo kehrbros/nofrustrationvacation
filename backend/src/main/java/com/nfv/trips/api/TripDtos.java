@@ -36,7 +36,7 @@ class TripDtos {
     TripDetailDto detail(long appUserId, long tripId) {
         Trip trip = tripLogic.get(appUserId, tripId);
         return new TripDetailDto(trip.getId(), trip.getName(), trip.getStartAt(), trip.getEndAt(),
-                trip.phaseAt(OffsetDateTime.now(clock)), tripLogic.coverImage(appUserId, tripId).isPresent(),
+                trip.phaseAt(OffsetDateTime.now(clock)), trip.getTravelers(), tripLogic.coverImage(appUserId, tripId).isPresent(),
                 tripLogic.stops(appUserId, tripId).stream().map(TripDtos::stop).toList(),
                 tripLogic.routes(appUserId, tripId).stream().map(TripDtos::route).toList());
     }

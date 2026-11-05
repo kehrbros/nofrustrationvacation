@@ -14,6 +14,7 @@ export default function NewTripPage() {
   const [name, setName] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [travelers, setTravelers] = useState('');
   const [cover, setCover] = useState<'generate' | 'upload'>('generate');
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +32,10 @@ export default function NewTripPage() {
       setError('Das Ende liegt vor dem Beginn.');
       return;
     }
+    if (travelers.trim() && !/^([1-9]|[1-9]\d)$/.test(travelers.trim())) {
+      setError('Reisende: bitte eine Zahl von 1 bis 99.');
+      return;
+    }
     if (cover === 'upload' && file && file.size > MAX_COVER_BYTES) {
       setError('Das Foto ist größer als 5 MB.');
       return;
@@ -38,7 +43,12 @@ export default function NewTripPage() {
     setSaving(true);
     setError(null);
     try {
-      const trip = await createTrip({ name: name.trim(), startAt, endAt });
+      const trip = await createTrip({
+        name: name.trim(),
+        startAt,
+        endAt,
+        travelers: travelers.trim() ? Number(travelers) : null,
+      });
       if (cover === 'upload' && file) {
         await uploadCoverImage(trip.id, file).catch(() => undefined);
       } else if (cover === 'generate') {
@@ -75,6 +85,20 @@ export default function NewTripPage() {
             <label htmlFor="trip-to">Bis</label>
             <input id="trip-to" type="date" value={to} min={from || undefined} required onChange={(event) => setTo(event.target.value)} />
           </div>
+        </div>
+        <div className="va-field">
+          <label htmlFor="trip-travelers">Reisende</label>
+          <input
+            id="trip-travelers"
+            type="number"
+            min={1}
+            max={99}
+            inputMode="numeric"
+            placeholder="z. B. 2"
+            value={travelers}
+            onChange={(event) => setTravelers(event.target.value)}
+          />
+          <span className="va-small va-muted">Wird bei Buchungen als Gästezahl vorgeschlagen.</span>
         </div>
 
         <fieldset className="va-fieldset">

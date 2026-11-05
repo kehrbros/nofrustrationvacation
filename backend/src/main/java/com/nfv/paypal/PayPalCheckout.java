@@ -9,12 +9,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Payments of payers to the platform with the Orders API v2 (intent {@code CAPTURE}): create an order, the payer
- * approves it at PayPal, then capture it, see Docs/paypal.md.
+ * Payments of payers to the platform with the Orders API v2: create an order, the payer approves it at PayPal, then
+ * capture it (intent {@code CAPTURE}), or authorize it and capture or void the authorization later (intent
+ * {@code AUTHORIZE}), see Docs/paypal.md.
  */
 @Component
 @RequiredArgsConstructor
@@ -22,15 +24,34 @@ public class PayPalCheckout {
     private final PayPalHttp http;
     private final PayPalProperties properties;
 
+    public boolean isConfigured() {
+        return properties.isConfigured();
+    }
+
+    /** @throws PayPalNotConfiguredException without client id and secret */
+    public void requireConfigured() {
+        http.requireConfigured();
+    }
+
     /**
      * @param reference our id of the payment, stored as {@code custom_id} and used for idempotency: repeating the
      *                  call with the same reference returns the same order
      * @return the order, the payer has to be sent to {@link CheckoutOrder#approveUrl()}
      */
     public CheckoutOrder createOrder(String reference, PayPalAmount amount, String description) {
+        return createOrder(reference, amount, description, Intent.CAPTURE, properties.checkoutReturnUrl(),
+                properties.checkoutCancelUrl());
+    }
+
+    /**
+     * Order with its own return and cancel URL. With {@link Intent#AUTHORIZE} the money is only reserved after
+     * approval ({@link #authorize}) and moved later ({@link #captureAuthorization}) or released ({@link #voidAuthorization}).
+     */
+    public CheckoutOrder createOrder(String reference, PayPalAmount amount, String description, Intent intent,
+                                     URI returnUrl, URI cancelUrl) {
         http.requireConfigured();
         var body = Map.of(
-                "intent", "CAPTURE",
+                "intent", intent.name(),
                 "purchase_units", List.of(Map.of(
                         "reference_id", reference,
                         "custom_id", reference,
@@ -40,8 +61,8 @@ public class PayPalCheckout {
                         "brand_name", properties.brandName(),
                         "user_action", "PAY_NOW",
                         "shipping_preference", "NO_SHIPPING",
-                        "return_url", properties.checkoutReturnUrl().toString(),
-                        "cancel_url", properties.checkoutCancelUrl().toString()))));
+                        "return_url", returnUrl.toString(),
+                        "cancel_url", cancelUrl.toString()))));
         OrderResponse order = http.post("/v2/checkout/orders", body, OrderResponse.class, "create-" + reference);
         String approveUrl = PayPalHttp.Link.find(order.links(), "payer-action");
         if (approveUrl == null) {
@@ -76,6 +97,61 @@ public class PayPalCheckout {
         return toState(http.get("/v2/checkout/orders/" + orderId, OrderResponse.class));
     }
 
+    /**
+     * Authorizes an approved order of intent {@code AUTHORIZE}: the money is reserved, not moved. An order authorized
+     * before is read instead.
+     *
+     * @throws PayPalRejectedException e.g. {@code ORDER_NOT_APPROVED} or {@code INSTRUMENT_DECLINED}
+     */
+    public Payment authorize(String orderId, String requestId) {
+        http.requireConfigured();
+        OrderResponse order;
+        try {
+            order = http.post("/v2/checkout/orders/" + orderId + "/authorize", Map.of(), OrderResponse.class, requestId);
+        } catch (PayPalRejectedException e) {
+            if (!"ORDER_ALREADY_AUTHORIZED".equals(e.getIssue())) {
+                throw e;
+            }
+            order = http.get("/v2/checkout/orders/" + orderId, OrderResponse.class);
+        }
+        PaymentResponse authorization = order.firstAuthorization();
+        if (authorization == null) {
+            throw new PayPalUnavailableException("PayPal order " + orderId + " has no authorization");
+        }
+        return authorization.toPayment();
+    }
+
+    /**
+     * Moves the authorized money (final capture). Repeating with the same {@code requestId} returns the first result.
+     *
+     * @return the capture, {@code COMPLETED} or {@code PENDING} means the money is (or will be) there
+     */
+    public Payment captureAuthorization(String authorizationId, String requestId) {
+        http.requireConfigured();
+        return http.post("/v2/payments/authorizations/" + authorizationId + "/capture", Map.of("final_capture", true),
+                PaymentResponse.class, requestId).toPayment();
+    }
+
+    /** Releases an authorization without moving money, e.g. when the booked service could not be delivered. */
+    public void voidAuthorization(String authorizationId, String requestId) {
+        http.requireConfigured();
+        try {
+            http.post("/v2/payments/authorizations/" + authorizationId + "/void", Map.of(), PaymentResponse.class,
+                    requestId);
+        } catch (PayPalRejectedException e) {
+            if (!"AUTHORIZATION_ALREADY_VOIDED".equals(e.getIssue())) {
+                throw e;
+            }
+        }
+    }
+
+    /** Refunds a capture in full. Repeating with the same {@code requestId} returns the first result. */
+    public Payment refundCapture(String captureId, String requestId) {
+        http.requireConfigured();
+        return http.post("/v2/payments/captures/" + captureId + "/refund", Map.of(), PaymentResponse.class, requestId)
+                .toPayment();
+    }
+
     private static OrderState toState(OrderResponse order) {
         Capture capture = order.firstCapture();
         PayPalAmount amount = capture == null || capture.amount() == null ? null
@@ -84,7 +160,36 @@ public class PayPalCheckout {
                 capture == null ? null : capture.status(), amount);
     }
 
+    public enum Intent {
+        /** Money is moved right after approval ({@link #capture}). */
+        CAPTURE,
+        /** Money is reserved after approval and moved or released later. */
+        AUTHORIZE
+    }
+
     public record CheckoutOrder(String orderId, String approveUrl) {
+    }
+
+    /**
+     * Authorization, capture or refund.
+     *
+     * @param status e.g. {@code CREATED} (authorization), {@code COMPLETED}, {@code PENDING}, {@code DECLINED}
+     */
+    public record Payment(String id, String status, @Nullable PayPalAmount amount) {
+        public boolean isCompleted() {
+            return "COMPLETED".equals(status);
+        }
+
+        public boolean isPending() {
+            return "PENDING".equals(status);
+        }
+    }
+
+    record PaymentResponse(String id, String status, @Nullable OrderAmount amount) {
+        Payment toPayment() {
+            return new Payment(id, status, amount == null ? null
+                    : new PayPalAmount(amount.currencyCode(), new BigDecimal(amount.value())));
+        }
     }
 
     /**
@@ -118,12 +223,20 @@ public class PayPalCheckout {
                     .flatMap(unit -> unit.payments().captures().stream())
                     .findFirst().orElse(null);
         }
+
+        @Nullable PaymentResponse firstAuthorization() {
+            if (purchaseUnits == null) return null;
+            return purchaseUnits.stream()
+                    .filter(unit -> unit.payments() != null && unit.payments().authorizations() != null)
+                    .flatMap(unit -> unit.payments().authorizations().stream())
+                    .findFirst().orElse(null);
+        }
     }
 
     record PurchaseUnit(@Nullable Payments payments) {
     }
 
-    record Payments(@Nullable List<Capture> captures) {
+    record Payments(@Nullable List<Capture> captures, @Nullable List<PaymentResponse> authorizations) {
     }
 
     record Capture(String id, String status, @Nullable OrderAmount amount) {

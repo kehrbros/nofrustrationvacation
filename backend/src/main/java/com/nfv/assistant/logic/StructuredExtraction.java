@@ -42,11 +42,24 @@ public class StructuredExtraction {
      */
     public JsonNode extract(long appUserId, String instructions, String schemaName, JsonNode schema,
                             List<ExtractionInput> inputs) {
+        return extract(appUserId, instructions, schemaName, schema, inputs, false);
+    }
+
+    /**
+     * Like {@link #extract(long, String, String, JsonNode, List)}; with {@code webSearch} the model may search the
+     * web (OpenAI's hosted web search tool) before answering, e.g. to look up public facts about a hotel. Only
+     * public data should go into such a request.
+     */
+    public JsonNode extract(long appUserId, String instructions, String schemaName, JsonNode schema,
+                            List<ExtractionInput> inputs, boolean webSearch) {
         if (!isAvailable()) {
             throw new AssistantUnavailableException("assistant is not configured");
         }
         rateLimiter.acquire(appUserId);
         ObjectNode request = request(instructions, schemaName, schema, inputs);
+        if (webSearch) {
+            request.putArray("tools").addObject().put("type", "web_search");
+        }
         String body;
         try {
             body = openAiRestClient.post().uri("/responses")

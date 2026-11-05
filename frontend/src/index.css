@@ -1054,3 +1054,25 @@ a.va-button {
   text-decoration: none;
   box-sizing: border-box;
 }
+
+/* Alternative accommodations (bookings/AlternativesSheet) */
+.va-alternatives {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.va-alternative {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  background: #ffffff;
+}
+.va-alternative-photo {
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: cover;
+}

@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import lombok.Getter;
 import org.hibernate.annotations.TimeZoneStorage;
 import org.hibernate.annotations.TimeZoneStorageType;
+import jakarta.annotation.Nullable;
 import org.hibernate.envers.Audited;
 
 import java.time.OffsetDateTime;
@@ -33,6 +34,8 @@ public class Trip extends AbstractEntity {
     private OffsetDateTime endAt;
     @Column(nullable = false)
     private OffsetDateTime createdAt;
+    /** Number of travelers (1–99), suggested as guests of bookings; null if not given. */
+    private @Nullable Integer travelers;
 
     protected Trip() {
     }
@@ -56,6 +59,13 @@ public class Trip extends AbstractEntity {
         }
         this.startAt = startAt;
         this.endAt = endAt;
+    }
+
+    public void changeTravelers(@Nullable Integer travelers) {
+        if (travelers != null && (travelers < 1 || travelers > 99)) {
+            throw new IllegalArgumentException("travelers must be between 1 and 99, was " + travelers);
+        }
+        this.travelers = travelers;
     }
 
     /** Where the trip stands at the given point in time. Compares instants, the offsets do not matter. */

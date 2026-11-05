@@ -1,4 +1,5 @@
-FROM node:22-alpine AS build
+# Build stage on the platform of the builder (no emulation), only the nginx stage is per target platform
+FROM --platform=$BUILDPLATFORM node:22-alpine AS build
 
 WORKDIR /app
 COPY package.json package-lock.json ./

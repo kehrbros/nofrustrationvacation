@@ -46,6 +46,8 @@ export interface TripDetail {
   startAt: string;
   endAt: string;
   phase: TripPhase;
+  /** Number of travelers, suggested as guests of bookings. */
+  travelers: number | null;
   hasCoverImage: boolean;
   stops: Stop[];
   routes: Route[];
@@ -68,6 +70,7 @@ export interface NewTrip {
   name: string;
   startAt: string;
   endAt: string;
+  travelers: number | null;
 }
 
 export interface NewStop {

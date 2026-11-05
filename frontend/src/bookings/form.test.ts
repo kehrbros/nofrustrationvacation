@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { emptyForm, formFromBooking, formFromDraft, toInput, validateForm } from './form';
+import { emptyForm, formFromBooking, formFromDraft, liteApiHotelId, stayTimes, toInput, validateForm, withStayDefaults } from './form';
 import { formatLocalDateTime, formatStay, nights } from './localTime';
 import type { AccommodationDraft, Booking } from './model';
 
@@ -39,9 +39,10 @@ describe('formFromDraft', () => {
     expect(form.cancellationDeadline).toBe('2027-07-10T18:00');
     expect(filled.has('reference')).toBe(true);
     expect(filled.has('phone')).toBe(false);
-    // check-in time missing: taken from the house rules and to be checked
-    expect(form.checkInTime).toBe('14:00');
-    expect([...uncertain].sort()).toEqual(['checkInTime', 'price']);
+    // times of the stay are not shown: no booked check-in time, the default stays, the house rules win in toInput
+    expect(form.checkInTime).toBe('15:00');
+    expect(form.checkInFrom).toBe('14:00');
+    expect([...uncertain].sort()).toEqual(['price']);
   });
 
   it('falls back to default times', () => {
@@ -72,6 +73,28 @@ describe('validateForm and toInput', () => {
     expect(validateForm({ ...valid, checkOutDate: '2027-07-11' })).toMatch(/nach der Anreise/);
     expect(validateForm({ ...valid, manageUrl: 'javascript:alert(1)' })).toMatch(/https/);
     expect(validateForm({ ...valid, price: 'viel' })).toMatch(/Preis/);
+  });
+});
+
+describe('stay defaults and times', () => {
+  it('fills empty dates and guests from stop and trip only', () => {
+    const form = withStayDefaults(emptyForm(), { checkInDate: '2027-07-12', checkOutDate: '2027-07-15', guests: 3 });
+    expect([form.checkInDate, form.checkOutDate, form.guests]).toEqual(['2027-07-12', '2027-07-15', '3']);
+    const read = withStayDefaults({ ...emptyForm(), checkInDate: '2027-08-01', guests: '2' }, { checkInDate: '2027-07-12', checkOutDate: '2027-07-15', guests: 3 });
+    // departure before the arrival read from the confirmation is not taken
+    expect([read.checkInDate, read.checkOutDate, read.guests]).toEqual(['2027-08-01', '', '2']);
+  });
+
+  it('takes the house rules as times of the stay, else the booked time or the default', () => {
+    expect(stayTimes(emptyForm())).toEqual({ checkIn: '15:00', checkOut: '10:00' });
+    expect(stayTimes({ ...emptyForm(), checkInFrom: '14:00', checkOutTime: '11:30', checkOutUntil: '' })).toEqual({ checkIn: '14:00', checkOut: '11:30' });
+    const input = toInput({ ...emptyForm(), name: 'X', checkInDate: '2027-07-12', checkOutDate: '2027-07-13', checkOutUntil: '12:00' }, 'MANUAL');
+    expect([input.checkIn, input.checkOut]).toEqual(['2027-07-12T15:00:00', '2027-07-13T12:00:00']);
+  });
+
+  it('reads the LiteAPI hotel id from the place reference', () => {
+    expect(liteApiHotelId({ ...emptyForm(), placeRef: 'liteapi:lp42' })).toBe('lp42');
+    expect(liteApiHotelId({ ...emptyForm(), placeRef: 'osm:node/1' })).toBeNull();
   });
 });
 

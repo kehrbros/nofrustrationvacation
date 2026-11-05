@@ -1,13 +1,15 @@
-import { CarOutlined, CopyOutlined, DeleteOutlined, EditOutlined, ExportOutlined, HomeOutlined } from '@ant-design/icons';
+import { CarOutlined, CopyOutlined, DeleteOutlined, EditOutlined, ExportOutlined, HomeOutlined, SwapOutlined } from '@ant-design/icons';
 import { Alert, Popconfirm } from 'antd';
-import { useState } from 'react';
-import { useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
 import { useTripContext } from '../trips/tripContext';
 import AddBookingSheet from './AddBookingSheet';
+import { fetchAlternativesStatus } from './alternativesApi';
 import { changeAccommodationBooking, deleteBooking } from './bookingsApi';
 import { formFromBooking, toInput } from './form';
+import { stopPoint } from './stayDefaults';
 import { formatLocalDateTime, shortTime } from './localTime';
 import { checkInLabel, checkOutLabel, directionsUrl, priceLabel, stayLabel } from './text';
 
@@ -19,6 +21,11 @@ export default function BookingSheet() {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [alternativesAvailable, setAlternativesAvailable] = useState(false);
+
+  useEffect(() => {
+    fetchAlternativesStatus().then((status) => setAlternativesAvailable(status.searchAvailable));
+  }, []);
 
   if (!booking) {
     return (
@@ -36,6 +43,7 @@ export default function BookingSheet() {
         onClose={() => setEditing(false)}
         context={stop ? `Stop ${stop.name}` : undefined}
         initialForm={formFromBooking(booking)}
+        near={stopPoint(stop)}
         submitLabel="Änderungen speichern"
         onSubmit={async (form) => {
           await changeAccommodationBooking(booking.id, toInput(form, booking.source));
@@ -102,13 +110,13 @@ export default function BookingSheet() {
       <dl className="va-facts">
         {checkInLabel(booking) && (
           <>
-            <dt>Check-in</dt>
+            <dt>Anreise</dt>
             <dd>{checkInLabel(booking)}</dd>
           </>
         )}
         {checkOutLabel(booking) && (
           <>
-            <dt>Check-out</dt>
+            <dt>Abreise</dt>
             <dd>{checkOutLabel(booking)}</dd>
           </>
         )}
@@ -177,6 +185,11 @@ export default function BookingSheet() {
         )}
       </dl>
       <div className="va-actions">
+        {accommodation && alternativesAvailable && booking.status !== 'CANCELLED' && (
+          <Link className="va-button va-button-accent va-block" to="alternativen">
+            <SwapOutlined aria-hidden="true" /> Alternative suchen
+          </Link>
+        )}
         {booking.manageUrl && (
           <a className="va-button va-button-outline va-block" href={booking.manageUrl} target="_blank" rel="noopener noreferrer">
             <ExportOutlined aria-hidden="true" /> {booking.provider ? `Bei ${booking.provider} öffnen` : 'Buchung öffnen'}

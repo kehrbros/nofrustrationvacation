@@ -57,7 +57,8 @@ public class TripController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public TripDetailDto createTrip(@AuthenticationPrincipal CurrentUser user, @RequestBody CreateTripDto trip) {
-        Trip created = tripLogic.create(user.appUserId(), trip.name(), trip.startAt(), trip.endAt());
+        Trip created = tripLogic.create(user.appUserId(), trip.name(), trip.startAt(), trip.endAt(),
+                trip.travelers());
         return tripDtos.detail(user.appUserId(), created.getId());
     }
 
@@ -67,11 +68,11 @@ public class TripController {
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Change name and period of a trip", description = "Routes are not planned again.")
+    @Operation(summary = "Change name, period and travelers of a trip", description = "Routes are not planned again.")
     @PutMapping("/{tripId}")
     public TripDetailDto updateTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
                                     @RequestBody UpdateTripDto trip) {
-        tripLogic.update(user.appUserId(), tripId, trip.name(), trip.startAt(), trip.endAt());
+        tripLogic.update(user.appUserId(), tripId, trip.name(), trip.startAt(), trip.endAt(), trip.travelers());
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
