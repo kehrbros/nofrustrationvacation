@@ -1,10 +1,12 @@
 package com.nfv.input.data;
 
 import com.nfv.input.entities.Event;
+import jakarta.annotation.Nullable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,6 +24,20 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     /** Latest event of the same event at the source that led to an incident. */
     Optional<Event> findFirstBySourceIdAndSubjectIdAndIncidentIdIsNotNullOrderByIdDesc(long sourceId,
                                                                                         String subjectId);
+
+    /** State of an event, read from the database without the entity: another thread may just have processed it. */
+    interface EventState {
+        String getExternalId();
+
+        @Nullable OffsetDateTime getProcessedAt();
+
+        @Nullable Long getIncidentId();
+
+        @Nullable String getProcessingNote();
+    }
+
+    /** State of the latest event of the same event at the source. */
+    Optional<EventState> findFirstBySourceIdAndSubjectIdOrderByIdDesc(long sourceId, String subjectId);
 
     /** Incidents the source has led to. */
     @Query("SELECT DISTINCT e.incidentId FROM Event e WHERE e.source.id = :sourceId AND e.incidentId IS NOT NULL")

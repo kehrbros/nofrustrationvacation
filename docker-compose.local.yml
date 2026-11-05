@@ -51,6 +51,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       # Empty: no search for alternative accommodations (LiteAPI, sandbox keys start with sand_)
       LITEAPI_API_KEY: ${LITEAPI_API_KEY:-}
+      # Test endpoints /api/v1/test/traffic-events, see Docs/traffic-feed.md#testquelle-manual
+      NFV_MANUAL_SOURCE_ENABLED: ${NFV_MANUAL_SOURCE_ENABLED:-false}
       # Road network data mounted below, see Docs/network.md#konfiguration
       NFV_DATA_DIR: /data
       NFV_NETWORK_IMPORT_ON_START: ${NFV_NETWORK_IMPORT_ON_START:-true}

@@ -13,8 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Creates the account "test" with password "test" on startup if no account exists yet. Only the login account
- * is created; the {@code AppUser} follows on the first authenticated request like for any other account.
+ * Creates the account "test" with password "test" and the role {@code tester} (test endpoints, see
+ * Docs/traffic-feed.md#testquelle-manual) on startup if no account exists yet. Only the login account is created; the
+ * {@code AppUser} follows on the first authenticated request like for any other account. The role is only granted here,
+ * not to an existing account of that name: anyone can register, so the name alone proves nothing.
  * Disable with {@code nfv.auth.test-account.enabled=false}.
  */
 @Slf4j
@@ -24,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class TestAccountInitializer implements ApplicationRunner {
     static final String USERNAME = "test";
     static final String PASSWORD = "test";
+    static final String TESTER_ROLE = "tester";
 
     private final AuthAccountRepository accountRepository;
     private final PasswordEncoder passwordEncoder;
@@ -34,7 +37,9 @@ public class TestAccountInitializer implements ApplicationRunner {
         if (accountRepository.count() > 0) {
             return;
         }
-        accountRepository.save(new AuthAccount(USERNAME, passwordEncoder.encode(PASSWORD), null));
+        AuthAccount account = new AuthAccount(USERNAME, passwordEncoder.encode(PASSWORD), null);
+        account.grant(TESTER_ROLE);
+        accountRepository.save(account);
         log.info("No account found, created test account '{}'.", USERNAME);
     }
 }

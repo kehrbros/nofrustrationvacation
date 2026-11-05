@@ -56,6 +56,7 @@ jobs:
           DOMAIN: ${{ vars.DOMAIN }}
           NFV_HOST_DATA_DIR: ${{ vars.NFV_HOST_DATA_DIR }}
           PAYPAL_ENVIRONMENT: ${{ vars.PAYPAL_ENVIRONMENT }}
+          NFV_MANUAL_SOURCE_ENABLED: ${{ vars.NFV_MANUAL_SOURCE_ENABLED }}
         run: |
           set -euo pipefail
 

@@ -45,4 +45,8 @@ public class AuthAccount {
         this.createdAt = OffsetDateTime.now();
         this.roles.add(DEFAULT_ROLE);
     }
+
+    public void grant(String role) {
+        this.roles.add(role);
+    }
 }

@@ -1,11 +1,13 @@
 package com.nfv.incidents.logic;
 
+import com.nfv.incidents.data.ConsequenceRepository;
 import com.nfv.incidents.data.IncidentRepository;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.incidents.entities.IncidentType;
 import com.nfv.network.logic.GeoLine;
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.RoutingUnavailableException;
+import com.nfv.network.logic.SegmentInfo;
 import com.nfv.network.logic.SegmentMatching;
 import com.nfv.network.logic.SegmentQueries;
 import com.nfv.trips.data.RouteSectionRepository;
@@ -16,11 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Entry point for incidents reported by sources ({@code input}): locates them on road segments and creates or changes
@@ -37,6 +43,7 @@ public class IncidentReporting {
 
     private final IncidentLogic incidentLogic;
     private final IncidentRepository incidentRepository;
+    private final ConsequenceRepository consequenceRepository;
     private final SegmentMatching segmentMatching;
     private final SegmentQueries segmentQueries;
     private final RouteSectionRepository routeSectionRepository;
@@ -44,11 +51,13 @@ public class IncidentReporting {
     private final double pointRadiusMeters;
 
     public IncidentReporting(IncidentLogic incidentLogic, IncidentRepository incidentRepository,
+                             ConsequenceRepository consequenceRepository,
                              SegmentMatching segmentMatching, SegmentQueries segmentQueries,
                              RouteSectionRepository routeSectionRepository, Clock clock,
                              @Value("${nfv.incidents.point-radius-meters:50}") double pointRadiusMeters) {
         this.incidentLogic = incidentLogic;
         this.incidentRepository = incidentRepository;
+        this.consequenceRepository = consequenceRepository;
         this.segmentMatching = segmentMatching;
         this.segmentQueries = segmentQueries;
         this.routeSectionRepository = routeSectionRepository;
@@ -98,6 +107,30 @@ public class IncidentReporting {
                 ? incidentLogic.change(previous.get().getId(), details, segmentIds)
                 : incidentLogic.create(details, segmentIds);
         return ReportOutcome.incident(incident.getId());
+    }
+
+    /** The incident with its roads and consequences, empty if it does not exist. */
+    @Transactional(readOnly = true)
+    public Optional<IncidentOverview> overview(long incidentId) {
+        return incidentRepository.findById(incidentId).map(incident -> {
+            Map<List<String>, List<SegmentInfo>> byRoad = segmentQueries.segments(incident.getSegmentIds()).values()
+                    .stream().collect(Collectors.groupingBy(segment -> Arrays.asList(segment.ref(), segment.name())));
+            List<IncidentOverview.Road> roads = byRoad.values().stream()
+                    .map(segments -> new IncidentOverview.Road(segments.getFirst().ref(), segments.getFirst().name(),
+                            segments.size(), segments.stream().mapToDouble(SegmentInfo::lengthMeters).sum()))
+                    .sorted(Comparator.comparingDouble(IncidentOverview.Road::lengthMeters).reversed())
+                    .toList();
+            List<IncidentOverview.Effect> effects = consequenceRepository.findByIncidentId(incidentId).stream()
+                    .map(c -> new IncidentOverview.Effect(c.getRouteId(), c.getCategory(), c.getMatch(), c.getImpact(),
+                            c.getAssessedDelay(), c.isDelayAssumed(), c.getPassageAt(), c.getExpectedArrival(),
+                            c.getDeadline(), c.getWindowStart(), c.getWindowEnd()))
+                    .toList();
+            return new IncidentOverview(incident.getId(), incident.getType(), incident.impact(),
+                    incident.getDescription(), incident.getValidFrom(), incident.getValidTo(),
+                    incident.getExpectedDelay(), incident.getAssumedDelay(), incident.isTimesUnconfirmed(),
+                    incident.getVehicleScope(), incident.timeWindows(), incident.getSegmentIds().size(), roads,
+                    effects);
+        });
     }
 
     /** Whether a planned route passes the region during {@code [from, to]}. */
