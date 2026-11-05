@@ -132,7 +132,11 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     networks:
-      - nfv
+      nfv:
+        aliases:
+          # The backend calls its own public URL (OIDC issuer discovery). With the alias Docker DNS resolves DOMAIN
+          # to Caddy inside the overlay network, no hairpin through the public IP and the host firewall
+          - ${DOMAIN:?DOMAIN must be set, see Docs/deployment.md}
     deploy:
       replicas: 1
       # Host ports and the certificate volume are local to a node
