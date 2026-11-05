@@ -95,7 +95,7 @@ final class NztaReader {
         return new TrafficReport(type(impact, description, eventType), "Resolved".equals(text(event, "status")),
                 validFrom, validTo(event), roadRef, null, location(text(event, "geometry")),
                 null, assumedDelay(impact, description), title.isEmpty() ? "NZTA" : title,
-                description(messageText, locations(event.get("locations"))), messageText, null, linkOnly);
+                description(messageText, locations(event.get("locations"))), messageText, null, linkOnly, List.of(), null);
     }
 
     /** Type rules, first match wins. */

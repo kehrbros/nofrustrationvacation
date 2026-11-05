@@ -1,12 +1,15 @@
 package com.nfv.input.logic;
 
 import com.nfv.incidents.entities.IncidentType;
+import com.nfv.incidents.entities.VehicleScope;
 import com.nfv.incidents.logic.IncidentLocation;
+import com.nfv.incidents.logic.TimeWindow;
 import com.nfv.incidents.logic.TravelDirection;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /**
  * One event of a source read deterministically from its payload ({@link TrafficSource#read}), without network or
@@ -24,11 +27,16 @@ import java.time.OffsetDateTime;
  * @param messageText  all free texts, the same as {@link SourceItem#messageText()}
  * @param sourceUrl    page of the event at the source, if any
  * @param linkOnly     the event concerns only a ramp or link, not the road it belongs to
+ * @param windows      periods the source gives as data, used without an enrichment; empty: none given
+ * @param vehicleScope vehicles the source gives as data, used without an enrichment; {@code null}: not stated
  */
 public record TrafficReport(IncidentType type, boolean resolved, OffsetDateTime validFrom,
                             @Nullable OffsetDateTime validTo, @Nullable String roadRef,
                             @Nullable TravelDirection direction, @Nullable IncidentLocation location,
                             @Nullable Duration delay, @Nullable Duration assumedDelay, String title,
                             @Nullable String description, @Nullable String messageText, @Nullable String sourceUrl,
-                            boolean linkOnly) {
+                            boolean linkOnly, List<TimeWindow> windows, @Nullable VehicleScope vehicleScope) {
+    public TrafficReport {
+        windows = List.copyOf(windows);
+    }
 }

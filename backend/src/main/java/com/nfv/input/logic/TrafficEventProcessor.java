@@ -133,7 +133,7 @@ public class TrafficEventProcessor {
         // ending never asks the model
         Optional<MessageEnrichment.Enrichment> enriched = ended ? Optional.empty()
                 : enrichment.enrich(source.get(), report);
-        if (!ended && enriched.isEmpty() && type != IncidentType.OTHER
+        if (!ended && enriched.isEmpty() && report.windows().isEmpty() && type != IncidentType.OTHER
                 && mentionsTimesOfDay(report.messageText())) {
             timesUnconfirmed = type == IncidentType.CLOSURE;
             type = IncidentType.OTHER;
@@ -148,9 +148,9 @@ public class TrafficEventProcessor {
         ReportOutcome outcome = incidentReporting.report(new ReportedIncident(type, description, report.validFrom(),
                 report.validTo(), report.delay(), report.assumedDelay(), report.location(), report.roadRef(),
                 report.direction(), source.get().networkRegion(), ended,
-                enriched.map(MessageEnrichment.Enrichment::windows).orElse(List.of()),
-                enriched.map(MessageEnrichment.Enrichment::vehicleScope).orElse(null), timesUnconfirmed,
-                report.linkOnly()), previous);
+                enriched.map(MessageEnrichment.Enrichment::windows).orElse(report.windows()),
+                enriched.map(MessageEnrichment.Enrichment::vehicleScope).orElse(report.vehicleScope()),
+                timesUnconfirmed, report.linkOnly()), previous);
         if (outcome.reason() == ReportOutcome.Reason.ROUTING_UNAVAILABLE) {
             return null;
         }

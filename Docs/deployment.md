@@ -61,6 +61,7 @@
 - `VITE_OIDC_AUTHORITY` ist Build-Zeit. Die Stack-Images bauen mit `same-origin`: Das Frontend nimmt zur Laufzeit den eigenen Origin als IdP (`frontend/src/auth/oidcConfig.ts`), das Image hängt also nicht von der Domain ab. Lokal bleibt `http://localhost:8080`.
 - MCP-Clients (Claude, ChatGPT) erreichen den Server unter `https://${DOMAIN}/mcp`. Das Backend braucht ausgehendes HTTPS (Port 443), um die Client ID Metadata Documents der Clients abzurufen, siehe [authentication.md](authentication.md#mcp-clients-cimd).
 - PayPal: `PAYPAL_ENVIRONMENT` (`sandbox`/`live`). In der PayPal-App muss die Return URL `https://${DOMAIN}/paypal/connected` eingetragen sein.
+- `NFV_MANUAL_SOURCE_ENABLED` (optional, Standard `false`): Testendpunkte `/api/v1/test/traffic-events`, im Stack aus der gleichnamigen GitHub-Variable, nie in Produktion, siehe [traffic-feed.md](traffic-feed.md#testquelle-manual).
 
 ## TLS (Caddy)
 

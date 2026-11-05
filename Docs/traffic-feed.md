@@ -289,6 +289,23 @@ flowchart LR
 - `input` kennt `network` nicht. Orte übergibt es als `incidents.logic.IncidentLocation` (eigener Record, WGS84), `incidents` setzt ihn in `network.logic`-Records um.
 - Adapter (`input.sources.*`) hängen nur von `input.logic` und `incidents.logic` (Records) ab, später per ArchUnit.
 
+## Testquelle `manual`
+
+- **Zweck:** Ereignisse von Hand eingeben und das Ergebnis direkt sehen, mit beliebigen Daten, ohne Datei tauschen, auch Richtung und Zeitfenster vor der Anreicherung. Manuelle Tests in `test.txt`.
+- **Aufbau:** `input.sources.manual.ManualSource`, ein gewöhnlicher Adapter (`TRAFFIC_FEED`), kein Webhook, weil `TrafficPolling` und `TrafficEventProcessor` nur `TrafficEvent`s kennen. Eingegebene Ereignisse liegen im Speicher, `fetch` liefert sie als nicht vollständigen Stand (`complete=false`), ein Neustart hebt also nichts auf. Ablauf danach wie bei jeder Quelle: `FeedDiff`, `read`, Anreicherung, `IncidentReporting`, Bewertung.
+- **Endpunkte** (`input.api.TestTrafficEventController`):
+  - `POST /api/v1/test/traffic-events`: meldet das Ereignis, ruft sofort ab und verarbeitet, Antwort wie beim `GET`. Gleiche `id` ändert das Ereignis, `resolved` beendet es. Ungültig → 400.
+  - `GET /api/v1/test/traffic-events/{id}?source=…`: letzte Version eines Ereignisses jeder Quelle (Standard `manual`, z. B. `source=nz-nzta`): `outcome` (`PENDING`, `INCIDENT` oder Grund wie `NO_SEGMENTS`), `note`, Incident mit Straßen und Consequences aller Routen.
+- **Felder:** `id`, `type`, `point` oder `line`, `roadRef`, `direction`, `validFrom`, `validTo`, `delayMinutes`, `assumedDelayMinutes`, `text`, `windows`, `vehicleScope`, `linkOnly`, `resolved`.
+- **`TrafficReport`** trägt dafür zusätzlich `windows` und `vehicleScope`: Ohne Anreicherung gelten diese Werte, mit Anreicherung deren Werte. Mit `windows` greift die Übergangsregel `TIMES_IN_TEXT` nicht.
+- **Absicherung** (beschlossen 2026-11-05), ein Ereignis wirkt auf die Routen aller Nutzer der Region:
+  - Quelle und Endpunkte gibt es nur mit `nfv.input.sources.manual.enabled=true` (`NFV_MANUAL_SOURCE_ENABLED`, Standard `false`), nie in Produktion. Die OpenAPI-Datei enthält sie nicht, der generierte Client also auch nicht.
+  - Rolle `tester` für `/api/v1/test/**` (`ApiSecurityConfig`, erste Rollenprüfung der API). Das Konto `test` bekommt sie nur beim Anlegen auf leerer Datenbank (`TestAccountInitializer`), nicht nach Namen: Jeder kann sich registrieren. Bestehende Konten per SQL (`auth_account_role`), danach neu anmelden.
+  - Das Konto `test`/`test` hat ein bekanntes Passwort: auf einem erreichbaren Server eigenes Konto mit der Rolle nutzen.
+- **Region:** `nfv.input.sources.manual.network-region` (`NFV_MANUAL_SOURCE_REGION`, Standard `nz`).
+- **Antwort des `POST`:** Nach einem Abruf kann der Hintergrundlauf (`after-poll`) das Ereignis vor der Anfrage verarbeiten. `TrafficEventInspection` liest den Stand deshalb als Projektion aus der Datenbank (`EventRepository.EventState`), nicht als Entity: Die Session der Anfrage hielte sonst den alten Stand.
+- **Tests:** `ManualSourceApiTest` (mit `after-poll`, Kategorien, Richtung, Fenster, Änderung, Ende, Fehler, Rollen), `ManualSourceDisabledTest`, `TestAccountRoleTest`. Manuell in `test.txt`, am 2026-11-05 gegen `docker-compose.local.yml` mit echter Anmeldung und ganzem Netz `nz` durchlaufen.
+
 ## Frontend
 
 - Am Hinweis (`IncidentSheet`): Originaltext, Quelle aus `Attribution`, „Stand: hh:mm“, geschätzte Werte mit ✦ wie bei Buchungen.

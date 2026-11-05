@@ -23,6 +23,8 @@ services:
       # Trust X-Forwarded-Proto/-For of Caddy (private addresses only), so redirects (e.g. to /login) stay https
       SERVER_FORWARD_HEADERS_STRATEGY: native
       JAVA_TOOL_OPTIONS: -XX:MaxRAMPercentage=75
+      # Test endpoints /api/v1/test/traffic-events, never true in production, see Docs/traffic-feed.md#testquelle-manual
+      NFV_MANUAL_SOURCE_ENABLED: ${NFV_MANUAL_SOURCE_ENABLED:-false}
       # Road network data mounted below, see Docs/network.md#konfiguration
       NFV_DATA_DIR: /data
     # Host directory NFV_HOST_DATA_DIR (required, e.g. /home/deploy/data), must exist on the node:
