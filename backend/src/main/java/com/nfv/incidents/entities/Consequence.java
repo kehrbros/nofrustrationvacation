@@ -20,7 +20,7 @@ import java.time.OffsetDateTime;
  * first affected section of the route. Derived by {@code ConsequenceAssessment}, never edited by users. Route and
  * section are referenced by id (trips module); the database removes the consequence with them.
  * <p>
- * {@link #impact} describes the incident at that place, {@link #category} the effect on the arrival at the target
+ * {@link #impact()} describes the incident at that place, {@link #category} the effect on the arrival at the target
  * stop, see Docs/consequence-assessment.md.
  */
 @Getter
@@ -33,9 +33,6 @@ public class Consequence extends AbstractEntity {
     private long routeId;
     @Column(nullable = false)
     private long routeSectionId;
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 16)
-    private Impact impact;
     /** Expected delay of the incident as given, {@code null} if unknown. */
     private @Nullable Duration delay;
     /** First window of the incident the passage falls into, for display ("closed 21:00–04:30"); none without. */
@@ -77,7 +74,6 @@ public class Consequence extends AbstractEntity {
     /** Takes over a new assessment of the route, the id stays. */
     public void assessed(RouteAssessor.Assessment assessment, @Nullable OffsetDateTime deadline, OffsetDateTime at) {
         this.routeSectionId = assessment.sectionId();
-        this.impact = incident.impact();
         this.delay = incident.getExpectedDelay();
         this.windowStart = assessment.window() == null ? null : assessment.window().startsAt();
         this.windowEnd = assessment.window() == null ? null : assessment.window().endsAt();
@@ -95,6 +91,11 @@ public class Consequence extends AbstractEntity {
     /** The route has passed the place, including the wait there; an impassable one counts as waiting max-wait. */
     public boolean isOver(OffsetDateTime now, Duration maxWait) {
         return passageAt != null && passageAt.plus(assessedDelay == null ? maxWait : assessedDelay).isBefore(now);
+    }
+
+    /** What the incident does at that place, whatever it means for the arrival. */
+    public Impact impact() {
+        return incident.impact();
     }
 
     /** Not passable (closure without end or waiting longer than allowed). */

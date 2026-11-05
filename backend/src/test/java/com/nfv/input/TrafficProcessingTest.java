@@ -223,7 +223,7 @@ class TrafficProcessingTest {
                 + " ON i.segment_id = s.id WHERE i.incident_id = ?", String.class, tunnel.getId())).containsOnly("SH 1");
         Consequence consequence = consequenceRepository.findByRouteId(routeId).stream()
                 .filter(c -> c.getIncident().getId() == tunnel.getId()).findFirst().orElseThrow();
-        assertThat(consequence.getImpact()).isEqualTo(Impact.DELAYED);
+        assertThat(consequence.impact()).isEqualTo(Impact.DELAYED);
         // a closure at unconfirmed times: "check times", not NO_IMPACT, adds no delay
         assertThat(tunnel.isTimesUnconfirmed()).isTrue();
         assertThat(consequence.getCategory()).isEqualTo(Category.DELAYED);
@@ -318,7 +318,7 @@ class TrafficProcessingTest {
         assertThat(windows.getFirst().startsAt()).isAtSameInstantAs(tunnel.getValidFrom());
 
         Consequence blocked = tunnelConsequence(wednesdayNight, tunnel).orElseThrow();
-        assertThat(blocked.getImpact()).isEqualTo(Impact.BLOCKED);
+        assertThat(blocked.impact()).isEqualTo(Impact.BLOCKED);
         assertThat(blocked.getWindowStart()).isAtSameInstantAs(OffsetDateTime.parse("2026-11-04T21:00:00+13:00"));
         assertThat(blocked.getWindowEnd()).isAtSameInstantAs(OffsetDateTime.parse("2026-11-05T04:30:00+13:00"));
         assertThat(tunnelConsequence(wednesdayNoon, tunnel)).isEmpty();

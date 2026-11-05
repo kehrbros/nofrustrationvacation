@@ -66,7 +66,7 @@
   - `passageAt` (verschobene Durchfahrt der getroffenen Section, für Rangfolge und Hinweis „knapp“)
   - `assessedAt`
 - `Incident` zusätzlich `assumedDelay` (Annahme der Quelle ohne Zahl, historisiert, `V33`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historisiert, `V35`) und `timesUnconfirmed` (historisiert, `V36`)
-- `impact` (`BLOCKED`, `DELAYED`) bleibt: beschreibt den Incident an der Stelle, die Kategorie beschreibt die Folge für die Reise. `delay` bleibt die Angabe des Incidents.
+- `impact` (`BLOCKED`, `DELAYED`) beschreibt den Incident an der Stelle, die Kategorie die Folge für die Reise. Es folgt aus dem Typ des Incidents (`Incident.impact()`, `Consequence.impact()`) und wird seit `V41` nicht mehr je Consequence gespeichert, die API liefert es unverändert. `delay` bleibt die Angabe des Incidents.
 - Schema: eigene Migration `V35` (statt mit den Zeitfenstern, die schon in `V34` kamen).
 
 ## Wann bewertet wird

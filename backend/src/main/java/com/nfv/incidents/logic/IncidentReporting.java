@@ -121,7 +121,7 @@ public class IncidentReporting {
                     .sorted(Comparator.comparingDouble(IncidentOverview.Road::lengthMeters).reversed())
                     .toList();
             List<IncidentOverview.Effect> effects = consequenceRepository.findByIncidentId(incidentId).stream()
-                    .map(c -> new IncidentOverview.Effect(c.getRouteId(), c.getCategory(), c.getMatch(), c.getImpact(),
+                    .map(c -> new IncidentOverview.Effect(c.getRouteId(), c.getCategory(), c.getMatch(), c.impact(),
                             c.getAssessedDelay(), c.isDelayAssumed(), c.getPassageAt(), c.getExpectedArrival(),
                             c.getDeadline(), c.getWindowStart(), c.getWindowEnd()))
                     .toList();

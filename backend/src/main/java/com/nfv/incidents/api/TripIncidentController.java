@@ -53,7 +53,7 @@ public class TripIncidentController {
     private static TripIncidentDto toDto(Consequence consequence) {
         Incident incident = consequence.getIncident();
         return new TripIncidentDto(incident.getId(), consequence.getRouteId(), incident.getType(),
-                incident.getDescription(), consequence.getImpact(), minutes(consequence.getDelay()),
+                incident.getDescription(), incident.impact(), minutes(consequence.getDelay()),
                 incident.getValidFrom(), incident.getValidTo(), consequence.getDetectedAt(), consequence.getUpdatedAt(),
                 consequence.getCategory(), consequence.getMatch(), minutes(consequence.getAssessedDelay()),
                 consequence.isDelayAssumed(), consequence.getPassageAt(), consequence.getExpectedArrival(),

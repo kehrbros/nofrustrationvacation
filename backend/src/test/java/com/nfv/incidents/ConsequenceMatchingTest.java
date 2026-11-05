@@ -117,7 +117,7 @@ class ConsequenceMatchingTest {
         List<Consequence> consequences = consequenceRepository.findByIncidentId(incident.getId());
         assertThat(consequences).singleElement().satisfies(c -> {
             assertThat(c.getRouteId()).isEqualTo(routeId);
-            assertThat(c.getImpact()).isEqualTo(Impact.BLOCKED);
+            assertThat(c.impact()).isEqualTo(Impact.BLOCKED);
             assertThat(c.getRouteSectionId()).isEqualTo(sectionOn(routeId, second));
         });
     }
@@ -162,7 +162,7 @@ class ConsequenceMatchingTest {
 
         plan(routeId, first, second);
         assertThat(consequenceRepository.findByRouteId(routeId)).singleElement()
-                .satisfies(c -> assertThat(c.getImpact()).isEqualTo(Impact.DELAYED));
+                .satisfies(c -> assertThat(c.impact()).isEqualTo(Impact.DELAYED));
 
         plan(routeId, first, elsewhere);
         assertThat(consequenceRepository.findByRouteId(routeId)).isEmpty();
