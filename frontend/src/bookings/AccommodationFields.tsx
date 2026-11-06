@@ -199,12 +199,10 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
           {label}
           {(filled?.has(name) || researched) && (
             <span
-              className="va-ai-mark"
-              title={researched ? 'Vom Assistenten im Web gefunden' : 'Aus der Bestätigung gelesen'}
-              aria-label={researched ? 'vom Assistenten im Web gefunden' : 'aus der Bestätigung gelesen'}
-            >
-              {' '}✦
-            </span>
+              className="va-filled-mark"
+              title={researched ? 'Ergänzt aus öffentlichen Angaben' : 'Aus der Bestätigung übernommen'}
+              aria-label={researched ? 'ergänzt aus öffentlichen Angaben' : 'aus der Bestätigung übernommen'}
+            />
           )}
         </label>
         {input}
@@ -239,7 +237,7 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
       <div className={`va-field ${uncertain?.has('name') ? 'va-field-check' : ''}`}>
         <label htmlFor="acc-name">
           Name
-          {filled?.has('name') && <span className="va-ai-mark" aria-label="aus der Bestätigung gelesen"> ✦</span>}
+          {filled?.has('name') && <span className="va-filled-mark" title="Aus der Bestätigung übernommen" aria-label="aus der Bestätigung übernommen" />}
         </label>
         <input
           id="acc-name"
@@ -358,7 +356,7 @@ function LookupNote({ lookup, fromLiteApi, fromAssistant }: { lookup: Lookup; fr
       {fromLiteApi.length > 0 && <>Aus den Hoteldaten: {fromLiteApi.join(', ')}. </>}
       {fromAssistant.length > 0 && (
         <>
-          <span className="va-ai-mark">✦</span> Im Web gefunden: {fromAssistant.join(', ')}, bitte prüfen
+          Ergänzt aus öffentlichen Angaben: {fromAssistant.join(', ')}, bitte prüfen
           {lookup.sources.length > 0 && (
             <>
               {' '}(

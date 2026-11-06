@@ -1,6 +1,6 @@
 # Konzept: Vom Reiseplaner zur Umplanungs-App
 
-- **Status:** Entwurf zur Freigabe (2026-11-05), noch kein Code.
+- **Status:** Entwurf (2026-11-05). Umgesetzt 2026-11-06: PayPal stabil (Button im Sheet, Abschluss im Hintergrund, Sonderfälle, Storno mit Erstattung), PayPal-Mehrwert in der Oberfläche, Teile der UX-Überarbeitung. Bei der LiteAPI-Sandbox geblieben (Philipp: keine Demo-Hotels). Der Plan nach einem Incident wird separat umgesetzt.
 - **Ziel:** Die App wird zur Hilfe für den Moment, in dem eine Reise schiefgeht. Ein Incident trifft die Route oder eine Unterkunft fällt aus, die App hat schon einen fertigen Plan B, der Nutzer bestätigt ihn mit einem Tipp und zahlt mit PayPal.
 - **Reiseplanung bleibt Mittel zum Zweck:** Sie liefert Stops, Routen und Buchungen, damit die App die Lage bewerten kann. Sie soll schnell gehen und rückt in der Oberfläche nach hinten.
 - **KI bleibt unsichtbar:** Der Nutzer sieht Empfehlungen und Begründungen in Klartext, aber keine Hinweise auf einen Assistenten. Harte Fakten wie Preis, Verfügbarkeit und Erreichbarkeit prüft weiter das Backend. Das Modell wählt nur aus und begründet ([accommodation-alternatives.md](accommodation-alternatives.md#rollen-assistant-und-litepi)).

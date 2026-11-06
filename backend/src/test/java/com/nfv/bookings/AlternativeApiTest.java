@@ -74,6 +74,8 @@ class AlternativeApiTest {
     private PayPalCheckout checkout;
     @MockitoBean
     private StructuredExtraction extraction;
+    @Autowired
+    private com.nfv.bookings.logic.AlternativeReservations reservations;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private RequestPostProcessor user;
@@ -250,6 +252,141 @@ class AlternativeApiTest {
         mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(other)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(CRITERIA))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void approvedPaymentIsBookedInTheBackgroundWhenTheUserDoesNotComeBack() throws Exception {
+        long reservationId = reserve("O-3");
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-reservations", tripId).with(user))
+                .andExpect(jsonPath("$[*].id", contains((int) reservationId)))
+                .andExpect(jsonPath("$[0].payPalOrderId").value("O-3"));
+        when(checkout.getOrder("O-3")).thenReturn(new PayPalCheckout.OrderState("O-3", "APPROVED", null, null, null));
+        mockPaymentAndBooking(reservationId, "O-3");
+
+        reservations.recover(reservationId);
+
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}", reservationId).with(user))
+                .andExpect(jsonPath("$.status").value("BOOKED"));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-reservations", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(0)));
+    }
+
+    @Test
+    void paymentNotApprovedStaysOpenUntilTheTimeout() throws Exception {
+        long reservationId = reserve("O-4");
+        when(checkout.getOrder("O-4")).thenReturn(new PayPalCheckout.OrderState("O-4", "PAYER_ACTION_REQUIRED", null,
+                null, null));
+
+        reservations.recover(reservationId);
+
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}", reservationId).with(user))
+                .andExpect(jsonPath("$.status").value("PAYMENT_PENDING"));
+        verify(checkout, never()).authorize(anyString(), anyString());
+    }
+
+    @Test
+    void lostBookingAnswerContinuesWithTheEarlierBooking() throws Exception {
+        long reservationId = reserve("O-5");
+        when(checkout.authorize(eq("O-5"), anyString())).thenReturn(
+                new PayPalCheckout.Payment("A-5", "CREATED", new PayPalAmount("EUR", new BigDecimal("165.00"))));
+        when(liteApi.book(anyString(), any(), anyInt(), anyString()))
+                .thenThrow(new OfferUnavailableException("4005", "duplicate clientReference"));
+        when(liteApi.findBooking("nfv-stay-" + reservationId))
+                .thenReturn(java.util.Optional.of(new LiteApi.ProviderBooking("LB-5", "HC-5", "CONFIRMED")));
+        when(checkout.captureAuthorization(eq("A-5"), anyString())).thenReturn(
+                new PayPalCheckout.Payment("C-5", "COMPLETED", null));
+
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BOOKED"))
+                .andExpect(jsonPath("$.booking.reference").value("HC-5"));
+        verify(checkout, never()).voidAuthorization(anyString(), anyString());
+    }
+
+    @Test
+    void refusedCaptureNeedsAttentionInsteadOfAnUnpaidBooking() throws Exception {
+        long reservationId = reserve("O-6");
+        when(checkout.authorize(eq("O-6"), anyString())).thenReturn(
+                new PayPalCheckout.Payment("A-6", "CREATED", new PayPalAmount("EUR", new BigDecimal("165.00"))));
+        when(liteApi.book(anyString(), any(), anyInt(), anyString()))
+                .thenReturn(new LiteApi.ProviderBooking("LB-6", null, "CONFIRMED"));
+        when(checkout.captureAuthorization(eq("A-6"), anyString()))
+                .thenThrow(new com.nfv.paypal.PayPalRejectedException(422, "AUTHORIZATION_EXPIRED", "d-1", "expired"));
+
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("NEEDS_ATTENTION"));
+        mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-reservations", tripId).with(user))
+                .andExpect(jsonPath("$[0].status").value("NEEDS_ATTENTION"));
+    }
+
+    @Test
+    void cancellingABookingMadeInTheAppRefundsThePayment() throws Exception {
+        long reservationId = reserve("O-7");
+        mockPaymentAndBooking(reservationId, "O-7");
+        String booked = mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user)
+                .with(csrf())).andReturn().getResponse().getContentAsString();
+        long newBookingId = ((Number) JsonPath.read(booked, "$.bookingId")).longValue();
+        when(liteApi.cancel("LB-1")).thenReturn(new LiteApi.Cancellation("CANCELLED", null));
+        when(checkout.refundCapture("C-1", null, "refund-stay-" + reservationId))
+                .thenReturn(new PayPalCheckout.Payment("R-1", "COMPLETED", null));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/refund-cancellation", newBookingId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.refundAmount").value("165.00"))
+                .andExpect(jsonPath("$.refunded").value(true))
+                .andExpect(jsonPath("$.booking.status").value("CANCELLED"));
+        // the original booking was not made in the app
+        mockMvc.perform(post("/api/v1/bookings/{id}/refund-cancellation", bookingId).with(user).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANCELLATION_NOT_POSSIBLE"));
+    }
+
+    @Test
+    void failedRefundIsRetriedInTheBackground() throws Exception {
+        long reservationId = reserve("O-8");
+        mockPaymentAndBooking(reservationId, "O-8");
+        String booked = mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user)
+                .with(csrf())).andReturn().getResponse().getContentAsString();
+        long newBookingId = ((Number) JsonPath.read(booked, "$.bookingId")).longValue();
+        when(liteApi.cancel("LB-1")).thenReturn(new LiteApi.Cancellation("CANCELLED", null));
+        when(checkout.refundCapture(anyString(), any(), anyString()))
+                .thenThrow(new com.nfv.paypal.PayPalUnavailableException("down"));
+
+        mockMvc.perform(post("/api/v1/bookings/{id}/refund-cancellation", newBookingId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.refunded").value(false));
+
+        org.mockito.Mockito.reset(checkout);
+        when(checkout.refundCapture("C-1", null, "refund-stay-" + reservationId))
+                .thenReturn(new PayPalCheckout.Payment("R-8", "COMPLETED", null));
+        reservations.recover(reservationId);
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}", reservationId).with(user))
+                .andExpect(jsonPath("$.refunded").value(true));
+    }
+
+    private long reserve(String orderId) throws Exception {
+        prebookAndHotel("150.00");
+        when(checkout.createOrder(anyString(), any(), anyString(), any(), any(), any()))
+                .thenReturn(new PayPalCheckout.CheckoutOrder(orderId, "https://paypal.test/" + orderId));
+        return ((Number) JsonPath.read(mockMvc.perform(
+                        post("/api/v1/accommodation-bookings/{id}/alternative-reservations", bookingId).with(user)
+                                .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(reservation()))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(), "$.id")).longValue();
+    }
+
+    private void mockPaymentAndBooking(long reservationId, String orderId) {
+        when(checkout.authorize(orderId, "authorize-stay-" + reservationId)).thenReturn(
+                new PayPalCheckout.Payment("A-1", "CREATED", new PayPalAmount("EUR", new BigDecimal("165.00"))));
+        when(liteApi.book(eq("P-1"), any(), eq(1), eq("nfv-stay-" + reservationId)))
+                .thenReturn(new LiteApi.ProviderBooking("LB-1", "HC-77", "CONFIRMED"));
+        when(checkout.captureAuthorization("A-1", "capture-stay-" + reservationId))
+                .thenReturn(new PayPalCheckout.Payment("C-1", "COMPLETED", null));
     }
 
     private void prebookAndHotel(String net) {

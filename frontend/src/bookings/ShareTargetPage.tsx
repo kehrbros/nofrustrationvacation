@@ -190,7 +190,7 @@ export default function ShareTargetPage() {
           </button>
           {source !== 'MANUAL' && (
             <p className="va-note">
-              <span className="va-ai-mark">✦</span> aus der Bestätigung gelesen. <strong>Gelb markierte Felder bitte prüfen.</strong>
+              Aus der Bestätigung übernommen. <strong>Gelb markierte Felder bitte prüfen.</strong>
             </p>
           )}
           <div className="va-form">

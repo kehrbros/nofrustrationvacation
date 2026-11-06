@@ -7,6 +7,7 @@ import { useAsync } from '../api/useAsync';
 import { fetchTripBookings } from '../bookings/bookingsApi';
 import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
+import OpenReservations from '../bookings/OpenReservations';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
@@ -147,6 +148,7 @@ export default function TripPage() {
       </header>
 
       <div className="va-trip-map">
+        <OpenReservations tripId={trip.id} bookings={bookings} onFinished={reload} />
         <Suspense fallback={<div className="va-map va-map-loading" />}>
           <TripMap
             stops={trip.stops}

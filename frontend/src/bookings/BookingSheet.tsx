@@ -6,7 +6,7 @@ import { Link, useParams } from 'react-router';
 import Sheet from '../components/Sheet';
 import { useTripContext } from '../trips/tripContext';
 import AddBookingSheet from './AddBookingSheet';
-import { fetchAlternativesStatus } from './alternativesApi';
+import { cancelWithRefund, fetchAlternativesStatus } from './alternativesApi';
 import { changeAccommodationBooking, deleteBooking } from './bookingsApi';
 import { formFromBooking, toInput } from './form';
 import { stopPoint } from './stayDefaults';
@@ -22,6 +22,8 @@ export default function BookingSheet() {
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [alternativesAvailable, setAlternativesAvailable] = useState(false);
+  const [refund, setRefund] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     fetchAlternativesStatus().then((status) => setAlternativesAvailable(status.searchAvailable));
@@ -71,6 +73,24 @@ export default function BookingSheet() {
       setError('Die Buchung konnte nicht gelöscht werden.');
     }
   };
+  // booked in the app and still free to cancel: cancel at the hotel, PayPal refunds
+  const refundable = booking.source === 'SEARCH' && booking.status !== 'CANCELLED' && booking.cancellationDeadline != null
+    && new Date(booking.cancellationDeadline).getTime() > Date.now();
+  const cancelAndRefund = async () => {
+    setCancelling(true);
+    setError(null);
+    try {
+      const reservation = await cancelWithRefund(booking.id);
+      setRefund(reservation.refunded
+        ? `Storniert. ${money(reservation.refundAmount ?? reservation.price, reservation.currency)} sind per PayPal auf dem Weg zurück zu dir.`
+        : 'Storniert. Die Erstattung per PayPal folgt in Kürze automatisch.');
+      reload();
+    } catch {
+      setError('Die Buchung konnte nicht storniert werden. Bitte versuche es noch einmal.');
+    } finally {
+      setCancelling(false);
+    }
+  };
   const houseRules = [
     accommodation?.checkInFrom && `Check-in ab ${shortTime(accommodation.checkInFrom)}`,
     accommodation?.checkInUntil && `bis ${shortTime(accommodation.checkInUntil)}`,
@@ -103,6 +123,7 @@ export default function BookingSheet() {
         </div>
       }
     >
+      {refund && <Alert type="success" showIcon message={refund} />}
       <div className="va-impact">
         <span className="va-eyebrow">{stop ? `Stop ${stop.name}` : 'Aufenthalt'}</span>
         <span className="va-strong">{stayLabel(booking)}</span>
@@ -190,6 +211,19 @@ export default function BookingSheet() {
             <SwapOutlined aria-hidden="true" /> Alternative suchen
           </Link>
         )}
+        {refundable && (
+          <Popconfirm
+            title="Kostenlos stornieren?"
+            description="Wir stornieren beim Hotel, PayPal erstattet dir den vollen Betrag."
+            okText="Stornieren"
+            cancelText="Behalten"
+            onConfirm={() => void cancelAndRefund()}
+          >
+            <button type="button" className="va-button va-button-outline va-block" disabled={cancelling}>
+              {cancelling ? 'Wird storniert …' : 'Kostenlos stornieren, Geld zurück per PayPal'}
+            </button>
+          </Popconfirm>
+        )}
         {booking.manageUrl && (
           <a className="va-button va-button-outline va-block" href={booking.manageUrl} target="_blank" rel="noopener noreferrer">
             <ExportOutlined aria-hidden="true" /> {booking.provider ? `Bei ${booking.provider} öffnen` : 'Buchung öffnen'}
@@ -217,4 +251,12 @@ export default function BookingSheet() {
       {error && <Alert type="error" showIcon message={error} />}
     </Sheet>
   );
+}
+
+function money(amount: string, currency: string): string {
+  try {
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(Number(amount));
+  } catch {
+    return `${amount} ${currency}`;
+  }
 }

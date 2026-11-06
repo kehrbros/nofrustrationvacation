@@ -4,9 +4,11 @@ import {
   alternativesStatus,
   bookReservation as bookReservationRequest,
   cancelBooking as cancelBookingRequest,
+  cancelWithRefund as cancelWithRefundRequest,
   getReservation,
   reserveAlternative as reserveAlternativeRequest,
   searchAlternatives as searchAlternativesRequest,
+  unfinishedReservations as unfinishedReservationsRequest,
 } from '../generated/api';
 import type { AlternativeCandidateDto, ReservationDto } from '../generated/api';
 import { TripsApiError } from '../trips/tripsApi';
@@ -17,6 +19,8 @@ export interface AlternativesStatus {
   searchAvailable: boolean;
   bookingAvailable: boolean;
   rankingAvailable: boolean;
+  /** Public client id for the PayPal button, null without PayPal. */
+  payPalClientId: string | null;
 }
 
 /** Dates yyyy-mm-dd local at the place, maxPrice the total for the stay as decimal string. */
@@ -64,7 +68,8 @@ export interface SearchResult {
   offersChecked: number;
 }
 
-export type ReservationStatus = 'PREBOOKED' | 'PAYMENT_PENDING' | 'AUTHORIZED' | 'PROVIDER_BOOKED' | 'BOOKED' | 'FAILED';
+export type ReservationStatus = 'PREBOOKED' | 'PAYMENT_PENDING' | 'AUTHORIZED' | 'PROVIDER_BOOKED' | 'BOOKED' | 'FAILED'
+  | 'NEEDS_ATTENTION' | 'CANCELLED';
 
 export interface Reservation {
   id: number;
@@ -84,7 +89,12 @@ export interface Reservation {
   refundable: boolean;
   freeCancellationUntil: string | null;
   approveUrl: string | null;
+  payPalOrderId: string | null;
   failure: string | null;
+  refundAmount: string | null;
+  refunded: boolean;
+  /** The booking created once booked, with the accommodation's coordinates and the booking number. */
+  booking: { id: number; reference: string | null; latitude: number | null; longitude: number | null } | null;
 }
 
 export interface Holder {
@@ -145,7 +155,16 @@ function toReservation(dto: ReservationDto): Reservation {
     refundable: dto.refundable ?? false,
     freeCancellationUntil: dto.freeCancellationUntil ?? null,
     approveUrl: dto.approveUrl ?? null,
+    payPalOrderId: dto.payPalOrderId ?? null,
     failure: dto.failure ?? null,
+    refundAmount: dto.refundAmount ?? null,
+    refunded: dto.refunded ?? false,
+    booking: dto.booking?.id != null ? {
+      id: dto.booking.id,
+      reference: dto.booking.reference ?? null,
+      latitude: dto.booking.accommodation?.latitude ?? null,
+      longitude: dto.booking.accommodation?.longitude ?? null,
+    } : null,
   };
 }
 
@@ -157,9 +176,10 @@ export async function fetchAlternativesStatus(): Promise<AlternativesStatus> {
       searchAvailable: status.searchAvailable ?? false,
       bookingAvailable: status.bookingAvailable ?? false,
       rankingAvailable: status.rankingAvailable ?? false,
+      payPalClientId: status.payPalClientId ?? null,
     };
   } catch {
-    return { searchAvailable: false, bookingAvailable: false, rankingAvailable: false };
+    return { searchAvailable: false, bookingAvailable: false, rankingAvailable: false, payPalClientId: null };
   }
 }
 
@@ -235,3 +255,35 @@ export async function markBookingCancelled(bookingId: number): Promise<void> {
   await unwrap(cancelBookingRequest({ path: { bookingId } }));
 }
 
+
+/** Reservations of the trip whose payment or booking is not finished (or has to be checked). */
+export async function fetchUnfinishedReservations(tripId: number): Promise<Reservation[]> {
+  return (await unwrap(unfinishedReservationsRequest({ path: { tripId } }))).map(toReservation);
+}
+
+/** Cancels a booking made in the app at the hotel and refunds the PayPal payment. */
+export async function cancelWithRefund(bookingId: number): Promise<Reservation> {
+  return toReservation(await unwrap(cancelWithRefundRequest({ path: { bookingId } })));
+}
+
+const HOLDER_KEY = 'nfv.bookingHolder';
+
+/** Guest data of the last booking on this device, so the next rebooking needs no form. */
+export function rememberedHolder(): Holder | null {
+  try {
+    const value = JSON.parse(localStorage.getItem(HOLDER_KEY) ?? 'null') as Partial<Holder> | null;
+    return value && typeof value.firstName === 'string' ? {
+      firstName: value.firstName ?? '', lastName: value.lastName ?? '', email: value.email ?? '', phone: value.phone ?? '',
+    } : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberHolder(holder: Holder): void {
+  try {
+    localStorage.setItem(HOLDER_KEY, JSON.stringify(holder));
+  } catch {
+    // private mode: asked again next time
+  }
+}
