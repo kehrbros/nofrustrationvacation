@@ -3134,10 +3134,10 @@
           },
           "options" : {
             "type" : "array",
+            "description" : "Best first, empty if there is a problem",
             "items" : {
               "$ref" : "#/components/schemas/RouteOptionDto"
-            },
-            "description" : "Best first, empty if there is a problem"
+            }
           },
           "problem" : {
             "type" : [ "string", "null" ],
@@ -3154,8 +3154,8 @@
           },
           "waypointMode" : {
             "type" : [ "string", "null" ],
-            "enum" : [ "IGNORE", "FOLLOW" ],
-            "description" : "null if there is a problem"
+            "description" : "null if there is a problem",
+            "enum" : [ "IGNORE", "FOLLOW" ]
           }
         }
       },
