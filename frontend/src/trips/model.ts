@@ -156,7 +156,12 @@ export interface RouteOption {
   conflicts: RouteConflict[];
 }
 
-export type SuggestionProblem = 'MISSING_COORDINATES' | 'MISSING_DEPARTURE' | 'NO_ROUTE';
+export type SuggestionProblem =
+  | 'MISSING_COORDINATES'
+  | 'MISSING_DEPARTURE'
+  | 'NO_ROUTE'
+  | 'WAYPOINT_UNREACHABLE'
+  | 'CONSEQUENCE_PASSED';
 
 export interface RouteSuggestions {
   options: RouteOption[];
