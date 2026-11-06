@@ -1,6 +1,6 @@
 # Verkehrsdaten-Quellen (`input`) – Entwurf
 
-- **Status:** Stufen 1 und 2 umgesetzt (Abruf, Abgleich, Lesen, Verorten, Incidents anlegen, ändern und beenden, Ruhepause, siehe [Stufen](#stufen)), Rest Entwurf. Füllt die offenen Punkte „Ereignisquellen“ und „Event → Incident“ aus [architecture.md](architecture.md#offene-punkte) und [domain.md](domain.md#offen).
+- **Status:** Stufen 1, 2 und 4 umgesetzt (Abruf, Abgleich, Lesen, Verorten, Incidents anlegen, ändern und beenden, Ruhepause, Anreicherung, siehe [Stufen](#stufen)), Rest Entwurf. Füllt die offenen Punkte „Ereignisquellen“ und „Event → Incident“ aus [architecture.md](architecture.md#offene-punkte) und [domain.md](domain.md#offen).
 - **Ziel:** Verkehrsereignisse aus mehreren Quellen je Land über **eine** Schnittstelle anbinden, als `Incident` an Segmenten verorten und über den bestehenden `ConsequenceMatcher` den Routen der Trips zuordnen.
 - **Grundsatz:** Abruf, Abgleich, Speichern, Verorten, Incident und Anreicherung sind gemeinsam. Je Quelle gibt es nur einen Adapter, der abruft und liest. Neue Quelle = neuer Adapter plus Konfiguration, keine Änderung an Schema oder Verarbeitung.
 - **Erste Quelle:** NZTA Traffic and Travel REST API (Neuseeland), siehe [NZTA](#erste-quelle-nzta).
@@ -130,19 +130,27 @@ public interface TrafficSource {
 
 ## Anreicherung (`MessageEnrichment`)
 
-- **Umgesetzt (Teil Zeitfenster, beschlossen 2026-11-04):** `input.logic.MessageEnrichment` prüft die Zeitfenster aus der Antwort des Modells; der Aufruf selbst steckt hinter `EnrichmentModel` (Antwort: Fenster in Ortszeit mit Datum, leer = durchgehend). Im Betrieb bisher `NoEnrichmentModel` (keine Antwort), Tests mocken `EnrichmentModel`.
+- **Umgesetzt (`V39`):** `input.logic.AssistantEnrichmentModel` fragt das Modell über `StructuredExtraction.extractForSystem` (Systemkontingent), `input.logic.MessageEnrichment` speichert die Antwort (`message_enrichment`, Entity `StoredEnrichment`, unverändert) und prüft sie bei jeder Verwendung. Tests mocken `EnrichmentModel`.
+  - **Abweichung: Aufruf außerhalb der Transaktion.** Ein Aufruf kann bis zu 90 s dauern und soll keine Datenbankverbindung halten. `TrafficEventProcessor` fragt vor der Transaktion des Events, die Transaktion liest nur die gespeicherte Antwort.
+  - **Keine Antwort jetzt** (`EnrichmentDeferredException`: Kontingent erschöpft, Modell nicht erreichbar, Antwort unbrauchbar): Das Event wird ohne Anreicherung verarbeitet und `enrichment_pending`. Bis zum nächsten Lauf wird das Modell nicht mehr gefragt, weitere Events werden ebenfalls `enrichment_pending`.
+  - **Nachholen:** Am Ende jedes Laufs, wenige Fehlversuche zuerst, dann die ältesten; Fehlversuch beendet das Nachholen für diesen Lauf. Danach gleiches Event erneut gemeldet, gleicher Incident. Überholte Versionen und beendete Ereignisse werden nicht nachgeholt. Nach 20 Fehlversuchen (`enrichment_attempts`) bleibt das Event ohne Anreicherung, ein erschöpftes Kontingent zählt nicht als Fehlversuch.
+  - **Ohne Key oder mit `nfv.input.enrichment.enabled=false`:** kein Aufruf, kein `enrichment_pending`. Kommt später ein Key dazu, werden bereits verarbeitete Events erst mit neuer Version angereichert.
+  - **Bestand:** `V39` setzt `enrichment_pending` für alle bereits verarbeiteten `TrafficEvent`s mit Text, damit auch Ereignisse mit unverändertem Text gelesen werden (Terrace Tunnel). Überholte Versionen und beendete Ereignisse gehen ohne Aufruf ab.
+  - **Ablage geschätzter Werte (beschlossen 2026-11-05):** Eine Verzögerung aus dem Text ersetzt `assumedDelay` und gilt damit als geschätzt, keine eigene Spalte. `expectedDelay` bleibt der Zahl der Quelle vorbehalten.
+  - **Lesen:** `closedDuringWindows` hebt `OTHER`, `ROADWORKS`, `CONGESTION` auf `CLOSURE` (nur `HIGH`, `ACCIDENT` bleibt). `expectedReopening` wird `validTo`. `direction` geht an die Verortung. Ungültige Einzelwerte (Wiedereröffnung, Verzögerung) werden ignoriert, die übrige Antwort gilt. `evidence` wird ohne Unterschiede im Leerraum verglichen.
+  - **Nicht geprüft:** Qualität des Modells an echten Texten, siehe [Offen](#offen). `events.json` enthält die Fälle, ein Lauf mit Key zeigt sie.
   - Umrechnung Ortszeit → Zeitpunkt mit `TrafficSource.zone()` (NZTA `Pacific/Auckland`), im Code, nicht im Modell.
   - Ende nach Beginn, höchstens 24 h je Fenster, höchstens 200 Fenster; sonst wird die ganze Antwort verworfen.
   - **Abweichung:** Fenster werden auf `validFrom`–`validTo` **zugeschnitten** statt verworfen (erste Nacht des Terrace Tunnel beginnt 21:00, `validFrom` 21:00:26); ganz außerhalb liegende fallen weg, bleibt keines, wird die Antwort verworfen. Die Gültigkeit wird nie ausgedehnt.
   - Mit Fenstern gilt der Typ aus `read` (z. B. `CLOSURE` → `BLOCKED` nur in den Fenstern). Ohne verwertbare Antwort bleibt die Übergangsregel (`TIMES_IN_TEXT` → `OTHER`). Beendete Events fragen das Modell nie.
-  - Noch offen (Rest Stufe 4): Aufruf über `StructuredExtraction.extractForSystem`, Systemkontingent, `message_enrichment` mit Hash-Regel, `enrichment_pending` mit Nachholen, die übrigen Felder (`closedDuringWindows`, `expectedReopening`, `delayMinutes`, `direction`, `evidence`, `confidence`). `vehicleScope` reicht der Verarbeiter schon an `Incident.vehicleScope` weiter (für die Bewertung, [consequence-assessment.md](consequence-assessment.md)), ungeprüft bis auf den Wertebereich. Bis dahin ruft der Verarbeiter `EnrichmentModel` bei jeder Verarbeitung eines Events mit Text auf (mit `NoEnrichmentModel` kostenlos).
+  - `vehicleScope` geht an `Incident.vehicleScope` (für die Bewertung, [consequence-assessment.md](consequence-assessment.md)), ungeprüft bis auf den Wertebereich.
 
 - **Wofür:** Freitext der Meldung, den `read` nicht deterministisch lesen kann, z. B. „expected to reopen around 3pm“, „allow an extra 30 minutes“, „northbound only“.
-- **Nur bei geändertem Text:** Der Agent wird ausschließlich aufgerufen, wenn sich `messageText` gegenüber der vorigen Version desselben Ereignisses (`subjectId`) geändert hat:
+- **Nur bei geändertem Text oder geänderter Gültigkeit (Gültigkeit beschlossen 2026-11-05, `V40`):** Der Agent wird aufgerufen, wenn es für `messageText` und `validFrom`–`validTo` desselben Ereignisses (`subjectId`) noch keine Antwort gibt. Die Gültigkeit gehört dazu, weil die Antwort datierte Fenster enthält: Verlängert die Quelle eine Sperrung bei gleichem Text, endeten die Fenster sonst beim alten Ende und spätere Durchfahrten wären nicht betroffen. Fehlversuche werden wiederholt, siehe oben.
   - `message_hash` = SHA-256 über den normalisierten `messageText` (Leerraum zusammengefasst, Groß-/Kleinschreibung beibehalten).
   - Erste Version eines Ereignisses → Aufruf.
-  - Neue Version mit gleichem Hash (z. B. nur Zeitstempel, Geometrie oder Status geändert) → kein Aufruf, Ergebnis der vorigen Version übernehmen.
-  - Neue Version mit anderem Hash → Aufruf.
+  - Neue Version mit gleichem Hash und gleicher Gültigkeit (z. B. nur Zeitstempel, Geometrie oder Status geändert) → kein Aufruf, gespeicherte Antwort verwenden.
+  - Neue Version mit anderem Hash oder anderer Gültigkeit → Aufruf.
   - Unveränderte Abrufe erzeugen kein Event (`FeedDiff`), also auch keinen Aufruf. Aufheben ruft nie auf.
   - Leerer `messageText` → kein Aufruf.
 - **Was der Agent nicht tut:** Segmente bestimmen, Incidents anlegen, Gültigkeit über `validFrom`–`validTo` der Quelle hinaus ausdehnen. Verortung aus `read` bleibt führend.
@@ -162,11 +170,11 @@ public interface TrafficSource {
 - Wochentage und Nächte („Sunday to Thursday nights between 9pm and 4:30am“) liefert das Modell bereits als einzelne Fenster mit Datum. Das Prüfen (innerhalb der Gültigkeit, Länge) macht der Code.
 
 - Werte aus `read` gehen vor (z. B. Ende oder Verzögerung, die die Quelle als Feld liefert). Der Agent füllt nur Lücken.
-- **Speicherung:** Tabelle `message_enrichment` (`source_id`, `subject_id`, `message_hash`, Ergebnis-JSON, Modell, `created_at`, eindeutig über `source_id, subject_id, message_hash`). Bei gleichem Hash wird das gespeicherte Ergebnis verwendet. Am Incident sind übernommene Werte als geschätzt markiert (Umsetzung beim Bau entscheiden: Spalte `derived` oder Verweis auf `message_enrichment`).
+- **Speicherung:** Tabelle `message_enrichment` (`source_id`, `subject_id`, `message_hash`, `validity`, Ergebnis-JSON, Modell, `created_at`, eindeutig über `source_id, subject_id, message_hash, validity`). Bei gleichem Hash und gleicher Gültigkeit wird das gespeicherte Ergebnis verwendet. Am Incident sind übernommene Werte als geschätzt markiert (Umsetzung beim Bau entscheiden: Spalte `derived` oder Verweis auf `message_enrichment`).
 - **Systemkontingent (beschlossen 2026-11-04, nachgetragen in [architecture.md](architecture.md#assistant)):** Hintergrundaufrufe zählen nicht gegen einen Nutzer, sondern gegen ein eigenes Kontingent (`nfv.assistant.system-requests-per-hour`, Standard 60, eigener Zähler im `RateLimiter`). `StructuredExtraction` bekommt dafür einen Aufruf ohne Nutzer (`extractForSystem(…)`), kein technischer Nutzer in `app_user`.
   - Erwartete Last: einmalig rund 200 Aufrufe beim ersten Abruf (Stichprobe: 197 Ereignisse, über einige Stunden verteilt durch das Kontingent), danach nur geänderte Texte, geschätzt einige Dutzend am Tag.
   - **Kontingent erschöpft** (oder Modell nicht erreichbar): Das Event wird ohne Anreicherung verarbeitet (Incident nach `read`, Ereignisse mit Uhrzeiten im Text als `OTHER` ohne Sperre, siehe [Stufen](#stufen)) und als `enrichment_pending` markiert. Jeder Abruf holt offene Anreicherungen nach (älteste zuerst, im Rahmen des Kontingents) und ändert danach den Incident. Gleicher Hash → kein zweiter Aufruf, auch beim Nachholen.
-- **Kosten:** Mit der Regel „nur bei geändertem Text“ fällt je Ereignis und Textfassung genau ein Aufruf an, unabhängig vom Abrufintervall. Auch Ereignisse ohne betroffene Route werden angereichert, damit spätere Routen (`RouteChanged`) die Werte schon vorfinden.
+- **Kosten:** Mit der Regel „nur bei geändertem Text oder geänderter Gültigkeit“ fällt je Ereignis, Textfassung und Gültigkeit genau ein Aufruf an (ohne Wiederholungen nach Fehlern), unabhängig vom Abrufintervall. Auch Ereignisse ohne betroffene Route werden angereichert, damit spätere Routen (`RouteChanged`) die Werte schon vorfinden.
 - **Ohne Key** fehlt nur die Anreicherung. **Datenschutz:** nur Texte der Quelle gehen ans Modell, keine Nutzer- oder Tripdaten.
 
 ## Zeitfenster
@@ -195,7 +203,9 @@ public interface TrafficSource {
 - **`V34` (Zeitfenster, umgesetzt):** Tabellen `incident_window` (`incident_id`, `starts_at`, `ends_at`) und `incident_window_aud` (mit `setordinal`); `consequence.window_start`, `consequence.window_end`.
 - **`V36` (Übergangsregel, umgesetzt):** `incident.times_unconfirmed BOOLEAN` und `incident_aud.times_unconfirmed`.
 - **`V37` (Auf- und Abfahrten, umgesetzt):** `road_segment.link BOOLEAN`, siehe [network.md](network.md#datenmodell).
-- **Später, eigene Migration:** Tabelle `message_enrichment`, siehe oben (Stufe 4).
+- **`V39` (Anreicherung, umgesetzt):** Tabelle `message_enrichment`, siehe oben; `input_event.enrichment_attempts SMALLINT`.
+- **`V40` (umgesetzt):** `message_enrichment.validity`, Teil des eindeutigen Schlüssels.
+- **`V41` (umgesetzt):** `revtype` im Primärschlüssel von `incident_window_aud`: Envers nummeriert die Elemente des Sets nach Position, ein Fenster kann in einer Revision entfernt und hinzugefügt werden. `IncidentWindow` vergleicht Zeitpunkte, nicht Offsets (die Datenbank liefert einen anderen als die Quelle), `Incident.change` ändert nur die Differenz der Fenster.
 
 ## Erste Quelle: NZTA
 
@@ -315,7 +325,7 @@ flowchart LR
 ## Konfiguration
 
 ```properties
-# ab Stufe 4
+# Stufe 4 (umgesetzt)
 nfv.input.enrichment.enabled=true
 nfv.assistant.system-requests-per-hour=60
 # Stufe 1 (umgesetzt): Scheduler, alle tick nach fälligen Quellen suchen
@@ -379,7 +389,7 @@ nfv.input.sources.nz-nzta.assumed-delay.vehicle-restrictions=0m
   - `SegmentMatchingTest` (Wellington): `566003` mit `01N` nur Tunnel-Segmente mit `SH 1`, ohne `ref` auch The Terrace darüber; Peilung trennt die Richtungen; `566353` per Map Matching auf beiden Fahrbahnen der Motorway, nordwärts und südwärts getrennt; außerhalb nichts; Region ohne Netz → `RoutingUnavailableException`; `RefNormalizer`.
   - `TrafficProcessingTest` (fester `Clock` 3.11. 22:15 NZ): Ende zu Ende NZTA-Datei → 197 verarbeitet, Incidents nur für `566003` und `566353`, Rest `NO_SEGMENTS`/`ENDED` → Consequence `DELAYED` mit `timesUnconfirmed` an der Route Te Aro → Thorndon am 10.11. (wegen `TIMES_IN_TEXT`), dann `Resolved` → gleicher Incident endet, Consequence weg. Neue Version ohne Uhrzeiten → gleicher Incident, Typ `CLOSURE`, ohne `timesUnconfirmed`. Neue Version mit abgelaufenem Ende → `validTo` leer. Quelle auf Region ohne Netz → Event bleibt offen. Ruhepause.
   - `NztaReadTest` und `SegmentMatchingTest` zusätzlich: `linkOnly` je Ereignis, `SH N/A` ohne `roadRef`, `linkOnly` findet Rampen ohne Nummer.
-  - Noch nicht: nordwärts nur mit Anreicherung (Richtung).
+  - `TrafficProcessingTest`, Anreicherung (Modell gemockt): gleicher Text fragt einmal, neue Gültigkeit fragt neu und ersetzt die Fenster, Antwort ändert Typ, Richtung, Verzögerung, niedrige Sicherheit und falscher Beleg werden ignoriert, Nachholen ändert denselben Incident, Aufgeben nach 20 Fehlversuchen, Kontingent zählt nicht. `AssistantEnrichmentModelTest`: gesendeter Text, Lesen der Antwort. `RateLimiterTest`: Systemkontingent.
 - **Zeitfenster (umgesetzt):**
   - `TrafficProcessingTest.nightWindowsBlockOnlyPassagesAtNight` (Modell gemockt mit So–Do 21:00–04:30 vom 1.11. bis 18.12.): `566003` bleibt `CLOSURE` mit 34 Fenstern; Route Mi 4.11. 22:00 → `BLOCKED`, Fenster 4.11. 21:00 – 5.11. 04:30; 12:00 → keine; Fr 6.11. 22:00 → keine. Danach geplante Routen (über `matchRoute`): Do 5.11. 23:00 → Fenster ab 5.11. 21:00, Sa 7.11. 23:00 → keine.
   - `MessageEnrichmentTest`: Zeitzone (Sommer- und Winterzeit), Zuschneiden, verworfene Antworten (Ende vor Beginn, über 24 h, über 200), leer = durchgehend, `IncidentOverlap` mit Fenstern.
@@ -395,7 +405,7 @@ nfv.input.sources.nz-nzta.assumed-delay.vehicle-restrictions=0m
 1. **Umgesetzt:** `TrafficSource`, Records, `TrafficSources`, `TrafficPolling`, `FeedDiff`, `V32`, `NztaSource.fetch`. Sammelt echte Payloads.
 2. **Umgesetzt:** `NztaSource.read`, `IncidentReporting` mit `SegmentMatching` (Punkt, Linie), Incident anlegen und ändern (inkl. Typ), `assumedDelay` (`V33`), `TrafficEventProcessor`, Ruhepause beim Abruf, wenn niemand in der Region unterwegs ist. Beenden (`Resolved`, entfallen) gleich mit umgesetzt, weil `ReportedIncident` „beendet“ ohnehin trägt.
 3. Frontend (Quelle, Stand, nicht aktuell).
-4. **Teilweise umgesetzt:** Zeitfenster am Incident und an der Consequence (`V34`), Prüfung der Fenster in `MessageEnrichment` hinter `EnrichmentModel`. Offen: Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, übrige Felder der Anreicherung, Bewertung ([consequence-assessment.md](consequence-assessment.md)). Ohne Fenster Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
+4. **Umgesetzt:** Zeitfenster am Incident und an der Consequence (`V34`), Bewertung ([consequence-assessment.md](consequence-assessment.md)), Modellaufruf mit Hash-Regel, Systemkontingent und Nachholen, alle Felder der Anreicherung (`V39`). Ohne verwertbare Antwort Ereignisse mit Uhrzeiten im Text nur als Hinweis (`OTHER`) ohne Sperre, damit nächtliche Sperrungen nicht ganztags melden.
 5. Webhook-Endpunkt, zweite Quelle (z. B. Auckland Transport), Flächenereignisse, Verzögerung fortschreiben, Benachrichtigung.
 
 ## Offen
@@ -404,7 +414,9 @@ nfv.input.sources.nz-nzta.assumed-delay.vehicle-restrictions=0m
 - `ETag`/`Last-Modified` bei der NZTA (an einer echten Antwort mit Headern prüfen).
 - Zusammenführen derselben Sperrung aus zwei Quellen (gleiche Segmente, überlappende Zeit).
 - Aufbewahrung alter `input_event`-Versionen (z. B. 90 Tage).
-- Ablage der geschätzten Felder am Incident (Spalte `derived` oder Verweis auf `message_enrichment`).
+- Anweisung an das Modell und Regeln an echten Texten prüfen (`AssistantEnrichmentModel.INSTRUCTIONS`), bisher nur mit gemocktem Modell getestet.
+- Sperrungen, deren Strecke nur im Text steht („von … bis“), sind nicht Teil der Anreicherung; siehe oben.
+- Beim ersten Lauf (rund 170 Aufrufe, 60 je Stunde) wartet ein `POST` an die Testquelle, bis der laufende Durchgang fertig ist.
 - Schriftliche Rückfrage an opendata@nzta.govt.nz, ob 5 min in Ordnung sind.
 - Sperrungen als `POINT`, die eine Strecke meinen („Full Closure Lincoln Rd to Brigham Creek Rd“: `566364`, `566366`, `566367`, `566368`): Nur 447–1.465 m werden getroffen, das „von … bis“ steht nur im Text. `566368` trifft zudem SH 20A, der Text nennt SH 20.
 - Ereignisse ohne passende Nummer in OSM (`541001`, `565350`): Rückfall auf die nächste Hauptstraße im Umkreis, als unsicher markiert.

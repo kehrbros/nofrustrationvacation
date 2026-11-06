@@ -1,9 +1,12 @@
 package com.nfv.input.logic;
 
+import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.IncidentOverlap;
 import com.nfv.incidents.logic.TimeWindow;
+import com.nfv.incidents.logic.TravelDirection;
 import org.junit.jupiter.api.Test;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -91,6 +94,83 @@ class MessageEnrichmentTest {
     @Test
     void validityWithoutLengthOverlapsNothing() {
         assertThat(IncidentOverlap.overlaps(FROM, FROM, List.of(), FROM.minusHours(1), FROM.plusHours(1))).isFalse();
+    }
+
+    @Test
+    void lowConfidenceOrFalseEvidenceRejectTheWholeAnswer() {
+        assertThat(answer(null, EnrichmentModel.Confidence.LOW)).isEmpty();
+        assertThat(answer("not in the text", EnrichmentModel.Confidence.HIGH)).isEmpty();
+        assertThat(answer("closed  to\nnorthbound", EnrichmentModel.Confidence.MEDIUM)).as("whitespace").isPresent();
+    }
+
+    @Test
+    void closedOnlyWithHighConfidence() {
+        assertThat(check(closed(EnrichmentModel.Confidence.HIGH), report(null, null, null)).orElseThrow().closed()).isTrue();
+        assertThat(check(closed(EnrichmentModel.Confidence.MEDIUM), report(null, null, null)).orElseThrow().closed()).isFalse();
+    }
+
+    @Test
+    void reopeningOnlyWithoutEndFromTheSourceAndWithinThirtyDays() {
+        OffsetDateTime sourceEnd = TO;
+
+        assertThat(check(reopening("2026-11-06T15:00"), report(null, null, null)).orElseThrow().validTo())
+                .isEqualTo(OffsetDateTime.parse("2026-11-06T15:00+13:00"));
+        assertThat(check(reopening("2026-11-06T15:00"), report(sourceEnd, null, null)).orElseThrow().validTo())
+                .as("the source goes first").isEqualTo(sourceEnd);
+        assertThat(check(reopening("2026-10-30T15:00"), report(null, null, null)).orElseThrow().validTo())
+                .as("before the start").isNull();
+        assertThat(check(reopening("2026-12-30T15:00"), report(null, null, null)).orElseThrow().validTo())
+                .as("over 30 days").isNull();
+    }
+
+    @Test
+    void delayWithinRangeAndOnlyWithoutFigureFromTheSource() {
+        assertThat(check(delay(30), report(null, null, null)).orElseThrow().delay()).isEqualTo(Duration.ofMinutes(30));
+        assertThat(check(delay(721), report(null, null, null)).orElseThrow().delay()).isNull();
+        assertThat(check(delay(-1), report(null, null, null)).orElseThrow().delay()).isNull();
+        assertThat(check(delay(30), report(null, Duration.ofMinutes(5), null)).orElseThrow().delay()).isNull();
+    }
+
+    @Test
+    void directionOnlyNarrows() {
+        assertThat(check(direction(TravelDirection.NORTHBOUND), report(null, null, null)).orElseThrow().direction())
+                .isEqualTo(TravelDirection.NORTHBOUND);
+        assertThat(check(direction(TravelDirection.BOTH), report(null, null, null)).orElseThrow().direction()).isNull();
+        assertThat(check(direction(TravelDirection.NORTHBOUND), report(null, null, TravelDirection.SOUTHBOUND))
+                .orElseThrow().direction()).as("the source goes first").isNull();
+    }
+
+    private static Optional<MessageEnrichment.Enrichment> check(EnrichmentModel.Answer answer, TrafficReport report) {
+        return MessageEnrichment.check(answer, report, AUCKLAND);
+    }
+
+    private static Optional<MessageEnrichment.Enrichment> answer(String evidence, EnrichmentModel.Confidence confidence) {
+        return check(new EnrichmentModel.Answer(List.of(), null, false, null, null, null, evidence, confidence),
+                report(null, null, null));
+    }
+
+    private static EnrichmentModel.Answer closed(EnrichmentModel.Confidence confidence) {
+        return new EnrichmentModel.Answer(List.of(), null, true, null, null, null, null, confidence);
+    }
+
+    private static EnrichmentModel.Answer reopening(String at) {
+        return new EnrichmentModel.Answer(List.of(), null, false, LocalDateTime.parse(at), null, null, null,
+                EnrichmentModel.Confidence.HIGH);
+    }
+
+    private static EnrichmentModel.Answer delay(int minutes) {
+        return new EnrichmentModel.Answer(List.of(), null, false, null, minutes, null, null,
+                EnrichmentModel.Confidence.HIGH);
+    }
+
+    private static EnrichmentModel.Answer direction(TravelDirection direction) {
+        return new EnrichmentModel.Answer(List.of(), null, false, null, null, direction, null,
+                EnrichmentModel.Confidence.HIGH);
+    }
+
+    private static TrafficReport report(OffsetDateTime validTo, Duration delay, TravelDirection direction) {
+        return new TrafficReport(IncidentType.CLOSURE, false, FROM, validTo, "01N", direction, null, delay, null,
+                "title", "text", "This tunnel is closed to\nnorthbound traffic", null, false, List.of(), null);
     }
 
     private static Optional<List<TimeWindow>> check(EnrichmentModel.LocalWindow... windows) {

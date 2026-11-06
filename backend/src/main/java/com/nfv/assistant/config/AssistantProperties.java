@@ -14,10 +14,12 @@ import java.time.Duration;
  * @param imageQuality    {@code low}, {@code medium} or {@code high}, drives the cost per image
  * @param timeout         per request to the model
  * @param requestsPerHour per user, protects against runaway costs
+ * @param systemRequestsPerHour background requests without a user, e.g. reading traffic messages
  */
 @ConfigurationProperties("nfv.assistant")
 public record AssistantProperties(String apiKey, String baseUrl, String model, String imageModel,
-                                  String imageQuality, Duration timeout, int requestsPerHour) {
+                                  String imageQuality, Duration timeout, int requestsPerHour,
+                                  int systemRequestsPerHour) {
 
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();

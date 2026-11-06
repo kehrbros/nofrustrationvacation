@@ -25,8 +25,15 @@ public interface EventRepository extends JpaRepository<Event, Long> {
     Optional<Event> findFirstBySourceIdAndSubjectIdAndIncidentIdIsNotNullOrderByIdDesc(long sourceId,
                                                                                         String subjectId);
 
+    /** Processed events still waiting for their enrichment, those with the fewest failed tries first, then oldest. */
+    @Query("SELECT e.id FROM TrafficEvent e WHERE e.enrichmentPending = TRUE AND e.processedAt IS NOT NULL "
+            + "ORDER BY e.enrichmentAttempts, e.receivedAt, e.id")
+    List<Long> findEnrichmentPendingIds();
+
     /** State of an event, read from the database without the entity: another thread may just have processed it. */
     interface EventState {
+        long getId();
+
         String getExternalId();
 
         @Nullable OffsetDateTime getProcessedAt();

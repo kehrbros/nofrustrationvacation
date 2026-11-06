@@ -50,6 +50,9 @@ public abstract class Event extends AbstractEntity {
     private @Nullable String processingNote;
     /** Processed without enrichment, enrichment is caught up later. */
     private boolean enrichmentPending;
+    /** Failed attempts to catch up, events with fewer are tried first. */
+    @Column(nullable = false)
+    private short enrichmentAttempts;
 
     protected Event() {
     }
@@ -81,5 +84,23 @@ public abstract class Event extends AbstractEntity {
         this.incidentId = incidentId;
         this.processingNote = note == null || note.length() <= 500 ? note : note.substring(0, 500);
         this.processedAt = processedAt;
+    }
+
+    /** The model gave no answer, to be caught up. */
+    public void enrichmentDeferred() {
+        this.enrichmentPending = true;
+    }
+
+    /** Nothing left to catch up. */
+    public void enrichmentSettled() {
+        this.enrichmentPending = false;
+    }
+
+    /** A try to catch up failed; after {@code maxAttempts} tries the event stays without enrichment. */
+    public void enrichmentAttemptFailed(int maxAttempts) {
+        this.enrichmentAttempts++;
+        if (enrichmentAttempts >= maxAttempts) {
+            this.enrichmentPending = false;
+        }
     }
 }

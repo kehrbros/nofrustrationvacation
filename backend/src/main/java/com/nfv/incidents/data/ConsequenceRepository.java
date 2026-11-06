@@ -11,6 +11,7 @@ import java.util.Collection;
 import java.util.List;
 
 public interface ConsequenceRepository extends JpaRepository<Consequence, Long> {
+    @EntityGraph(attributePaths = "incident")
     List<Consequence> findByIncidentId(long incidentId);
 
     @EntityGraph(attributePaths = "incident")

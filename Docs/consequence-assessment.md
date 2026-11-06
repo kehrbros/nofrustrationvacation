@@ -66,7 +66,7 @@
   - `passageAt` (verschobene Durchfahrt der getroffenen Section, für Rangfolge und Hinweis „knapp“)
   - `assessedAt`
 - `Incident` zusätzlich `assumedDelay` (Annahme der Quelle ohne Zahl, historisiert, `V33`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historisiert, `V35`) und `timesUnconfirmed` (historisiert, `V36`)
-- `impact` (`BLOCKED`, `DELAYED`) bleibt: beschreibt den Incident an der Stelle, die Kategorie beschreibt die Folge für die Reise. `delay` bleibt die Angabe des Incidents.
+- `impact` (`BLOCKED`, `DELAYED`) beschreibt den Incident an der Stelle, die Kategorie die Folge für die Reise. Es folgt aus dem Typ des Incidents (`Incident.impact()`, `Consequence.impact()`) und wird seit `V42` nicht mehr je Consequence gespeichert, die API liefert es unverändert. `delay` bleibt die Angabe des Incidents.
 - Schema: eigene Migration `V35` (statt mit den Zeitfenstern, die schon in `V34` kamen).
 
 ## Wann bewertet wird
@@ -129,7 +129,7 @@ nfv.incidents.assessment.tolerance-max=2h
   - Nach „nicht passierbar“ sind alle späteren Consequences mit eigener Verzögerung `TOO_LATE`, ihre `expectedArrival` ist leer.
   - Wartezeit nach dem Ende eines Fensters (Treffer nur durch Toleranz danach): 0.
   - `matchIncident` sucht Routen in der Hülle erweitert um `max-wait + tolerance-max` davor und `tolerance-max` danach; eine Verschiebung um mehr als `max-wait` in einen neuen Incident findet erst die nächste Bewertung der Route.
-  - `HEAVY_ONLY` kommt aus der Anreicherung (`EnrichmentModel.Answer.vehicleScope`), bis Stufe 4 der Anreicherung also nur aus Tests.
+  - `HEAVY_ONLY` kommt aus der Anreicherung (`EnrichmentModel.Answer.vehicleScope`) oder von der Testquelle.
 - Tests: `RouteAssessorTest` (Beispieltabelle und alle Sonderfälle oben, `timesUnconfirmed`), `ConsequenceMatchingTest` (Ankunft ändern → `DELAYED` ↔ `TOO_LATE`, `NO_IMPACT` gelistet, nicht gezählt, Zusammenfassung, Durchfahrt vorbei, laufende Wartezeit, vor dem Beginn beendet), `TripApiTest` (neue Felder, Endpunkt je Route).
 
 ## Offen
