@@ -1,6 +1,6 @@
 # Vorschläge durch den Agenten (`advisor`)
 
-- **Status:** Entwurf, beschlossen 2026-11-06 (Lukas), Code noch nicht umgesetzt.
+- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers umgesetzt (`V43`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe (`RouteTooLate`) und Frontend fehlen noch.
 - **Ziel:** Trifft ein Incident eine Route, schlägt ein Agent vor, was der Nutzer tun kann. Bei `TOO_LATE` automatisch, bei `DELAYED` nur auf Anfrage des Nutzers.
 - **Grundsatz:** Das Modell wählt, vergleicht und begründet. Strecken, Zeiten und Konflikte berechnet das Backend. Das Modell ändert nichts an der Reise, das bestätigt immer der Nutzer.
 - **Abgrenzung:** `recommendations` berechnet Strecken deterministisch und ohne Modell ([recommendations.md](recommendations.md)). `advisor` nutzt diese Berechnung, entscheidet, was vorgeschlagen wird, und speichert das Ergebnis.
@@ -53,26 +53,27 @@ flowchart LR
       String name();
       String description();
       JsonNode parameters();
-      boolean appliesTo(AdvisorRun run);
-      JsonNode call(AdvisorRun run, JsonNode arguments);
+      boolean appliesTo(RunContext run);
+      JsonNode call(RunContext run, JsonNode arguments);
   }
   ```
 
-- **Fest je Lauf:** `appUserId`, `tripId` und `routeId` setzt das Backend. Sie sind nie Parameter des Modells.
-- **Kennungen:** Tools liefern Kennungen, die nur im Lauf gelten (`route_option_id`, `shift_id`), die Daten dahinter hält der Lauf im Speicher. `submit_proposals` darf nur Kennungen aus diesem Lauf nennen, unbekannte verwirft das Backend, wie `AlternativeRanking` fremde Hotel-Ids.
+- **Fest je Lauf:** Nutzer, Route und Consequence setzt das Backend (`RunContext`). Sie sind nie Parameter des Modells.
+- **Kennungen:** Tools liefern eine `option_id`, die nur im Lauf gilt, die Daten dahinter hält der `RunContext` im Speicher. `submit_proposals` darf nur Kennungen aus diesem Lauf nennen, unbekannte und doppelte verwirft das Backend, wie `AlternativeRanking` fremde Hotel-Ids. Sind alle unbekannt, gilt der Lauf als ohne Modell.
 - **Keine Tools zum Ändern:** Route übernehmen, Stops ändern, reservieren, zahlen und stornieren bleiben hinter der Bestätigung des Nutzers.
 
 ### Erste Stufe
 
 | Tool | Parameter | Liefert | Nutzt |
 |---|---|---|---|
-| `find_alternative_routes` | `count` (1–5), `depart_at` (optional) | je Option `route_option_id`, `via`, Ankunft, Abstand zur Referenz, Puffer zur Frist, Konflikte, Anteil gemeinsamer Strecke, ohne Geometrie | `Suggestions.forConsequence` |
-| `find_departure_shifts` | keine, immer auf der geplanten Route | je Richtung höchstens eine `shift_id`, Abfahrt, Ankunft, Konflikte, `meets_deadline` | `Suggestions.forConsequence` mit `DEPARTURE_SHIFT` |
-| `submit_proposals` | `summary`, `proposals[]` mit `kind`, `rank`, `reason` und den Kennungen | beendet den Lauf | `advisor` |
+| `find_alternative_routes` | `count` (1–5 oder `null`) | je Option `option_id`, `via`, Abfahrt, Ankunft, Strecke, Dauer, Verzögerung, `meets_deadline`, Konflikte, Anteil gemeinsamer Strecke, ohne Geometrie | `Suggestions.forConsequence` mit `ALTERNATIVES` |
+| `find_departure_shifts` | keine, immer auf der geplanten Route | je Richtung höchstens eine Option, Felder wie oben | `Suggestions.forConsequence` mit `DEPARTURE_SHIFT` |
+| `submit_proposals` | `summary`, `proposals[]` mit `option_id` und `reason`, beste zuerst | beendet den Lauf | `advisor` |
 
 - Waypoints des Nutzers bleiben, alle aktiven Incidents der Route werden gesperrt bzw. verzögert. Das entscheidet das Szenario, nicht das Modell ([recommendations.md](recommendations.md#szenario-recommendationslogic)). Deshalb keine Parameter für Waypoints oder Segmente.
 - `find_departure_shifts` entfällt, wenn der Nutzer schon unterwegs ist.
-- **`kind`:** `REROUTE`, `SHIFT_DEPARTURE`, `KEEP_ROUTE`. `KEEP_ROUTE` ist kein Generator in `recommendations`: Strecke und Verzögerung aus `SuggestionResult.reference`, bei einer Sperrung Wartezeit und Ankunft aus der Consequence (die Referenz enthält das Warten nicht).
+- **Keine andere Abfahrt für Routen-Optionen:** `find_alternative_routes` rechnet immer mit der geplanten Abfahrt. `choice` setzt entweder Waypoints oder eine Abfahrt, ein Vorschlag mit beidem ließe sich nicht wählen wie angezeigt.
+- **`kind`:** `REROUTE`, `SHIFT_DEPARTURE`, `KEEP_ROUTE`, folgt aus der `option_id`. `keep_route` steht dem Modell immer zur Verfügung. `KEEP_ROUTE` ist kein Generator in `recommendations`: Strecke und Verzögerung aus `SuggestionResult.reference`, bei einer Sperrung Wartezeit und Ankunft aus der Consequence (die Referenz enthält das Warten nicht).
 - **Grenze der ersten Stufe:** Gibt es bei einer Sperrung weder Umfahrung noch sinnvolle Abfahrt, kann der Lauf nur `KEEP_ROUTE` mit Verzögerung melden oder keine brauchbare Option. Eine Übernachtung unterwegs kommt erst mit den Unterkunfts-Tools.
 
 ### Später: Unterkünfte und Nachricht an die Unterkunft
@@ -122,9 +123,9 @@ public interface LateArrivalNotices {
 
 - Eigene Tabellen, Migration `V43`, abgeleitet und nicht historisiert. `@ManyToOne` nur innerhalb des Moduls, `route_id` als Id mit Fremdschlüssel. Wird die Route gelöscht, löscht die Datenbank die Läufe mit (`ON DELETE CASCADE`).
 - `AdvisorRun` (`advisor_run`):
-  - `route_id`, `consequence_id` (optional, vom Nutzer gewählt, `ON DELETE SET NULL`)
+  - `route_id`, `consequence_id` (vom Nutzer gewählt, sonst die schlimmste der Route, `ON DELETE SET NULL`)
   - `trigger` (`AUTO`, `USER`, Spalte `run_trigger`), `goal` (optional)
-  - `status`: `PENDING`, `RUNNING`, `COMPLETED`, `COMPLETED_WITHOUT_MODEL`, `FAILED`
+  - `status`: `PENDING`, `RUNNING`, `COMPLETED`, `COMPLETED_WITHOUT_MODEL`, `FAILED` mit `failure` (`ROUTING_UNAVAILABLE`, `CONSEQUENCE_GONE`, `INTERNAL_ERROR`, `ABANDONED`, `INTERRUPTED`)
   - `auto_key` (nur `AUTO`, eindeutig mit `route_id`; `NULL` kollidiert nicht)
   - `situation`: Hash aus Incidents mit Kategorie `TOO_LATE` oder `DELAYED`, Frist und Planankunft, siehe [Veraltete Vorschläge](#veraltete-vorschläge)
   - `summary`, `failure`, `created_at`, `finished_at`
@@ -141,7 +142,7 @@ public interface LateArrivalNotices {
 ## API
 
 - `POST /api/v1/routes/{routeId}/alternative-proposals`: Body optional `consequenceId`, `goal` (`ARRIVE_ON_TIME`, `MINIMIZE_DELAY`, Standard `ARRIVE_ON_TIME`). Antwort `202` mit `runId`, läuft asynchron, weil mehrere Modellaufrufe nötig sind.
-- `GET /api/v1/routes/{routeId}/alternative-proposals`: letzter Lauf der Route, auch der automatische. Ohne Lauf `200` mit leerem Ergebnis.
+- `GET /api/v1/routes/{routeId}/alternative-proposals`: letzter Lauf der Route, auch der automatische. Ohne Lauf `200` mit `run: null`.
 - `GET /api/v1/alternative-proposals/{runId}`: `status`, `stale`, `summary`, `proposals`.
 - **Wählen:** `REROUTE` über `PUT /routes/{routeId}/choice` mit den Punkten des Vorschlags, `SHIFT_DEPARTURE` über dasselbe `choice` mit `departureAt` ([recommendations.md](recommendations.md#auswahl-speichern)). `KEEP_ROUTE` ändert nichts.
 - **Fehler** (`AdvisorExceptionHandler`): fremde oder unbekannte Route bzw. fremder Lauf `404` `TRIP_NOT_FOUND`, keine aktuelle `TOO_LATE`- oder `DELAYED`-Consequence `409` `NO_ACTIVE_CONSEQUENCE`, `consequenceId` gehört nicht zur Route `400` `INVALID_PROPOSAL_INPUT`.
@@ -162,13 +163,12 @@ public interface LateArrivalNotices {
 
 - `advisor → recommendations`, `→ incidents`, `→ trips`, `→ assistant`. Kein anderes Modul kennt `advisor`, kein Zyklus. Rückwärts nur über das Event `RouteTooLate` aus `incidents.logic`.
 - Vorerst kein `advisor → bookings`, das kommt mit dem Adapter für `StayOptions` und `LateArrivalNotices`.
-- **Neu in `trips.logic`:** Eigentümer einer Route lesen, `RouteSnapshots.ownerOf(routeId)`. Der automatische Lauf kennt nur die `routeId`, `Suggestions` und `RouteSnapshots` verlangen `appUserId`.
+- **Neu in `trips.logic` (kommt mit den automatischen Läufen):** Eigentümer einer Route lesen, `RouteSnapshots.ownerOf(routeId)`. Der automatische Lauf kennt nur die `routeId`, `Suggestions` und `RouteSnapshots` verlangen `appUserId`.
 - `TripTools` lassen sich nicht wiederverwenden: Sie lesen den Nutzer aus dem `SecurityContext`, den ein Hintergrundlauf nicht hat. Die Tools von `advisor` rufen dieselbe Logik auf.
 
 ## Konfiguration
 
 ```properties
-nfv.advisor.auto-enabled=true
 nfv.advisor.max-turns=8
 nfv.advisor.max-proposals=3
 nfv.advisor.run-timeout=15m
@@ -179,8 +179,8 @@ nfv.advisor.run-timeout=15m
 1. Doku.
 2. `recommendations`: `forConsequence`, nur betroffene Abschnitte, `DEPARTURE_SHIFT`, bereits unterwegs, ohne Modell testbar.
 3. `assistant`: `ToolConversation`, gegen eine gemockte API getestet (`ToolConversationTest`). Vor dem ersten Betrieb einmal gegen die echte API prüfen, besonders das Wiederholen des verschlüsselten Reasonings.
-4. `advisor`: Migration `V43`, Agent, Tools, API, Schnittstellen `StayOptions` und `LateArrivalNotices`.
-5. `incidents`: `RouteTooLate` in `assessRoute`, erst damit laufen automatische Läufe.
+4. `advisor`: Migration `V43`, Agent, Tools, API, Schnittstellen `StayOptions` und `LateArrivalNotices`. Erste Läufe gegen die echte API.
+5. `incidents`: `RouteTooLate` in `assessRoute`, Listener und `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, Schalter `nfv.advisor.auto-enabled`. Erst damit laufen automatische Läufe.
 
 ## Tests
 
@@ -188,6 +188,7 @@ nfv.advisor.run-timeout=15m
 - Listener: gleicher `auto_key` nach Neuplanung startet keinen Lauf, geänderte Incidents oder Frist schon, `FAILED` gibt den Schlüssel frei.
 - Agent mit gemockter `ToolConversation` (Tests rufen OpenAI nie auf): unbekannte Kennungen verworfen, Werte kommen aus dem Backend, `max-turns`, ohne Modell `COMPLETED_WITHOUT_MODEL`.
 - API: `202`, fremde Route `404`, `DELAYED` startet nur durch den Nutzer, `NO_ACTIVE_CONSEQUENCE`, laufender Lauf wird wiederverwendet, `stale` nach geänderter Lage.
+- Umgesetzt in `AlternativeProposalsTest` (Tools, Kontext, Werte aus dem Backend, ohne Modell, abgebrochene Läufe, Neustart, API), `ConsequenceAssessment` und Listener folgen mit den automatischen Läufen.
 
 ## Offen
 
@@ -196,4 +197,5 @@ nfv.advisor.run-timeout=15m
 - **Frontend:** Anzeige der Vorschläge im `IncidentSheet`, Hinweis `stale`, Knopf für den Lauf bei `DELAYED`.
 - **Mehrere Replicas:** Der Schutz vor doppelten Läufen hält über den Unique-Constraint, das Zurücksetzen beim Start müsste dann auf Läufe der eigenen Instanz oder ein Zeitlimit umgestellt werden.
 - **Aufräumen:** wie lange alte Läufe aufgehoben werden.
+- **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).

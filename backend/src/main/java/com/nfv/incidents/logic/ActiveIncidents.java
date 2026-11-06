@@ -51,13 +51,14 @@ public class ActiveIncidents {
 
     private RouteConsequence view(Consequence consequence) {
         return new RouteConsequence(consequence.getId(), consequence.getRouteId(),
-                consequence.getIncident().getId(), consequence.impact(), consequence.getCategory(),
-                consequence.getMatch(), consequence.getAssessedDelay(),
-                Set.copyOf(consequence.getIncident().getSegmentIds()),
+                consequence.getIncident().getId(), consequence.getIncident().getDescription(), consequence.impact(),
+                consequence.getCategory(), consequence.getMatch(), consequence.getAssessedDelay(),
+                consequence.isDelayAssumed(), Set.copyOf(consequence.getIncident().getSegmentIds()),
                 consequence.getWindowStart() != null ? consequence.getWindowStart()
                         : consequence.getIncident().getValidFrom(),
                 consequence.getWindowEnd() != null ? consequence.getWindowEnd()
                         : consequence.getIncident().getValidTo(),
+                consequence.getPassageAt(), consequence.getExpectedArrival(),
                 consequence.isOver(OffsetDateTime.now(clock), rules.maxWait()));
     }
 }
