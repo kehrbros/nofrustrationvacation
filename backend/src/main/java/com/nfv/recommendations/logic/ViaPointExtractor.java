@@ -2,6 +2,7 @@ package com.nfv.recommendations.logic;
 
 import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.NoRouteException;
+import com.nfv.network.logic.RouteOptions;
 import com.nfv.network.logic.RoutePoint;
 import com.nfv.network.logic.RouteResult;
 import com.nfv.network.logic.RoutedSegment;
@@ -41,6 +42,7 @@ class ViaPointExtractor {
      * combination) a point in the middle of its longest segment; checked by routing over the points, more points in
      * the longest part still different until {@code viaReproduceRatio} is reached.
      *
+     * @param base     see {@link #base}
      * @param segments details of all segments of the candidate
      */
     List<SuggestedOption.Point> extract(Scenario scenario, Candidate candidate, Candidate base,
@@ -94,6 +96,33 @@ class ViaPointExtractor {
         return points(placed);
     }
 
+    /**
+     * Way the points have to steer away from. Choosing plans the route without incidents, so with an incident this is
+     * the way without restrictions: otherwise the best way around an incident would get no point and the plan would
+     * lead through the incident again.
+     */
+    Candidate base(Scenario scenario, List<Candidate> candidates) {
+        if (scenario.trigger() != SuggestionTrigger.INCIDENT) {
+            return candidates.getFirst();
+        }
+        List<RoutePoint> points = scenario.points();
+        List<RouteResult> legs = new ArrayList<>();
+        for (int i = 0; i + 1 < points.size(); i++) {
+            legs.add(routing.route(List.of(asStop(points.get(i)), asStop(points.get(i + 1))), RouteOptions.none()));
+        }
+        return new Candidate(candidates.getFirst().kind(), legs, scenario.departure());
+    }
+
+    /** The waypoints as they are, for a candidate on the planned route. */
+    List<SuggestedOption.Point> waypoints(Scenario scenario) {
+        return scenario.vias().stream().map(via -> new SuggestedOption.Point(via.point().point().lat(),
+                via.point().point().lon(), via.point().roadHint(), via.waypointId())).toList();
+    }
+
+    private static RoutePoint asStop(RoutePoint point) {
+        return new RoutePoint(point.point(), RoutePoint.Kind.STOP, point.roadHint());
+    }
+
     private static void place(List<Placed> placed, Set<Integer> used, List<RoutedSegment> all, int index,
                               Map<Long, SegmentInfo> segments) {
         used.add(index);
@@ -111,7 +140,8 @@ class ViaPointExtractor {
         points.forEach(point -> route.add(new RoutePoint(new GeoPoint(point.latitude(), point.longitude()),
                 RoutePoint.Kind.VIA, point.roadHint())));
         route.add(scenario.end());
-        return ids(routing.route(route, scenario.constraints()));
+        // without restrictions: that is how the route is planned after choosing
+        return ids(routing.route(route, RouteOptions.none()));
     }
 
     /** Maximal runs of consecutive segment indices not matching {@code inOther}. */

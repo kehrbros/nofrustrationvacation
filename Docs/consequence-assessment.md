@@ -5,7 +5,7 @@
   - `TOO_LATE`: Mit dem Incident kommt der Nutzer nach der Ankunftszeit am Ziel-Stop an (oder kommt gar nicht durch).
   - `DELAYED`: spürbare Verzögerung, die Ankunftszeit wird trotzdem gehalten.
   - `NO_IMPACT`: Incident auf der Route zur Zeit der Durchfahrt, aber ohne nennenswerte Verzögerung (z. B. NZTA `Caution`).
-- **Nicht Teil dieses Entwurfs:** Lösungen und Alternativen (Umfahrung, spätere Abfahrt, andere Unterkunft). Die Bewertung beschreibt nur die Lage.
+- **Nicht Teil dieses Entwurfs:** Lösungen und Alternativen (Umfahrung, spätere Abfahrt, andere Unterkunft). Die Bewertung beschreibt nur die Lage. Lösungen schlägt das Modul `advisor` vor, siehe [advisor.md](advisor.md).
 
 ## Referenzzeit
 
@@ -75,6 +75,7 @@
   - nach `matchIncident` für jede Route mit neuer, geänderter oder entfernter Consequence
   - nach `matchRoute` (`RouteChanged`)
   - **neu:** Ankunft des Ziel-Stops geändert → `trips` veröffentlicht `StopArrivalChanged(stopId, routeIds)`, `incidents` bewertet die Routen zum Stop neu. Heute löst eine Änderung der Ankunft keine Planung aus ([domain.md](domain.md#trips)), daher ein eigenes Event statt `RouteChanged`.
+- **Vorschläge auslösen (Entwurf 2026-11-06, noch nicht umgesetzt):** Hat die Route nach der Bewertung mindestens eine `TOO_LATE`-Consequence, deren Durchfahrt nicht vorbei ist, veröffentlicht `assessRoute` `RouteTooLate(routeId, incidentIds, deadline)`. Doppelte Läufe verhindert `advisor`, die Bewertung vergleicht nichts mit dem vorigen Stand, siehe [advisor.md](advisor.md#automatisch-nur-too_late).
 - Zeit vergeht: keine Neubewertung, die Durchfahrten sind geplant. Abgelaufene Incidents fallen wie bisher aus der Anzeige.
 - **Durchfahrt vorbei (umgesetzt 2026-11-05):** Consequences fallen aus Liste, Zusammenfassung und Zähler (`TripIncidents`), sobald `passageAt` + eigene Verzögerung vorbei ist (nicht passierbar: `max-wait`), gespeichert bleiben sie. Solange die Wartezeit läuft, bleiben sie sichtbar. Grenze: Sind alle Consequences einer Route vorbei, zeigt die Zusammenfassung wieder die Planankunft, auch wenn die Route noch unterwegs ist.
 
@@ -82,6 +83,7 @@
 
 - `incidents` liest Frist und Planankunft über `trips.logic` (wie `TripIncidents` über `TripLogic`) und die Sections über `RouteSectionRepository` (besteht).
 - `trips -.->|StopArrivalChanged| incidents` neu, Richtung wie `RouteChanged`.
+- `incidents -.->|RouteTooLate| advisor` (Entwurf): `incidents` kennt `advisor` nicht.
 
 ## API und Frontend
 

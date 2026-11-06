@@ -131,7 +131,7 @@ class AlternativesAndViaPointsTest {
         return new Scenario(1L, SuggestionTrigger.PLANNING, null, new RoutePoint(NEWTOWN, RoutePoint.Kind.STOP, null),
                 new RoutePoint(THORNDON, RoutePoint.Kind.STOP, null), vias,
                 vias.isEmpty() ? WaypointMode.IGNORE : WaypointMode.FOLLOW, DEPARTURE, RouteOptions.none(), List.of(),
-                Set.of(OptionKind.ALTERNATIVES), 3);
+                Set.of(OptionKind.ALTERNATIVES), 3, List.of(), null);
     }
 
     private static RouteResult result(long segmentId) {

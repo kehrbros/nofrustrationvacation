@@ -4,8 +4,6 @@ package com.nfv.recommendations.logic;
 public enum OptionKind {
     /** GraphHopper {@code alternative_route}, the fastest included. */
     ALTERNATIVES,
-    /** The planned route as it is (incidents, later). */
-    KEEP_ROUTE,
-    /** The planned route with another departure (incidents, later). */
+    /** The planned route with another departure (incidents). */
     DEPARTURE_SHIFT
 }

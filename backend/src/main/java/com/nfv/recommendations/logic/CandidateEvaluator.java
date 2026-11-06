@@ -70,15 +70,16 @@ final class CandidateEvaluator {
                 extra = extra.plus(scenarioDelay);
             }
             for (ActiveIncident incident : bySegment.getOrDefault(step.segmentId(), List.of())) {
-                if (conflicts.containsKey(incident.id()) || !incident.overlaps(passage, end)) {
+                if (!incident.affectsCars() || conflicts.containsKey(incident.id())
+                        || !incident.overlaps(passage, end)) {
                     continue;
                 }
                 conflicts.put(incident.id(), new SuggestedOption.Conflict(incident.id(), incident.impact(),
-                        incident.expectedDelay()));
+                        incident.delay()));
                 if (incident.impact() == Impact.BLOCKED) {
                     blocked = true;
-                } else if (incident.expectedDelay() != null) {
-                    extra = extra.plus(incident.expectedDelay());
+                } else if (incident.delay() != null) {
+                    extra = extra.plus(incident.delay());
                 }
             }
             delay = delay.plus(extra);

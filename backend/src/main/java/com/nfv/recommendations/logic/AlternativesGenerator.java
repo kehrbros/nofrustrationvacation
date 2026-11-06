@@ -1,6 +1,8 @@
 package com.nfv.recommendations.logic;
 
 import com.nfv.network.logic.AlternativeOptions;
+import com.nfv.network.logic.NoRouteException;
+import com.nfv.network.logic.RouteOptions;
 import com.nfv.network.logic.RoutePoint;
 import com.nfv.network.logic.RouteResult;
 import com.nfv.network.logic.Routing;
@@ -44,13 +46,35 @@ class AlternativesGenerator implements CandidateGenerator {
                 properties.maxShareFactor());
         List<RoutePoint> points = scenario.points();
         List<List<RouteResult>> legs = new ArrayList<>();
-        for (int i = 0; i + 1 < points.size(); i++) {
-            legs.add(routing.alternatives(asStop(points.get(i)), asStop(points.get(i + 1)), scenario.constraints(),
-                    options));
+        try {
+            for (int i = 0; i + 1 < points.size(); i++) {
+                legs.add(leg(scenario, asStop(points.get(i)), asStop(points.get(i + 1)), options));
+            }
+        } catch (NoRouteException e) {
+            if (scenario.trigger() != SuggestionTrigger.INCIDENT) {
+                throw e;
+            }
+            // no way around the incident: the caller reports it, the planned route stays as comparison
+            return List.of();
         }
         return combine(legs, keep).stream()
                 .map(combination -> new Candidate(OptionKind.ALTERNATIVES, combination, scenario.departure()))
                 .toList();
+    }
+
+    /** With an incident only legs that pass it get alternatives, the others stay the way they are driven now. */
+    private List<RouteResult> leg(Scenario scenario, RoutePoint from, RoutePoint to, AlternativeOptions options) {
+        if (scenario.trigger() == SuggestionTrigger.INCIDENT) {
+            RouteResult direct = routing.route(List.of(from, to), RouteOptions.none());
+            if (direct.segments().stream().noneMatch(segment -> restricted(scenario.constraints(), segment.segmentId()))) {
+                return List.of(direct);
+            }
+        }
+        return routing.alternatives(from, to, scenario.constraints(), options);
+    }
+
+    private static boolean restricted(RouteOptions constraints, long segmentId) {
+        return constraints.blockedSegmentIds().contains(segmentId) || constraints.delayedSegments().containsKey(segmentId);
     }
 
     /**
