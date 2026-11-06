@@ -2,7 +2,7 @@
 
 - **Ziel:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung).
 - **Architektur** (Module, Abhängigkeiten, Persistenz, Altbestand): siehe [architecture.md](architecture.md).
-- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`, Streckenvorschläge und `waypoint.origin` `V29__recommendations.sql`, Buchung alternativer Unterkünfte `V30__booking_reservation.sql`, Reisende `V31`, Verkehrsfeed `V32`–`V37` (siehe [traffic-feed.md](traffic-feed.md), [consequence-assessment.md](consequence-assessment.md)), Streckenvorschläge nicht mehr gespeichert `V38__drop_suggestion_sets.sql`, Anreicherung `V39`–`V41`, `impact` nicht mehr gespeichert `V42`. Nächste freie Migration: `V43`.
+- **Schema:** `V20__trips_and_incidents.sql`, Titelfoto `V21__trip_cover_image.sql`, Reisezeitraum und Offsets `V22__trip_period_and_offsets.sql`, Streckennetz `V23__road_network.sql`, Routenplanung `V24__route_planning.sql`, Planungsstatus `V25__route_plan_status.sql`, Buchungen von Unterkünften `V26__booking_accommodation.sql`, Punkt der Unterkunft für räumliche Abfragen `V28__accommodation_location.sql`, Streckenvorschläge und `waypoint.origin` `V29__recommendations.sql`, Buchung alternativer Unterkünfte `V30__booking_reservation.sql`, Reisende `V31`, Verkehrsfeed `V32`–`V37` (siehe [traffic-feed.md](traffic-feed.md), [consequence-assessment.md](consequence-assessment.md)), Streckenvorschläge nicht mehr gespeichert `V38__drop_suggestion_sets.sql`, Anreicherung `V39`–`V41`, `impact` nicht mehr gespeichert `V42`, Vorschläge des Agenten `V43__advisor.sql`. Nächste freie Migration: `V44`.
 
 ## Bounded Contexts
 
@@ -14,7 +14,7 @@
 | `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent`, `SourceSubject` |
 | `com.nfv.incidents` | `Incident`, `Consequence` |
 | `com.nfv.recommendations` | keine (Vorschläge werden flüchtig berechnet, gespeichert wird nur die gewählte Strecke als `Waypoint`s) |
-| `com.nfv.advisor` (Entwurf) | `AdvisorRun`, `AdvisorProposal` (Vorschläge des Agenten, siehe [advisor.md](advisor.md)) |
+| `com.nfv.advisor` | `AdvisorRun`, `AdvisorProposal` (Vorschläge des Agenten, siehe [advisor.md](advisor.md)) |
 
 - **Referenzen zwischen Modulen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, …), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls.
 - **Historisiert (Envers):** `Trip`, `Stop`, `Waypoint`, `Booking`, `AccommodationDetails`, `Incident` (inkl. Segmente, `incident_segment_aud`). Nicht historisiert: `TripCoverImage` (Binärdaten, ersetztes Bild entfällt), Streckennetz, `Route`/`RouteSection` (geplant, wird ersetzt), `Consequence` und Vorschläge des Agenten (abgeleitet), Input (unveränderlich bis auf Verarbeitungsstatus).
@@ -114,7 +114,7 @@
 ## Streckenvorschläge
 
 - Für eine Route bis zu `n` Vorschläge, wie gefahren werden kann, bei der Planung und wenn ein Incident die Route trifft. Beide aus einem `Scenario` (Punkte, Abfahrt, Sperren/Verzögerungen, Referenzroute) mit derselben Logik, Details in [recommendations.md](recommendations.md).
-- **Vorschläge des Agenten (Entwurf):** Bei `TOO_LATE` automatisch, bei `DELAYED` auf Anfrage schlägt ein Agent Lösungen vor. Diese Läufe und Vorschläge speichert `advisor` (Entscheidung 2026-11-06), der Nutzer wählt selbst, siehe [advisor.md](advisor.md).
+- **Vorschläge des Agenten:** Auf Anfrage des Nutzers (umgesetzt), bei `TOO_LATE` künftig automatisch, schlägt ein Agent Lösungen vor. Diese Läufe und Vorschläge speichert `advisor` (Entscheidung 2026-11-06), der Nutzer wählt selbst, siehe [advisor.md](advisor.md).
 - Vorschläge von `recommendations` werden bei jeder Anfrage neu berechnet und nicht gespeichert. Die gewählte Strecke kommt als Liste von Punkten zurück (`PUT /routes/{id}/choice`), wird als `Waypoint`s gespeichert (neue mit `origin` `SUGGESTION`, bestehende des Nutzers bleiben) und die Route neu geplant, keine Segmentliste. Eine gespeicherte Route gilt als gewählt, es gibt keinen eigenen Merker.
 - Keine Prüfung auf parallele Änderungen, die letzte Wahl gewinnt. Später allgemein über Versionierung der Entitäten (`@Version`), bei Routen inklusive der Stops.
 - Der geplante Verlauf einer Route kommt aus `RouteLines` (`trips.logic`): Linie aus den Sections über `network.SegmentQueries.line`, Distanz, Dauer und „über …“ aus den Straßenhinweisen der `SUGGESTION`-Waypoints.
