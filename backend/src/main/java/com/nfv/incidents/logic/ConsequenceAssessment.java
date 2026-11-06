@@ -64,21 +64,25 @@ public class ConsequenceAssessment {
         Map<Long, Consequence> remaining = new HashMap<>(consequenceRepository.findByRouteId(routeId).stream()
                 .collect(Collectors.toMap(c -> c.getIncident().getId(), Function.identity())));
         List<Consequence> result = new ArrayList<>();
+        boolean becameTooLate = false;
         for (RouteAssessor.Assessment assessment : assessments) {
             Consequence consequence = remaining.remove(assessment.incidentId());
+            Category before = consequence == null ? null : consequence.getCategory();
             if (consequence == null) {
                 consequence = new Consequence(byId.get(assessment.incidentId()), routeId, assessment, deadline, now);
             } else {
                 consequence.assessed(assessment, deadline, now);
             }
+            becameTooLate |= before != Category.TOO_LATE && consequence.getCategory() == Category.TOO_LATE
+                    && !consequence.isOver(now, rules.maxWait());
             result.add(consequence);
         }
         consequenceRepository.deleteAll(remaining.values());
         List<Consequence> saved = consequenceRepository.saveAll(result);
-        List<Consequence> tooLate = saved.stream().filter(c -> c.getCategory() == Category.TOO_LATE).toList();
-        if (tooLate.stream().anyMatch(c -> !c.isOver(now, rules.maxWait()))) {
-            events.publishEvent(new RouteTooLate(routeId,
-                    tooLate.stream().map(c -> c.getIncident().getId()).collect(Collectors.toSet()), deadline));
+        if (becameTooLate) {
+            events.publishEvent(new RouteTooLate(routeId, saved.stream()
+                    .filter(c -> c.getCategory() == Category.TOO_LATE)
+                    .map(c -> c.getIncident().getId()).collect(Collectors.toSet()), deadline));
         }
         return saved;
     }

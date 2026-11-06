@@ -224,6 +224,39 @@ class ConsequenceMatchingTest {
     }
 
     @Test
+    void assessingAgainWithoutACategoryChangePublishesNothing() {
+        plan(routeId, first, second);
+        Incident jam = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(second)));
+        arriveAt(DEPARTURE.plusMinutes(40));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).hasSize(1);
+
+        // another deadline, still too late
+        arriveAt(DEPARTURE.plusMinutes(45));
+        // another delay, still too late
+        inTransaction(() -> incidentLogic.change(jam.getId(), jam.getDescription(), jam.getValidFrom(),
+                jam.getValidTo(), Duration.ofMinutes(30), Set.of(second)));
+
+        assertThat(consequenceRepository.findByIncidentId(jam.getId()).getFirst().getCategory())
+                .isEqualTo(Category.TOO_LATE);
+        assertThat(applicationEvents.stream(RouteTooLate.class)).hasSize(1);
+    }
+
+    @Test
+    void onlyTheChangeToTooLatePublishes() {
+        plan(routeId, first, second);
+        inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(second)));
+
+        arriveAt(DEPARTURE.plusMinutes(40));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).hasSize(1);
+        arriveAt(DEPARTURE.plusHours(2));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).as("back to delayed").hasSize(1);
+        arriveAt(DEPARTURE.plusMinutes(40));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).as("too late again").hasSize(2);
+    }
+
+    @Test
     void delayedAndNoImpactPublishNothing() {
         plan(routeId, first, second);
         inTransaction(() -> incidentLogic.create(IncidentType.OTHER, "Vorsicht",
