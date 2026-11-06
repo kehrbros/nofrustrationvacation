@@ -23,7 +23,7 @@ flowchart LR
 ```
 
 - **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
-- **OpenAI:** liest Buchungsbestätigungen aus, recherchiert fehlende Angaben zu Unterkünften im Web, zeichnet Titelfotos, sortiert alternative Unterkünfte und schlägt künftig Lösungen bei Incidents vor (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
+- **OpenAI:** liest Buchungsbestätigungen aus, recherchiert fehlende Angaben zu Unterkünften im Web, zeichnet Titelfotos, sortiert alternative Unterkünfte und schlägt Lösungen bei Incidents vor (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
 - **LiteAPI (Nuitee):** Hotelsuche nach Namen und Hoteldaten beim Erfassen einer Buchung, Hotelangebote, Prebook und Buchung alternativer Unterkünfte (Modul `bookings`, `LiteApi`), nur mit Key (`LITEAPI_API_KEY`), siehe [accommodation-alternatives.md](accommodation-alternatives.md).
 - **PayPal:** Zahlung alternativer Unterkünfte (Modul `paypal`, Orders API mit Autorisierung), siehe [paypal.md](paypal.md).
 - **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools für Trips, Stops und Waypoints, siehe [API](#api).
@@ -44,7 +44,7 @@ Jedes Modul ist ein Paket unter `com.nfv`.
 | `input` | Eingehende Ereignisse und ihre Quellen | neu |
 | `incidents` | Incidents, Consequences, Zuordnungslogik | neu |
 | `recommendations` | Streckenvorschläge aus Szenarien: bei der Planung und als Alternative zu Consequences (Umfahrung, spätere Abfahrt), siehe [recommendations.md](recommendations.md) | neu (Planung), Incidents Entwurf |
-| `advisor` | Agent, der bei Incidents Lösungen vorschlägt und speichert, automatisch bei `TOO_LATE`, sonst auf Anfrage, siehe [advisor.md](advisor.md) | neu (auf Anfrage), automatisch Entwurf |
+| `advisor` | Agent, der bei Incidents Lösungen vorschlägt und speichert, automatisch bei `TOO_LATE`, sonst auf Anfrage, siehe [advisor.md](advisor.md) | neu, automatisch vorerst ausgeschaltet |
 | `auth` | Eigener Identity Provider (OAuth2/OIDC, MCP-Clients per CIMD), unabhängig von allen anderen Modulen | Basis |
 | `user` | `AppUser`, Absicherung von `/api/**` und `/mcp`, `CurrentUser` | Basis |
 | `common` | `AbstractEntity`, Envers-Revision, Konverter, Fehlerbehandlung, OpenAPI | Basis |
@@ -105,7 +105,7 @@ flowchart LR
 3. **Zuordnung:** `ConsequenceMatcher.matchIncident` findet über die Segmente die Routen, deren erwartete Durchfahrt die Gültigkeit überschneidet, und legt `Consequence`s an, aktualisiert oder entfernt sie.
 4. **Route planen:** REST oder MCP → `TripEditing` → Änderung in `TripLogic` (verwirft Sections betroffener Routen, committet) → je betroffene Route `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
 5. **Vorschläge:** Frontend fragt an → `recommendations` baut ein Szenario (mit Sperren bzw. Verzögerungen aktiver Incidents) und liefert bis zu `n` Vorschläge, ohne sie zu speichern. Nutzer wählt → `PUT /routes/{id}/choice` → `TripEditing.replaceWaypoints` → `RoutePlanning.plan`. Zustand wie „benachrichtigt“ gehört an Consequence bzw. Benachrichtigung.
-6. **Vorschläge des Agenten** ([advisor.md](advisor.md), `TOO_LATE` noch Entwurf): `TOO_LATE` → `RouteTooLate` nach dem Commit, oder Nutzer per `POST /routes/{id}/alternative-proposals` → `advisor` startet einen Lauf auf einem virtuellen Thread → Agent ruft Tools auf `recommendations` auf → Vorschläge gespeichert. Der Nutzer wählt wie unter 5.
+6. **Vorschläge des Agenten** ([advisor.md](advisor.md), `TOO_LATE` umgesetzt, vorerst ausgeschaltet: `nfv.advisor.auto-enabled`): `TOO_LATE` → `RouteTooLate` nach dem Commit, oder Nutzer per `POST /routes/{id}/alternative-proposals` → `advisor` startet einen Lauf auf einem virtuellen Thread → Agent ruft Tools auf `recommendations` auf → Vorschläge gespeichert. Der Nutzer wählt wie unter 5.
 7. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
 8. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
 

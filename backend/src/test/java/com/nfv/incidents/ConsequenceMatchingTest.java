@@ -6,11 +6,13 @@ import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.incidents.entities.IncidentType;
+import com.nfv.incidents.entities.MatchKind;
 import com.nfv.incidents.entities.VehicleScope;
 import com.nfv.incidents.logic.IncidentDetails;
 import com.nfv.incidents.logic.IncidentLogic;
 import com.nfv.incidents.logic.IncidentReporting;
 import com.nfv.incidents.logic.ReportedIncident;
+import com.nfv.incidents.logic.RouteTooLate;
 import com.nfv.incidents.logic.TimeWindow;
 import com.nfv.incidents.logic.TripIncidents;
 import com.nfv.network.data.ExtractVersionRepository;
@@ -39,6 +41,8 @@ import org.locationtech.jts.geom.LineString;
 import org.locationtech.jts.geom.PrecisionModel;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.Duration;
@@ -55,6 +59,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /** Incidents and routes are matched both ways via their segments and the passage time, see Docs/domain.md. */
 @SpringBootTest
+@RecordApplicationEvents
 class ConsequenceMatchingTest {
     private static final OffsetDateTime DEPARTURE = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).withNano(0);
     private static final GeometryFactory GEOMETRY = new GeometryFactory(new PrecisionModel(), 4326);
@@ -88,6 +93,8 @@ class ConsequenceMatchingTest {
     private TripIncidents tripIncidents;
     @Autowired
     private IncidentReporting incidentReporting;
+    @Autowired
+    private ApplicationEvents applicationEvents;
 
     private long first;
     private long second;
@@ -198,6 +205,81 @@ class ConsequenceMatchingTest {
 
         arriveAt(null);
         assertThat(consequenceRepository.findByIncidentId(jam.getId()).getFirst().getDeadline()).isNull();
+    }
+
+    @Test
+    void tooLatePublishesTheIncidentsAndTheDeadline() {
+        plan(routeId, first, second);
+        Incident jam = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(second)));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).as("still in time").isEmpty();
+
+        arriveAt(DEPARTURE.plusMinutes(40));
+
+        assertThat(applicationEvents.stream(RouteTooLate.class)).singleElement().satisfies(event -> {
+            assertThat(event.routeId()).isEqualTo(routeId);
+            assertThat(event.incidentIds()).containsExactly(jam.getId());
+            assertThat(event.deadline()).isEqualTo(DEPARTURE.plusMinutes(40));
+        });
+    }
+
+    @Test
+    void delayedAndNoImpactPublishNothing() {
+        plan(routeId, first, second);
+        inTransaction(() -> incidentLogic.create(IncidentType.OTHER, "Vorsicht",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(2), Set.of(first)));
+        inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(second)));
+
+        assertThat(consequenceRepository.findByRouteId(routeId)).extracting(Consequence::getCategory)
+                .containsExactlyInAnyOrder(Category.NO_IMPACT, Category.DELAYED);
+        assertThat(applicationEvents.stream(RouteTooLate.class)).isEmpty();
+    }
+
+    @Test
+    void closureHitOnlyWithinTheTolerancePublishesNothing() {
+        plan(routeId, first);
+        // passage ends after 15 minutes, the tolerance is 15 minutes
+        inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung",
+                DEPARTURE.plusMinutes(25), DEPARTURE.plusHours(5), null, Set.of(first)));
+
+        assertThat(consequenceRepository.findByRouteId(routeId)).singleElement().satisfies(c -> {
+            assertThat(c.getMatch()).isEqualTo(MatchKind.MARGINAL);
+            assertThat(c.getCategory()).isEqualTo(Category.DELAYED);
+        });
+        assertThat(applicationEvents.stream(RouteTooLate.class)).isEmpty();
+    }
+
+    @Test
+    void tooLateThatIsPassedPublishesNothing() {
+        OffsetDateTime passage = OffsetDateTime.now(ZoneOffset.UTC).minusHours(5).withNano(0);
+        planAt(passage, second);
+        arriveAt(passage.plusMinutes(20));
+
+        inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                passage.minusHours(1), passage.plusHours(6), Duration.ofMinutes(20), Set.of(second)));
+
+        assertThat(consequenceRepository.findByRouteId(routeId)).singleElement()
+                .satisfies(c -> assertThat(c.getCategory()).isEqualTo(Category.TOO_LATE));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).isEmpty();
+    }
+
+    @Test
+    void passedIncidentsStayInTheEventOfACurrentOne() {
+        OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC).withNano(0);
+        routeLogic.replaceSections(routeId, List.of(
+                new PlannedSection(first, now.minusHours(5), now.minusHours(4)),
+                new PlannedSection(second, now.plusHours(1), now.plusHours(2))));
+        arriveAt(now.plusHours(2).plusMinutes(10));
+
+        Incident passed = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                now.minusHours(6), now.plusHours(6), Duration.ofMinutes(20), Set.of(first)));
+        assertThat(applicationEvents.stream(RouteTooLate.class)).as("only passed so far").isEmpty();
+        Incident current = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                now.minusHours(6), now.plusHours(6), Duration.ofMinutes(20), Set.of(second)));
+
+        assertThat(applicationEvents.stream(RouteTooLate.class)).singleElement().satisfies(event ->
+                assertThat(event.incidentIds()).containsExactlyInAnyOrder(passed.getId(), current.getId()));
     }
 
     @Test

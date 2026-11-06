@@ -14,4 +14,6 @@ public interface AdvisorRunRepository extends JpaRepository<AdvisorRun, Long> {
     List<AdvisorRun> findByRouteIdAndStatusIn(long routeId, Collection<RunStatus> statuses);
 
     List<AdvisorRun> findByStatusIn(Collection<RunStatus> statuses);
+
+    boolean existsByRouteIdAndAutoKey(long routeId, String autoKey);
 }

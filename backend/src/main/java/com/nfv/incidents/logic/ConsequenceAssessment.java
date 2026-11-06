@@ -3,6 +3,7 @@ package com.nfv.incidents.logic;
 import com.nfv.incidents.config.AssessmentProperties;
 import com.nfv.incidents.data.ConsequenceRepository;
 import com.nfv.incidents.data.IncidentRepository;
+import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.trips.data.RouteSectionRepository;
@@ -10,6 +11,7 @@ import com.nfv.trips.entities.RouteSection;
 import com.nfv.trips.logic.RouteSchedule;
 import com.nfv.trips.logic.RouteSchedules;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +41,7 @@ public class ConsequenceAssessment {
     private final RouteSchedules routeSchedules;
     private final AssessmentProperties rules;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public List<Consequence> assessRoute(long routeId) {
@@ -71,7 +74,13 @@ public class ConsequenceAssessment {
             result.add(consequence);
         }
         consequenceRepository.deleteAll(remaining.values());
-        return consequenceRepository.saveAll(result);
+        List<Consequence> saved = consequenceRepository.saveAll(result);
+        List<Consequence> tooLate = saved.stream().filter(c -> c.getCategory() == Category.TOO_LATE).toList();
+        if (tooLate.stream().anyMatch(c -> !c.isOver(now, rules.maxWait()))) {
+            events.publishEvent(new RouteTooLate(routeId,
+                    tooLate.stream().map(c -> c.getIncident().getId()).collect(Collectors.toSet()), deadline));
+        }
+        return saved;
     }
 
     static RouteAssessor.IncidentFacts facts(Incident incident) {

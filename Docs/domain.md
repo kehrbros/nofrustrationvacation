@@ -115,7 +115,7 @@
 ## Streckenvorschläge
 
 - Für eine Route bis zu `n` Vorschläge, wie gefahren werden kann, bei der Planung und wenn ein Incident die Route trifft. Beide aus einem `Scenario` (Punkte, Abfahrt, Sperren/Verzögerungen, Referenzroute) mit derselben Logik, Details in [recommendations.md](recommendations.md).
-- **Vorschläge des Agenten:** Auf Anfrage des Nutzers (umgesetzt), bei `TOO_LATE` künftig automatisch, schlägt ein Agent Lösungen vor. Diese Läufe und Vorschläge speichert `advisor` (Entscheidung 2026-11-06), der Nutzer wählt selbst, siehe [advisor.md](advisor.md).
+- **Vorschläge des Agenten:** Auf Anfrage des Nutzers, bei `TOO_LATE` automatisch (umgesetzt, vorerst ausgeschaltet), schlägt ein Agent Lösungen vor. Diese Läufe und Vorschläge speichert `advisor` (Entscheidung 2026-11-06), der Nutzer wählt selbst, siehe [advisor.md](advisor.md).
 - Vorschläge von `recommendations` werden bei jeder Anfrage neu berechnet und nicht gespeichert. Die gewählte Strecke kommt als Liste von Punkten zurück (`PUT /routes/{id}/choice`), wird als `Waypoint`s gespeichert (neue mit `origin` `SUGGESTION`, bestehende des Nutzers bleiben) und die Route neu geplant, keine Segmentliste. Eine gespeicherte Route gilt als gewählt, es gibt keinen eigenen Merker.
 - Keine Prüfung auf parallele Änderungen, die letzte Wahl gewinnt. Später allgemein über Versionierung der Entitäten (`@Version`), bei Routen inklusive der Stops.
 - Der geplante Verlauf einer Route kommt aus `RouteLines` (`trips.logic`): Linie aus den Sections über `network.SegmentQueries.line`, Distanz, Dauer und „über …“ aus den Straßenhinweisen der `SUGGESTION`-Waypoints.

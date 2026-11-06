@@ -9,12 +9,15 @@ import com.nfv.advisor.entities.RunTrigger;
 import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.incidents.logic.RouteConsequence;
+import com.nfv.incidents.logic.RouteTooLate;
 import com.nfv.trips.logic.RouteSnapshots;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -26,7 +29,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 
-/** Starts runs of the agent and reads their results, see Docs/advisor.md#api. Checks the ownership of the route. */
+/**
+ * Starts runs of the agent and reads their results, see Docs/advisor.md#api. Checks the ownership of the route, except
+ * for automatic runs.
+ */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlternativeProposals {
@@ -78,6 +85,45 @@ public class AlternativeProposals {
             Thread.ofVirtual().name("advisor-run").start(() -> agent.execute(started.runId(), appUserId));
         }
         return started.runId();
+    }
+
+    /**
+     * Runs the agent for a route that is too late, see Docs/advisor.md#automatisch-nur-too_late. Nobody is logged in,
+     * so no ownership check. Blocks until the run has ended: call it on a thread of its own.
+     *
+     * @return id of the run, empty if there is nothing to do: the situation was handled already, or the route is no
+     * longer too late or gone
+     * @throws TripItemNotFoundException the route was deleted just now
+     */
+    public Optional<Long> startAutomatic(RouteTooLate event) {
+        long routeId = event.routeId();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        // on its own: an abandoned run has to give up its key before the check and the insert below
+        transactionTemplate.executeWithoutResult(_ -> runRepository.findByRouteIdAndStatusIn(routeId, UNFINISHED)
+                .forEach(run -> expired(run, now)));
+        String key = situations.autoKey(event);
+        if (Boolean.TRUE.equals(transactionTemplate.execute(_ -> runRepository.existsByRouteIdAndAutoKey(routeId, key)))) {
+            return Optional.empty();
+        }
+        // the event may be out of date by now
+        Optional<RouteConsequence> worst = activeIncidents.consequencesOnRoute(routeId).stream()
+                .filter(c -> !c.over() && c.category() == Category.TOO_LATE).min(WORST_FIRST);
+        if (worst.isEmpty()) {
+            return Optional.empty();
+        }
+        long appUserId = routeSnapshots.ownerOf(routeId);
+        String situation = situations.of(routeId);
+        long runId;
+        try {
+            runId = Objects.requireNonNull(transactionTemplate.execute(_ -> runRepository.save(new AdvisorRun(routeId,
+                    worst.get().id(), RunTrigger.AUTO, ProposalGoal.ARRIVE_ON_TIME, situation, key, now)).getId()));
+        } catch (DataIntegrityViolationException e) {
+            // another event got there first, or route or consequence are gone by now
+            log.debug("No automatic advisor run for route {}: {}", routeId, e.getMessage());
+            return Optional.empty();
+        }
+        agent.execute(runId, appUserId);
+        return Optional.of(runId);
     }
 
     /** The run, also one started automatically. */
