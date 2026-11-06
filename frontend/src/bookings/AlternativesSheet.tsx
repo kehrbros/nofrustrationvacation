@@ -1,10 +1,11 @@
-import { CheckCircleOutlined, EnvironmentOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
+import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
 import { Alert, Spin } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
 import { searchPlaces, type Place } from '../map/geocoding';
+import PayPalButton from '../payments/PayPalButton';
 import { TripsApiError } from '../trips/tripsApi';
 import { useTripContext } from '../trips/tripContext';
 import {
@@ -14,6 +15,8 @@ import {
   fetchCriteria,
   fetchReservation,
   markBookingCancelled,
+  rememberedHolder,
+  rememberHolder,
   reserveAlternative,
   searchAlternatives,
   type AlternativesStatus,
@@ -24,21 +27,27 @@ import {
   type SearchResult,
 } from './alternativesApi';
 import { formatLocalDateTime } from './localTime';
+import { directionsUrl } from './text';
 
 type Step =
   | { kind: 'criteria' }
+  | { kind: 'searching' }
   | { kind: 'results'; result: SearchResult }
   | { kind: 'holder'; result: SearchResult; candidate: Candidate }
-  | { kind: 'pay'; reservation: Reservation }
+  | { kind: 'reserving'; candidate: Candidate }
+  | { kind: 'pay'; reservation: Reservation; result: SearchResult | null }
+  | { kind: 'booking'; reservation: Reservation }
   | { kind: 'returned' }
-  | { kind: 'booked'; reservation: Reservation };
+  | { kind: 'booked'; reservation: Reservation }
+  | { kind: 'attention'; reservation: Reservation };
 
 const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: '' };
 
 /**
- * Alternative to an accommodation booking that cannot be used: criteria from the booking, offers from LiteAPI
- * ranked by the assistant, booking paid with PayPal (redirect and back to this page), see
- * Docs/accommodation-alternatives.md.
+ * Alternative to an accommodation booking that cannot be used: criteria from the booking (searched right away when
+ * complete), offers that meet all of them with a recommendation, booking paid with the PayPal button in the sheet
+ * (money only reserved until the hotel confirmed). A redirect to PayPal is the fallback, it comes back to this page.
+ * See Docs/accommodation-alternatives.md and Docs/paypal.md.
  */
 export default function AlternativesSheet() {
   const { bookingId } = useParams();
@@ -54,52 +63,77 @@ export default function AlternativesSheet() {
   const [step, setStep] = useState<Step>(returnedReservation ? { kind: 'returned' } : { kind: 'criteria' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [holder, setHolder] = useState<Holder>(EMPTY_HOLDER);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [holder, setHolder] = useState<Holder>(() => rememberedHolder() ?? EMPTY_HOLDER);
   const [oldMarked, setOldMarked] = useState(false);
   const completing = useRef(false);
+  const autoSearched = useRef(false);
 
   useEffect(() => {
     fetchAlternativesStatus().then(setStatus);
   }, []);
 
-  // back from PayPal: book (or abort after cancelling there)
+  /** Result of booking (after PayPal): booked, to be checked, or back to choosing. */
+  const finished = (reservation: Reservation) => {
+    if (reservation.status === 'BOOKED') {
+      reload();
+      setStep({ kind: 'booked', reservation });
+    } else if (reservation.status === 'NEEDS_ATTENTION' || reservation.status === 'PROVIDER_BOOKED') {
+      reload();
+      setStep({ kind: 'attention', reservation });
+    } else if (reservation.status === 'FAILED') {
+      setError(failureText(reservation));
+      setStep({ kind: 'criteria' });
+    } else {
+      setStep({ kind: 'pay', reservation, result: null });
+    }
+  };
+
+  const book = (reservation: Reservation) => {
+    setError(null);
+    setNotice(null);
+    setStep({ kind: 'booking', reservation });
+    bookReservation(reservation.id).then(finished, (failure) => {
+      setError(errorText(failure));
+      fetchReservation(reservation.id).then(finished, () => setStep({ kind: 'pay', reservation, result: null }));
+    });
+  };
+
+  // back from PayPal after the redirect fallback: book (or abort after cancelling there)
   useEffect(() => {
     if (!returnedReservation || completing.current) {
       return;
     }
     completing.current = true;
     const id = Number(returnedReservation);
-    const run = cancelled ? abortReservation(id) : bookReservation(id);
-    run.then(
-      (reservation) => {
-        if (reservation.status === 'BOOKED') {
-          reload();
-          setStep({ kind: 'booked', reservation });
-        } else {
-          setError(cancelled ? 'Die Zahlung wurde bei PayPal abgebrochen, es wurde nichts gebucht.' : failureText(reservation));
-          setStep({ kind: 'criteria' });
-          navigate('.', { replace: true });
-        }
-      },
-      (failure) => {
-        setError(errorText(failure));
-        fetchReservation(id).then((reservation) => {
-          if (reservation.status !== 'FAILED' && reservation.status !== 'BOOKED') {
-            setStep({ kind: 'pay', reservation });
-          } else {
-            setStep({ kind: 'criteria' });
-            navigate('.', { replace: true });
-          }
-        }, () => setStep({ kind: 'criteria' }));
-      },
-    );
-  }, [returnedReservation, cancelled, navigate, reload]);
+    navigate('.', { replace: true });
+    if (cancelled) {
+      abortReservation(id).then(
+        () => setError('Die Zahlung wurde bei PayPal abgebrochen, es wurde nichts gebucht.'),
+        () => undefined,
+      ).finally(() => setStep({ kind: 'criteria' }));
+      return;
+    }
+    bookReservation(id).then(finished, (failure) => {
+      setError(errorText(failure));
+      fetchReservation(id).then(finished, () => setStep({ kind: 'criteria' }));
+    });
+  }, [returnedReservation, cancelled]);
 
   useEffect(() => {
-    if (step.kind === 'criteria' && !returnedReservation && booking && !criteria) {
+    if (step.kind === 'criteria' && booking && !criteria) {
       fetchCriteria(booking.id).then(setCriteria, () => setError('Die Angaben der Buchung konnten nicht geladen werden.'));
     }
-  }, [step, returnedReservation, booking, criteria]);
+  }, [step, booking, criteria]);
+
+  // everything known from the booking: search right away, the form is only for changes
+  useEffect(() => {
+    if (!autoSearched.current && step.kind === 'criteria' && criteria && status?.searchAvailable
+      && criteria.missing.length === 0 && canSearch(criteria)) {
+      autoSearched.current = true;
+      void search();
+    }
+  }, [step, criteria, status]);
 
   if (!booking) {
     return (
@@ -110,28 +144,41 @@ export default function AlternativesSheet() {
   }
 
   const back = () => navigate(`/reisen/${trip.id}/buchungen/${booking.id}`);
-  const search = async () => {
+  async function search() {
     if (!criteria) return;
     setBusy(true);
     setError(null);
+    setStep({ kind: 'searching' });
     try {
-      setStep({ kind: 'results', result: await searchAlternatives(booking.id, criteria) });
+      setStep({ kind: 'results', result: await searchAlternatives(booking!.id, criteria) });
     } catch (failure) {
       setError(errorText(failure));
+      setStep({ kind: 'criteria' });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const reserve = async (candidate: Candidate, result: SearchResult) => {
+    if (!criteria) return;
+    setBusy(true);
+    setError(null);
+    setStep({ kind: 'reserving', candidate });
+    try {
+      const reservation = await reserveAlternative(booking.id, criteria, candidate, holder);
+      rememberHolder(holder);
+      setStep({ kind: 'pay', reservation, result });
+    } catch (failure) {
+      setError(errorText(failure));
+      setStep({ kind: 'results', result });
     } finally {
       setBusy(false);
     }
   };
-  const reserve = async (candidate: Candidate) => {
-    if (!criteria) return;
-    setBusy(true);
-    setError(null);
-    try {
-      setStep({ kind: 'pay', reservation: await reserveAlternative(booking.id, criteria, candidate, holder) });
-    } catch (failure) {
-      setError(errorText(failure));
-    } finally {
-      setBusy(false);
+  const pick = (candidate: Candidate, result: SearchResult) => {
+    if (holderComplete(holder)) {
+      void reserve(candidate, result);
+    } else {
+      setStep({ kind: 'holder', result, candidate });
     }
   };
   const markOld = async () => {
@@ -144,7 +191,8 @@ export default function AlternativesSheet() {
     }
   };
 
-  const title = step.kind === 'booked' ? 'Alternative gebucht' : 'Alternative suchen';
+  const title = step.kind === 'booked' ? 'Umgebucht' : step.kind === 'attention' ? 'Gebucht, Zahlung wird geprüft'
+    : 'Andere Unterkunft';
   return (
     <Sheet open onClose={close} eyebrow={`statt ${booking.title}`} title={title} height="90vh"
       footer={footer()}>
@@ -152,36 +200,38 @@ export default function AlternativesSheet() {
         <Alert type="info" showIcon message="Die Suche nach Alternativen ist gerade nicht verfügbar." />
       )}
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
+      {notice && <Alert type="info" showIcon message={notice} closable onClose={() => setNotice(null)} />}
       {step.kind === 'criteria' && (criteria
         ? <CriteriaForm criteria={criteria} onChange={setCriteria} />
         : <div className="va-empty"><Spin /></div>)}
+      {step.kind === 'searching' && (
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Freie Unterkünfte werden gesucht und verglichen …</span></div>
+      )}
       {step.kind === 'results' && (
-        <Results result={step.result} criteria={criteria!} rankingAvailable={status?.rankingAvailable ?? false}
-          onPick={(candidate) => setStep({ kind: 'holder', result: step.result, candidate })} />
+        <Results result={step.result} criteria={criteria!} onPick={(candidate) => pick(candidate, step.result)} />
       )}
       {step.kind === 'holder' && (
         <HolderForm candidate={step.candidate} holder={holder} onChange={setHolder} />
       )}
-      {step.kind === 'pay' && <PaySummary reservation={step.reservation} />}
+      {step.kind === 'reserving' && (
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Preis bei {step.candidate.name} wird gesichert …</span></div>
+      )}
+      {step.kind === 'pay' && <PaySummary reservation={step.reservation} holder={holder} />}
+      {step.kind === 'booking' && <BookingProgress reservation={step.reservation} />}
       {step.kind === 'returned' && (
         <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Zahlung wird geprüft und gebucht …</span></div>
       )}
       {step.kind === 'booked' && (
+        <Booked reservation={step.reservation} oldTitle={booking.title} oldManageUrl={booking.manageUrl}
+          oldProvider={booking.provider} oldMarked={booking.status === 'CANCELLED' || oldMarked} onMarkOld={() => void markOld()} />
+      )}
+      {step.kind === 'attention' && (
         <div className="va-form">
           <p className="va-strong"><CheckCircleOutlined aria-hidden="true" /> {step.reservation.hotelName} ist gebucht.</p>
           <p className="va-muted">
-            Die Buchung steht jetzt beim Stop, bezahlt mit PayPal ({money(step.reservation.price, step.reservation.currency)}).
+            Die Zahlung bei PayPal ist noch nicht abgeschlossen. Wir kümmern uns darum, du musst nichts tun. Der Betrag
+            ist bei PayPal nur reserviert, solange das nicht geklärt ist.
           </p>
-          {booking.status !== 'CANCELLED' && !oldMarked ? (
-            <div className="va-note">
-              <p>Soll „{booking.title}“ als storniert markiert werden? Beim Anbieter stornierst du sie selbst.</p>
-              <button type="button" className="va-button va-button-outline" onClick={() => void markOld()}>
-                Als storniert markieren
-              </button>
-            </div>
-          ) : (
-            <p className="va-small va-muted">„{booking.title}“ ist als storniert markiert.</p>
-          )}
         </div>
       )}
     </Sheet>
@@ -195,14 +245,14 @@ export default function AlternativesSheet() {
             <button type="button" className="va-button va-button-outline" onClick={back}>Zurück</button>
             <button type="button" className="va-button va-grow" disabled={busy || !criteria || !canSearch(criteria) || !status?.searchAvailable}
               onClick={() => void search()}>
-              <SearchOutlined aria-hidden="true" /> {busy ? 'Suche läuft …' : 'Alternativen suchen'}
+              <SearchOutlined aria-hidden="true" /> {busy ? 'Suche läuft …' : 'Unterkünfte suchen'}
             </button>
           </div>
         );
       case 'results':
         return (
           <button type="button" className="va-button va-button-outline va-block" onClick={() => setStep({ kind: 'criteria' })}>
-            Kriterien ändern
+            Suche anpassen
           </button>
         );
       case 'holder':
@@ -212,32 +262,37 @@ export default function AlternativesSheet() {
               Zurück
             </button>
             <button type="button" className="va-button va-grow" disabled={busy || !holderComplete(holder) || !status?.bookingAvailable}
-              onClick={() => void reserve(step.candidate)}>
-              {busy ? 'Preis wird gesichert …' : 'Weiter zur Zahlung'}
+              onClick={() => void reserve(step.candidate, step.result)}>
+              Weiter zur Zahlung
             </button>
           </div>
         );
       case 'pay':
-        return step.reservation.approveUrl ? (
-          <a className="va-button va-button-accent va-block" href={step.reservation.approveUrl}>
-            Mit PayPal bezahlen ({money(step.reservation.price, step.reservation.currency)})
-          </a>
-        ) : (
-          <button type="button" className="va-button va-block" disabled={busy}
-            onClick={() => {
-              setBusy(true);
-              bookReservation(step.reservation.id).then(
-                (reservation) => {
-                  if (reservation.status === 'BOOKED') {
-                    reload();
-                    setStep({ kind: 'booked', reservation });
-                  }
-                },
-                (failure) => setError(errorText(failure)),
-              ).finally(() => setBusy(false));
-            }}>
-            Erneut versuchen
-          </button>
+        return (
+          <div className="va-column va-gap">
+            <PayPalButton
+              clientId={status?.payPalClientId ?? null}
+              currency={step.reservation.currency}
+              orderId={step.reservation.payPalOrderId}
+              approveUrl={step.reservation.approveUrl}
+              onApprove={() => book(step.reservation)}
+              onCancel={() => setNotice('Zahlung abgebrochen, es wurde nichts gebucht. Du kannst es noch einmal versuchen.')}
+              onError={() => setError('PayPal konnte die Zahlung nicht starten. Bitte versuche es noch einmal.')}
+            />
+            {!step.reservation.payPalOrderId && !step.reservation.approveUrl && (
+              <button type="button" className="va-button va-block" onClick={() => book(step.reservation)}>
+                Erneut versuchen
+              </button>
+            )}
+            {step.result && (
+              <button type="button" className="va-text-button" onClick={() => {
+                void abortReservation(step.reservation.id).catch(() => undefined);
+                setStep({ kind: 'results', result: step.result! });
+              }}>
+                Andere Unterkunft wählen
+              </button>
+            )}
+          </div>
         );
       case 'booked':
         return (
@@ -245,6 +300,10 @@ export default function AlternativesSheet() {
             onClick={() => navigate(`/reisen/${trip.id}/buchungen/${step.reservation.bookingId}`)}>
             Neue Buchung ansehen
           </button>
+        );
+      case 'attention':
+        return (
+          <button type="button" className="va-button va-block" onClick={close}>Zur Reise</button>
         );
       default:
         return undefined;
@@ -278,7 +337,7 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
   return (
     <div className="va-form">
       <p className="va-small va-muted">
-        Vorausgefüllt aus der Buchung. Gesucht werden Unterkünfte, die alle Kriterien erfüllen.
+        Übernommen aus deiner Buchung. Wir zeigen nur Unterkünfte, die alles davon erfüllen.
       </p>
       <div className={mark('location')}>
         <span className="va-label">Region</span>
@@ -357,10 +416,9 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
   );
 }
 
-function Results({ result, criteria, rankingAvailable, onPick }: {
+function Results({ result, criteria, onPick }: {
   result: SearchResult;
   criteria: Criteria;
-  rankingAvailable: boolean;
   onPick: (candidate: Candidate) => void;
 }) {
   if (result.candidates.length === 0) {
@@ -378,9 +436,8 @@ function Results({ result, criteria, rankingAvailable, onPick }: {
   return (
     <div className="va-form">
       <p className="va-small va-muted">
-        {result.candidates.length} {result.candidates.length === 1 ? 'Unterkunft erfüllt' : 'Unterkünfte erfüllen'} alle
-        Kriterien{criteria.maxPrice ? ` (bis ${money(criteria.maxPrice.replace(',', '.'), criteria.currency)})` : ''}.
-        {result.ranked ? ' Sortiert vom Assistenten nach Gleichwertigkeit ✦' : rankingAvailable ? '' : ' Sortiert nach Preis.'}
+        {result.candidates.length} {result.candidates.length === 1 ? 'freie Unterkunft' : 'freie Unterkünfte'} für
+        {' '}{criteriaSummary(criteria)}. {result.ranked ? 'Die passendste zuerst.' : 'Die günstigste zuerst.'}
       </p>
       <ul className="va-plain-list va-alternatives">
         {result.candidates.map((candidate) => (
@@ -389,7 +446,7 @@ function Results({ result, criteria, rankingAvailable, onPick }: {
               onClick={() => onPick(candidate)}>
               {candidate.photoUrl && <img src={candidate.photoUrl} alt="" className="va-alternative-photo" loading="lazy" />}
               <span>
-                {candidate.hotelId === result.recommendedHotelId && <span className="va-chip va-chip-ink">Empfehlung ✦</span>}
+                {candidate.hotelId === result.recommendedHotelId && <span className="va-chip va-chip-ink">Unsere Empfehlung</span>}
                 <span className="va-option-title">{candidate.name}</span>
                 <span className="va-small va-muted">
                   {[candidate.stars ? <span key="s">{candidate.stars} <StarFilled aria-label="Sterne" /></span> : null,
@@ -405,7 +462,7 @@ function Results({ result, criteria, rankingAvailable, onPick }: {
                     : 'Nicht stornierbar'}
                 </span>
                 {candidate.possiblySame && <span className="va-small va-check-hint">Möglicherweise die bisherige Unterkunft</span>}
-                {candidate.reason && <span className="va-small">✦ {candidate.reason}</span>}
+                {candidate.reason && <span className="va-small">{candidate.reason}</span>}
               </span>
             </button>
           </li>
@@ -424,8 +481,9 @@ function HolderForm({ candidate, holder, onChange }: { candidate: Candidate; hol
         <span className="va-strong">{candidate.name} · {money(candidate.price, candidate.currency)}</span>
       </div>
       <p className="va-small va-muted">
-        Für wen wird gebucht? Name, E-Mail und Telefon gehen an LiteAPI und das Hotel und werden nach der Buchung
-        bei uns gelöscht. Vor der Zahlung wird der Preis noch einmal gesichert.
+        Für wen wird gebucht? Name, E-Mail und Telefon gehen an das Hotel und werden nach der Buchung bei uns
+        gelöscht. Auf diesem Gerät merken wir sie uns für die nächste Umbuchung. Vor der Zahlung wird der Preis noch
+        einmal gesichert.
       </p>
       <div className="va-field-row">
         <div className="va-field">
@@ -449,33 +507,127 @@ function HolderForm({ candidate, holder, onChange }: { candidate: Candidate; hol
   );
 }
 
-function PaySummary({ reservation }: { reservation: Reservation }) {
+function PaySummary({ reservation, holder }: { reservation: Reservation; holder: Holder }) {
   return (
     <div className="va-form">
       <div className="va-impact">
         <span className="va-eyebrow">Preis gesichert</span>
         <span className="va-strong">{reservation.hotelName}</span>
+        <span className="va-strong">{money(reservation.price, reservation.currency)}</span>
       </div>
       <dl className="va-facts">
         <dt>Aufenthalt</dt>
         <dd>{date(reservation.checkIn)} – {date(reservation.checkOut)}</dd>
         <dt>Belegung</dt>
         <dd>{reservation.guests} {reservation.guests === 1 ? 'Gast' : 'Gäste'}, {reservation.rooms} Zimmer</dd>
+        <dt>Gebucht für</dt>
+        <dd>{holder.firstName} {holder.lastName}</dd>
         <dt>Preis</dt>
         <dd>{money(reservation.price, reservation.currency)} <span className="va-small va-muted">inkl. {money(reservation.fee, reservation.currency)} Servicegebühr</span></dd>
         <dt>Storno</dt>
         <dd>
           {reservation.refundable
-            ? reservation.freeCancellationUntil ? `kostenlos bis ${formatLocalDateTime(reservation.freeCancellationUntil)}` : 'kostenlos stornierbar'
+            ? reservation.freeCancellationUntil ? `kostenlos bis ${formatLocalDateTime(reservation.freeCancellationUntil)}, Geld zurück per PayPal` : 'kostenlos, Geld zurück per PayPal'
             : 'nicht stornierbar'}
         </dd>
       </dl>
-      <p className="va-small va-muted">
-        Bei PayPal wird der Betrag zunächst nur reserviert. Eingezogen wird er erst, wenn das Hotel die Buchung bestätigt
-        hat; klappt die Buchung nicht, wird die Reservierung freigegeben.
-      </p>
+      <ul className="va-plain-list va-paypal-promise">
+        <li><CheckOutlined aria-hidden="true" /> Bezahlen ohne Kartendaten, du bleibst in der App.</li>
+        <li><CheckOutlined aria-hidden="true" /> PayPal reserviert den Betrag nur. Abgebucht wird erst, wenn das Hotel bestätigt hat.</li>
+        <li><CheckOutlined aria-hidden="true" /> Klappt die Buchung nicht, wird die Reservierung sofort freigegeben.</li>
+      </ul>
     </div>
   );
+}
+
+/** While booking after the approval at PayPal: the three steps, the last ones still running. */
+function BookingProgress({ reservation }: { reservation: Reservation }) {
+  return (
+    <div className="va-form" role="status" aria-live="polite">
+      <div className="va-impact">
+        <span className="va-eyebrow">Wird gebucht</span>
+        <span className="va-strong">{reservation.hotelName}</span>
+      </div>
+      <ol className="va-plain-list va-progress">
+        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> Preis gesichert</li>
+        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> Zahlung bei PayPal freigegeben</li>
+        <li><LoadingOutlined aria-hidden="true" /> Hotel bestätigt die Buchung, danach bucht PayPal {money(reservation.price, reservation.currency)} ab</li>
+      </ol>
+      <p className="va-small va-muted">Das dauert wenige Sekunden. Du kannst die App schließen, die Buchung läuft weiter.</p>
+    </div>
+  );
+}
+
+function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, onMarkOld }: {
+  reservation: Reservation;
+  oldTitle: string;
+  oldManageUrl: string | null;
+  oldProvider: string | null;
+  oldMarked: boolean;
+  onMarkOld: () => void;
+}) {
+  const place = reservation.booking;
+  return (
+    <div className="va-form">
+      <div className="va-success">
+        <CheckCircleOutlined aria-hidden="true" />
+        <span className="va-column">
+          <span className="va-strong">{reservation.hotelName}</span>
+          <span className="va-small">{date(reservation.checkIn)} – {date(reservation.checkOut)}</span>
+        </span>
+      </div>
+      <dl className="va-facts">
+        {place?.reference && (
+          <>
+            <dt>Buchungsnr.</dt>
+            <dd className="va-mono">{place.reference}</dd>
+          </>
+        )}
+        <dt>Bezahlt</dt>
+        <dd>{money(reservation.price, reservation.currency)} mit PayPal</dd>
+        {reservation.refundable && (
+          <>
+            <dt>Storno</dt>
+            <dd>
+              {reservation.freeCancellationUntil ? `kostenlos bis ${formatLocalDateTime(reservation.freeCancellationUntil)}` : 'kostenlos'},
+              {' '}in der Buchung, Geld kommt automatisch per PayPal zurück
+            </dd>
+          </>
+        )}
+      </dl>
+      {place?.latitude != null && place.longitude != null && (
+        <a className="va-button va-button-accent va-block" href={directionsUrl(place.latitude, place.longitude)}
+          target="_blank" rel="noopener noreferrer">
+          <EnvironmentOutlined aria-hidden="true" /> Route zur Unterkunft
+        </a>
+      )}
+      {!oldMarked ? (
+        <div className="va-note">
+          <p>„{oldTitle}“ brauchst du nicht mehr? Markiere sie als storniert{oldManageUrl ? ' und storniere sie beim Anbieter' : ''}.</p>
+          <div className="va-row va-gap">
+            <button type="button" className="va-button va-button-outline" onClick={onMarkOld}>Als storniert markieren</button>
+            {oldManageUrl && (
+              <a className="va-button va-button-outline" href={oldManageUrl} target="_blank" rel="noopener noreferrer">
+                {oldProvider ? `Bei ${oldProvider} stornieren` : 'Beim Anbieter stornieren'}
+              </a>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="va-small va-muted">„{oldTitle}“ ist als storniert markiert.</p>
+      )}
+    </div>
+  );
+}
+
+function criteriaSummary(criteria: Criteria): string {
+  const guests = criteria.guests ?? 0;
+  return [
+    criteria.placeName ? `${(criteria.radiusMeters / 1000).toLocaleString('de-DE')} km um ${criteria.placeName}` : null,
+    criteria.checkIn && criteria.checkOut ? `${date(criteria.checkIn)} – ${date(criteria.checkOut)}` : null,
+    `${guests} ${guests === 1 ? 'Gast' : 'Gäste'}`,
+    criteria.maxPrice ? `bis ${money(criteria.maxPrice.replace(',', '.'), criteria.currency)}` : null,
+  ].filter(Boolean).join(' · ');
 }
 
 function canSearch(criteria: Criteria): boolean {
@@ -520,13 +672,13 @@ function errorText(failure: unknown): string {
     case 'PRICE_EXCEEDED':
       return 'Der Preis ist inzwischen höher als dein Maximum. Bitte wähle ein anderes Angebot.';
     case 'PAYMENT_NOT_APPROVED':
-      return 'Die Zahlung wurde bei PayPal noch nicht bestätigt.';
+      return 'Die Zahlung wurde bei PayPal noch nicht freigegeben.';
     case 'PAYMENT_DECLINED':
       return 'PayPal hat die Zahlung abgelehnt. Es wurde nichts gebucht.';
     case 'ALTERNATIVES_RATE_LIMITED':
       return 'Zu viele Suchen in kurzer Zeit. Bitte versuche es später noch einmal.';
     case 'ALTERNATIVES_UNAVAILABLE':
-      return 'Der Buchungsdienst antwortet gerade nicht. Bitte versuche es gleich noch einmal.';
+      return 'Der Buchungsdienst antwortet gerade nicht. Eine laufende Buchung schließen wir automatisch ab, sonst versuche es gleich noch einmal.';
     case 'PAYPAL_NOT_CONFIGURED':
     case 'PAYPAL_ERROR':
       return 'PayPal ist gerade nicht erreichbar.';

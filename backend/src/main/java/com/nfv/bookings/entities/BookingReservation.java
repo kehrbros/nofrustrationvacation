@@ -22,6 +22,9 @@ import java.time.OffsetDateTime;
 @Getter
 @Entity
 public class BookingReservation extends AbstractEntity {
+    /** Owner (of the trip), for the completion in the background. */
+    @Column(nullable = false)
+    private long appUserId;
     @Column(nullable = false)
     private long stopId;
     /** The booking that cannot be used, if this replaces one. */
@@ -83,12 +86,21 @@ public class BookingReservation extends AbstractEntity {
     @Column(nullable = false)
     private OffsetDateTime createdAt;
     private @Nullable OffsetDateTime bookedAt;
+    /** Last time a request or the background job worked on it. */
+    private @Nullable OffsetDateTime attemptedAt;
+    private @Nullable OffsetDateTime cancelledAt;
+    /** What is refunded with PayPal after a cancellation, zero if nothing. */
+    @Column(precision = 12, scale = 2)
+    private @Nullable BigDecimal refundAmount;
+    @Column(name = "paypal_refund_id", length = 64)
+    private @Nullable String payPalRefundId;
 
     protected BookingReservation() {
     }
 
-    public BookingReservation(long stopId, @Nullable Long replacesBookingId, Offer offer, ReservationHotel hotel,
-                              Holder holder, OffsetDateTime createdAt) {
+    public BookingReservation(long appUserId, long stopId, @Nullable Long replacesBookingId, Offer offer,
+                              ReservationHotel hotel, Holder holder, OffsetDateTime createdAt) {
+        this.appUserId = appUserId;
         this.stopId = stopId;
         this.replacesBookingId = replacesBookingId;
         this.status = ReservationStatus.PREBOOKED;
@@ -133,6 +145,45 @@ public class BookingReservation extends AbstractEntity {
         this.providerBookingId = providerBookingId;
         this.providerConfirmation = confirmation;
         this.status = ReservationStatus.PROVIDER_BOOKED;
+    }
+
+    /** Remembers that a request or the background job works on it now. */
+    public void attempted(OffsetDateTime at) {
+        this.attemptedAt = at;
+    }
+
+    /**
+     * Booked at LiteAPI, but the money could not be moved or the booking state is unclear: the booking is kept (or
+     * may exist), no automatic step is taken any more.
+     */
+    public void needsAttention(String reason) {
+        if (status != ReservationStatus.AUTHORIZED && status != ReservationStatus.PROVIDER_BOOKED) {
+            throw new IllegalStateException("reservation " + getId() + " is " + status);
+        }
+        this.failure = reason.length() > 500 ? reason.substring(0, 500) : reason;
+        this.status = ReservationStatus.NEEDS_ATTENTION;
+    }
+
+    /** Cancelled at LiteAPI; {@code refundAmount} is refunded with PayPal next (zero: nothing). */
+    public void cancelled(BigDecimal refundAmount, @Nullable String note, OffsetDateTime at) {
+        require(ReservationStatus.BOOKED);
+        this.refundAmount = refundAmount;
+        this.cancelledAt = at;
+        this.status = ReservationStatus.CANCELLED;
+        if (note != null) {
+            this.failure = note.length() > 500 ? note.substring(0, 500) : note;
+        }
+    }
+
+    public void refunded(String payPalRefundId) {
+        require(ReservationStatus.CANCELLED);
+        this.payPalRefundId = payPalRefundId;
+    }
+
+    /** Cancelled, a refund is due and not made yet. */
+    public boolean isRefundOpen() {
+        return status == ReservationStatus.CANCELLED && payPalRefundId == null && refundAmount != null
+                && refundAmount.signum() > 0;
     }
 
     /** Money captured, booking created; the holder's data is no longer needed. */

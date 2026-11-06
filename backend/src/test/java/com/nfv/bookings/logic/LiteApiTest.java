@@ -37,7 +37,8 @@ class LiteApiTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         liteApi = new LiteApi(builder.build(), new AlternativesProperties("sand_key", SEARCH, BOOK, BigDecimal.TEN,
-                5000, 20, "DE", "http://localhost:18173", Duration.ofSeconds(5), 30));
+                5000, 20, "DE", "http://localhost:18173", Duration.ofSeconds(5), 30,
+                Duration.ofHours(3), false, Duration.ofMinutes(2)));
     }
 
     @Test
@@ -117,6 +118,30 @@ class LiteApiTest {
                 .satisfies(e -> assertThat(((OfferUnavailableException) e).getProviderCode()).isEqualTo("4002"));
         assertThatThrownBy(() -> liteApi.book("P-1", new LiteApi.Holder("E", "M", "e@x.org", "+49 1"), 1, "r"))
                 .isInstanceOf(LiteApiUnavailableException.class);
+    }
+
+    @Test
+    void bookingIsFoundByClientReferenceAndCancelled() {
+        server.expect(requestTo(BOOK + "/bookings?clientReference=nfv-stay-1"))
+                .andExpect(method(HttpMethod.GET))
+                .andRespond(withSuccess("""
+                        {"data": [{"bookingId": "LB-1", "clientReference": "nfv-stay-1",
+                                   "hotelConfirmationCode": "HC-77", "status": "CONFIRMED"}]}""",
+                        MediaType.APPLICATION_JSON));
+        server.expect(requestTo(BOOK + "/bookings/LB-1"))
+                .andExpect(method(HttpMethod.PUT))
+                .andRespond(withSuccess("""
+                        {"data": {"bookingId": "LB-1", "status": "CANCELLED_WITH_CHARGES", "refund_amount": 80.5}}""",
+                        MediaType.APPLICATION_JSON));
+
+        assertThat(liteApi.findBooking("nfv-stay-1")).hasValueSatisfying(booking -> {
+            assertThat(booking.bookingId()).isEqualTo("LB-1");
+            assertThat(booking.hotelConfirmationCode()).isEqualTo("HC-77");
+        });
+        LiteApi.Cancellation cancellation = liteApi.cancel("LB-1");
+        assertThat(cancellation.isCancelled()).isTrue();
+        assertThat(cancellation.isFree()).isFalse();
+        assertThat(cancellation.refund()).isEqualByComparingTo("80.5");
     }
 
     @Test

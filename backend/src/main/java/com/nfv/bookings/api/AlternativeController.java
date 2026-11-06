@@ -17,6 +17,7 @@ import com.nfv.bookings.logic.BookingLogic;
 import com.nfv.bookings.logic.CriteriaProposal;
 import com.nfv.bookings.logic.InvalidBookingInputException;
 import com.nfv.bookings.logic.ReservationView;
+import com.nfv.paypal.PayPalCheckout;
 import com.nfv.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Locale;
 
 @Tag(name = "Alternative accommodations", description = "Search an alternative to an accommodation booking (LiteAPI, "
@@ -43,12 +45,14 @@ public class AlternativeController {
     private final AlternativeSearch search;
     private final AlternativeReservations reservations;
     private final BookingLogic bookingLogic;
+    private final PayPalCheckout checkout;
 
     @Operation(summary = "Alternatives status", description = "Whether alternatives can be searched, booked, ranked.")
     @GetMapping("/bookings/alternatives/status")
     public AlternativesStatusDto alternativesStatus() {
         AlternativeSearch.Status status = search.status();
-        return new AlternativesStatusDto(status.searchAvailable(), status.bookingAvailable(), status.rankingAvailable());
+        return new AlternativesStatusDto(status.searchAvailable(), status.bookingAvailable(), status.rankingAvailable(),
+                checkout.clientId(), checkout.environment());
     }
 
     @Operation(summary = "Criteria from a booking",
@@ -112,6 +116,24 @@ public class AlternativeController {
         return toDto(reservations.abort(user.appUserId(), reservationId));
     }
 
+    @Operation(summary = "Unfinished reservations of a trip",
+            description = "Payment running (approved at PayPal, booking in progress) or to be checked "
+                    + "(NEEDS_ATTENTION); the app shows them so nobody wonders what happened to the money.")
+    @GetMapping("/trips/{tripId}/booking-reservations")
+    public List<ReservationDto> unfinishedReservations(@AuthenticationPrincipal CurrentUser user,
+                                                       @PathVariable long tripId) {
+        return reservations.unfinished(user.appUserId(), tripId).stream().map(AlternativeController::toDto).toList();
+    }
+
+    @Operation(summary = "Cancel a booking made in the app and refund it",
+            description = "Cancels at LiteAPI and refunds the PayPal payment (in full while free of charge). Only "
+                    + "for alternatives booked in the app. 409 CANCELLATION_NOT_POSSIBLE, 409 OFFER_UNAVAILABLE "
+                    + "(LiteAPI refused), 503 ALTERNATIVES_UNAVAILABLE.")
+    @PostMapping("/bookings/{bookingId}/refund-cancellation")
+    public ReservationDto cancelWithRefund(@AuthenticationPrincipal CurrentUser user, @PathVariable long bookingId) {
+        return toDto(reservations.cancel(user.appUserId(), bookingId));
+    }
+
     @Operation(summary = "Mark a booking as cancelled",
             description = "Only in the app, e.g. the booking an alternative replaces; the provider is not contacted.")
     @PostMapping("/bookings/{bookingId}/cancellation")
@@ -157,7 +179,8 @@ public class AlternativeController {
                 reservation.getHotel().name(), reservation.getHotel().address(), reservation.getCheckIn(),
                 reservation.getCheckOut(), reservation.getGuests(), reservation.getRooms(), reservation.getPrice(),
                 reservation.getFee(), reservation.getCurrency(), reservation.isRefundable(),
-                reservation.getFreeCancellationUntil(), view.approveUrl(), reservation.getFailure(),
+                reservation.getFreeCancellationUntil(), view.approveUrl(), reservation.getPayPalOrderId(),
+                reservation.getFailure(), reservation.getRefundAmount(), reservation.getPayPalRefundId() != null,
                 view.booking() == null ? null : BookingController.toDto(view.booking()));
     }
 }

@@ -17,8 +17,11 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.net.URI;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -45,6 +48,7 @@ public class AlternativeReservations {
     private final PayPalCheckout checkout;
     private final ReservationSteps steps;
     private final AlternativesProperties properties;
+    private final Clock clock;
 
     /**
      * Prebooks the offer and creates the PayPal order. The user then approves the payment at
@@ -70,7 +74,7 @@ public class AlternativeReservations {
             throw new PriceExceededException(price.toPlainString(), input.maxPrice().toPlainString());
         }
         LiteApi.HotelDetails hotel = liteApi.hotel(input.hotelId());
-        BookingReservation reservation = steps.create(stop.getId(), bookingId,
+        BookingReservation reservation = steps.create(appUserId, stop.getId(), bookingId,
                 new BookingReservation.Offer(input.hotelId(), input.offerId(), prebook.prebookId(), input.checkIn(),
                         input.checkOut(), input.guests(), input.rooms(), prebook.netPrice(), price,
                         prebook.currency().toUpperCase(), prebook.refundable(), prebook.freeCancellationUntil()),
@@ -97,7 +101,8 @@ public class AlternativeReservations {
 
     /**
      * After the user approved at PayPal: authorize, book at LiteAPI, capture, create the booking. Safe to repeat,
-     * continues from the last committed step.
+     * continues from the last committed step; the background job ({@link ReservationRecovery}) does the same for
+     * reservations nobody comes back to.
      *
      * @throws PaymentFailedException     not approved or declined, nothing booked
      * @throws OfferUnavailableException  LiteAPI refused the booking, the authorization is voided
@@ -106,20 +111,84 @@ public class AlternativeReservations {
     public ReservationView complete(long appUserId, long reservationId) {
         BookingReservation reservation = steps.owned(appUserId, reservationId);
         long tripId = tripId(appUserId, reservation);
-        if (reservation.getStatus() == ReservationStatus.PAYMENT_PENDING) {
-            reservation = authorize(reservation);
+        return view(appUserId, advance(reservation), tripId);
+    }
+
+    /** Reservations of a trip that are not finished: payment running, or booked but to be checked. */
+    public List<ReservationView> unfinished(long appUserId, long tripId) {
+        List<Long> stopIds = tripLogic.stops(appUserId, tripId).stream().map(Stop::getId).toList();
+        OffsetDateTime approvalLimit = OffsetDateTime.now(clock).minus(properties.approvalTimeout());
+        return steps.ofStops(stopIds).stream()
+                .filter(reservation -> switch (reservation.getStatus()) {
+                    case PAYMENT_PENDING -> reservation.getCreatedAt().isAfter(approvalLimit);
+                    case AUTHORIZED, PROVIDER_BOOKED, NEEDS_ATTENTION -> true;
+                    default -> false;
+                })
+                .map(reservation -> new ReservationView(reservation, tripId, null, null))
+                .toList();
+    }
+
+    /**
+     * Continues a reservation in the background: a payment approved at PayPal is booked although the user did not
+     * come back (closed the app, lost the connection), one that was not approved in time fails, a due refund is
+     * made. Errors are left for the next run.
+     */
+    public void recover(long reservationId) {
+        BookingReservation reservation = steps.find(reservationId);
+        try {
+            if (reservation.isRefundOpen()) {
+                refund(reservation);
+                return;
+            }
+            if (reservation.getStatus() == ReservationStatus.PAYMENT_PENDING) {
+                String orderStatus = checkout.getOrder(reservation.getPayPalOrderId()).status();
+                if (!"APPROVED".equals(orderStatus) && !"COMPLETED".equals(orderStatus)) {
+                    if (reservation.getCreatedAt().isBefore(OffsetDateTime.now(clock).minus(properties.approvalTimeout()))) {
+                        steps.failed(reservationId, "payment not approved in time (" + orderStatus + ")");
+                    }
+                    return;
+                }
+            }
+            advance(reservation);
+            log.info("Reservation {} continued in the background", reservationId);
+        } catch (RuntimeException e) {
+            log.warn("Reservation {} not continued in the background: {}", reservationId, e.getMessage());
         }
-        if (reservation.getStatus() == ReservationStatus.AUTHORIZED) {
-            reservation = book(reservation);
+    }
+
+    /**
+     * Cancels an alternative booked in the app at LiteAPI and refunds the payment with PayPal: in full while the
+     * cancellation is free, otherwise what LiteAPI refunds (nothing if it does not say).
+     *
+     * @throws CancellationNotPossibleException not booked in the app or no longer free to cancel
+     */
+    public ReservationView cancel(long appUserId, long bookingId) {
+        BookingReservation reservation = steps.ofBooking(appUserId, bookingId)
+                .orElseThrow(() -> new CancellationNotPossibleException("booking " + bookingId
+                        + " was not booked in the app"));
+        long tripId = tripId(appUserId, reservation);
+        if (reservation.getStatus() == ReservationStatus.BOOKED) {
+            if (!reservation.isRefundable()) {
+                throw new CancellationNotPossibleException("the rate is not refundable");
+            }
+            LiteApi.Cancellation cancellation = liteApi.cancel(reservation.getProviderBookingId());
+            if (!cancellation.isCancelled()) {
+                throw new LiteApiUnavailableException("LiteAPI answered the cancellation with " + cancellation.status());
+            }
+            BigDecimal refund = cancellation.isFree() ? reservation.getPrice()
+                    : cancellation.refund() == null ? BigDecimal.ZERO : cancellation.refund().min(reservation.getPrice());
+            reservation = steps.cancelled(reservation.getId(), refund, cancellation.isFree() ? null
+                    : "cancelled with charges, LiteAPI refund " + cancellation.refund());
         }
-        if (reservation.getStatus() == ReservationStatus.PROVIDER_BOOKED) {
-            String captureId = capture(reservation);
-            String replacedName = reservation.getReplacesBookingId() == null ? "die bisherige Unterkunft"
-                    : bookingLogic.accommodation(appUserId, reservation.getReplacesBookingId()).accommodation().getName();
-            steps.booked(appUserId, reservationId, captureId, replacedName);
-            reservation = steps.owned(appUserId, reservationId);
+        if (reservation.isRefundOpen()) {
+            try {
+                reservation = refund(reservation);
+            } catch (PayPalException e) {
+                // cancelled at the hotel; the background job refunds later
+                log.warn("Refund of reservation {} failed, retried later: {}", reservation.getId(), e.getMessage());
+            }
         }
-        return view(appUserId, reservation, tripId);
+        return view(appUserId, steps.find(reservation.getId()), tripId);
     }
 
     /** The user cancelled at PayPal or left: the reservation fails, nothing was paid. */
@@ -135,6 +204,41 @@ public class AlternativeReservations {
     public ReservationView get(long appUserId, long reservationId) {
         BookingReservation reservation = steps.owned(appUserId, reservationId);
         return view(appUserId, reservation, tripId(appUserId, reservation));
+    }
+
+    private BookingReservation refund(BookingReservation reservation) {
+        PayPalCheckout.Payment refund = checkout.refundCapture(reservation.getPayPalCaptureId(),
+                reservation.getRefundAmount().compareTo(reservation.getPrice()) == 0 ? null
+                        : new PayPalAmount(reservation.getCurrency(), reservation.getRefundAmount()),
+                "refund-" + reference(reservation));
+        return steps.refunded(reservation.getId(), refund.id());
+    }
+
+    private BookingReservation advance(BookingReservation reservation) {
+        long reservationId = reservation.getId();
+        if (reservation.getStatus() == ReservationStatus.PAYMENT_PENDING
+                || reservation.getStatus() == ReservationStatus.AUTHORIZED
+                || reservation.getStatus() == ReservationStatus.PROVIDER_BOOKED) {
+            reservation = steps.attempted(reservationId);
+        }
+        if (reservation.getStatus() == ReservationStatus.PAYMENT_PENDING) {
+            reservation = authorize(reservation);
+        }
+        if (reservation.getStatus() == ReservationStatus.AUTHORIZED) {
+            reservation = book(reservation);
+        }
+        if (reservation.getStatus() == ReservationStatus.PROVIDER_BOOKED) {
+            String captureId = capture(reservation);
+            if (captureId == null) {
+                return steps.find(reservationId);
+            }
+            long appUserId = reservation.getAppUserId();
+            String replacedName = reservation.getReplacesBookingId() == null ? "die bisherige Unterkunft"
+                    : bookingLogic.accommodation(appUserId, reservation.getReplacesBookingId()).accommodation().getName();
+            steps.booked(appUserId, reservationId, captureId, replacedName);
+            reservation = steps.find(reservationId);
+        }
+        return reservation;
     }
 
     private BookingReservation authorize(BookingReservation reservation) {
@@ -166,12 +270,16 @@ public class AlternativeReservations {
         try {
             booked = liteApi.book(reservation.getPrebookId(), new LiteApi.Holder(reservation.getHolderFirstName(),
                             reservation.getHolderLastName(), reservation.getHolderEmail(), reservation.getHolderPhone()),
-                    reservation.getRooms(), "nfv-" + reference(reservation));
+                    reservation.getRooms(), clientReference(reservation));
         } catch (OfferUnavailableException e) {
             if (DUPLICATE_REFERENCE.equals(e.getProviderCode())) {
-                // booked by an earlier attempt whose answer got lost: keep the money reserved, needs a manual check
-                log.error("Reservation {} is booked at LiteAPI already, booking id unknown", reservation.getId());
-                throw new LiteApiUnavailableException("booking state at LiteAPI unclear");
+                // booked by an earlier attempt whose answer got lost: continue with that booking
+                LiteApi.ProviderBooking earlier = liteApi.findBooking(clientReference(reservation)).orElseThrow(() -> {
+                    log.warn("Reservation {} is booked at LiteAPI already, booking not found yet", reservation.getId());
+                    return new LiteApiUnavailableException("booking state at LiteAPI unclear, try again later");
+                });
+                log.info("Reservation {} was booked at LiteAPI before ({})", reservation.getId(), earlier.bookingId());
+                return steps.providerBooked(reservation.getId(), earlier.bookingId(), earlier.hotelConfirmationCode());
             }
             voidQuietly(reservation.getPayPalAuthorizationId(), reservation);
             steps.failed(reservation.getId(), e.getMessage());
@@ -180,12 +288,24 @@ public class AlternativeReservations {
         return steps.providerBooked(reservation.getId(), booked.bookingId(), booked.hotelConfirmationCode());
     }
 
-    private String capture(BookingReservation reservation) {
-        PayPalCheckout.Payment capture = checkout.captureAuthorization(reservation.getPayPalAuthorizationId(),
-                "capture-" + reference(reservation));
+    /**
+     * @return the capture id; null if PayPal refused it: the room is booked (and charged to us), the reservation
+     * needs attention instead of turning into a booking without payment
+     */
+    private @Nullable String capture(BookingReservation reservation) {
+        PayPalCheckout.Payment capture;
+        try {
+            capture = checkout.captureAuthorization(reservation.getPayPalAuthorizationId(),
+                    "capture-" + reference(reservation));
+        } catch (PayPalRejectedException e) {
+            log.error("Capture of reservation {} refused: {}", reservation.getId(), e.getIssue());
+            steps.needsAttention(reservation.getId(), "PayPal refused the capture: " + e.getIssue());
+            return null;
+        }
         if (!capture.isCompleted() && !capture.isPending()) {
-            // booked at LiteAPI, but PayPal refused the capture: the booking stays, needs a manual check
             log.error("Capture of reservation {} is {}", reservation.getId(), capture.status());
+            steps.needsAttention(reservation.getId(), "PayPal capture " + capture.status());
+            return null;
         }
         return capture.id();
     }
@@ -212,6 +332,10 @@ public class AlternativeReservations {
 
     private static String reference(BookingReservation reservation) {
         return "stay-" + reservation.getId();
+    }
+
+    private static String clientReference(BookingReservation reservation) {
+        return "nfv-" + reference(reservation);
     }
 
     private static String description(String hotel, LocalDate checkIn, LocalDate checkOut) {

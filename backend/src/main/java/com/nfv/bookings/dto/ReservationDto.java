@@ -22,7 +22,13 @@ public record ReservationDto(long id, long tripId, long stopId, @Nullable Long r
                              String currency, boolean refundable, @Nullable LocalDateTime freeCancellationUntil,
                              @Schema(description = "Approve the payment there, only in the answer that creates it")
                              @Nullable String approveUrl,
+                             @Schema(description = "PayPal order, for the PayPal button in the app (JS SDK)")
+                             @Nullable String payPalOrderId,
                              @Nullable String failure,
+                             @Schema(type = "string", format = "decimal", example = "189.00",
+                                     description = "Refunded with PayPal after a cancellation")
+                             @JsonFormat(shape = JsonFormat.Shape.STRING) @Nullable BigDecimal refundAmount,
+                             @Schema(description = "The refund with PayPal is made") boolean refunded,
                              // no @Nullable: springdoc would turn the referenced schema itself into type null
                              @Schema(description = "The created booking once booked") BookingDto booking) {
 }
