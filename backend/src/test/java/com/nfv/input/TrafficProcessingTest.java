@@ -35,6 +35,7 @@ import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.logic.RoutePlanning;
 import com.nfv.user.logic.AppUserProvisioning;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,6 +55,7 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -177,8 +179,12 @@ class TrafficProcessingTest {
     @Autowired
     private JdbcTemplate jdbc;
 
+    private long lastIncidentBefore;
+
     @BeforeEach
     void reset() {
+        lastIncidentBefore = Objects.requireNonNull(
+                jdbc.queryForObject("SELECT COALESCE(MAX(id), 0) FROM incident", Long.class));
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
             regionImport.importRegion("wellington");
         }
@@ -194,6 +200,16 @@ class TrafficProcessingTest {
         }
         // events of other test classes (other sources) must not get in the way
         jdbc.update("UPDATE input_event SET processed_at = now() WHERE processed_at IS NULL");
+    }
+
+    /**
+     * The database is shared by the whole test run and the sample lies on roads other tests plan over: without an end,
+     * the Terrace Tunnel closed at night would get in the way of later tests, depending on the order.
+     */
+    @AfterEach
+    void endIncidents() {
+        jdbc.update("UPDATE incident SET valid_from = TIMESTAMP WITH TIME ZONE '2000-01-01 00:00:00+00', "
+                + "valid_to = TIMESTAMP WITH TIME ZONE '2000-01-01 00:00:00+00' WHERE id > ?", lastIncidentBefore);
     }
 
     @Test
