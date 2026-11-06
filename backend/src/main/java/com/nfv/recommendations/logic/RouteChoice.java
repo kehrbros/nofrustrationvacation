@@ -2,6 +2,7 @@ package com.nfv.recommendations.logic;
 
 import com.nfv.recommendations.config.RecommendationProperties;
 import com.nfv.trips.entities.WaypointOrigin;
+import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.NewWaypoint;
 import com.nfv.trips.logic.PlanResult;
 import com.nfv.trips.logic.RouteSnapshot;
@@ -11,6 +12,8 @@ import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.Clock;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -27,6 +30,7 @@ public class RouteChoice {
     private final RouteSnapshots routeSnapshots;
     private final TripEditing tripEditing;
     private final RecommendationProperties properties;
+    private final Clock clock;
 
     /** @param result outcome of planning the route, {@code null} if it was deleted meanwhile */
     public record Chosen(long tripId, long routeId, @Nullable PlanResult result) {
@@ -50,6 +54,24 @@ public class RouteChoice {
                 .collect(Collectors.toMap(RouteSnapshot.WaypointPoint::id, Function.identity()));
         List<NewWaypoint> waypoints = points.stream().map(point -> waypoint(point, existing)).toList();
         Map<Long, PlanResult> results = tripEditing.replaceWaypoints(appUserId, route.tripId(), routeId, waypoints);
+        return new Chosen(route.tripId(), routeId, results.get(routeId));
+    }
+
+    /**
+     * Stores a chosen {@code DEPARTURE_SHIFT}: the new departure at the start stop, the waypoints stay as they are.
+     * The route is planned again like after any change of the departure.
+     *
+     * @throws com.nfv.trips.logic.TripItemNotFoundException route unknown or of another user
+     * @throws InvalidSuggestionInputException               departure in the past
+     */
+    public Chosen chooseDeparture(long appUserId, long routeId, OffsetDateTime departureAt) {
+        if (departureAt.isBefore(OffsetDateTime.now(clock))) {
+            throw new InvalidSuggestionInputException("departure must not be in the past");
+        }
+        RouteSnapshot route = routeSnapshots.of(appUserId, routeId);
+        RouteSnapshot.StopPoint from = route.from();
+        Map<Long, PlanResult> results = tripEditing.updateStop(appUserId, route.tripId(), from.id(),
+                new NewStop(from.name(), from.latitude(), from.longitude(), from.arrivalAt(), departureAt));
         return new Chosen(route.tripId(), routeId, results.get(routeId));
     }
 

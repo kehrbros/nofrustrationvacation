@@ -121,7 +121,7 @@
   - LiteAPI-Client `LiteApiClient` (paketprivat oder `bookings.logic.liteapi`), `RestClient` direkt wie im Assistant, kein SDK. Liefert eigene Records, keine LiteAPI-Typen nach außen.
 - `bookings.config`: `@ConfigurationProperties` `nfv.bookings.alternatives.*`: `api-key` (`LITEAPI_API_KEY`, im Stack Docker Secret), `base-url`, `book-url`, `margin`, `default-radius`, `max-candidates`, `timeout`, `searches-per-hour` (je Nutzer).
 - **Abhängigkeiten:** wie bisher `bookings --> trips` (Eigentum, Stop) und `bookings --> assistant`, neu `bookings --> paypal`. LiteAPI kommt als externes System hinzu (System Context), PayPal ist dort schon. `assistant` bleibt ohne Fachwissen und unverändert; das Ranking zählt gegen dessen Limit je Nutzer.
-- **Alternative:** Wird LiteAPI später auch außerhalb von `bookings` gebraucht (z. B. `recommendations` bei gesperrter Route), den Client in ein technisches Modul wie `assistant` auslagern, das keine Fachmodule kennt.
+- **Alternative:** Wird LiteAPI später auch außerhalb von `bookings` gebraucht, den Client in ein technisches Modul wie `assistant` auslagern, das keine Fachmodule kennt.
 
 ## Persistenz
 
@@ -186,4 +186,4 @@
 - Kinder und Alter, `guestNationality` (Profil oder Gerät), Sprache der Hotel-Daten.
 - Status der nicht nutzbaren Buchung (`CANCELLED` oder eigener Status) und ob sie in der Stop-Liste sichtbar bleibt.
 - Webhooks von LiteAPI für Statusänderungen prüfen; bis dahin Abgleich per `GET /bookings/{id}` beim Öffnen.
-- Weitere Use-Cases: anderer Ort (Region aus anderem Stop), Empfehlung bei `BLOCKED`-Route (Modul `recommendations`), Bezug zu Incidents an Unterkünften.
+- Weitere Use-Cases: anderer Ort (Region aus anderem Stop), Empfehlung bei nicht rechtzeitig fahrbarer Route (Modul `advisor`, Schnittstelle `StayOptions`, siehe [advisor.md](advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft)), Bezug zu Incidents an Unterkünften.

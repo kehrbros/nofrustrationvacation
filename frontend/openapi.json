@@ -896,7 +896,7 @@
     },
     "/api/v1/routes/{routeId}/choice" : {
       "put" : {
-        "description" : "Its waypoints replace the waypoints of the route, which is planned again. Waypoints with waypointId stay as they are.",
+        "description" : "Its waypoints replace the waypoints of the route, which is planned again. Waypoints with waypointId stay as they are. With departureAt only the departure at the start stop changes.",
         "operationId" : "choose",
         "parameters" : [ {
           "in" : "path",
@@ -2866,6 +2866,11 @@
         "type" : "object",
         "description" : "The chosen suggestion: its waypoints as returned with it, empty for the fastest way without waypoints",
         "properties" : {
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "New departure at the start stop (suggestion of kind DEPARTURE_SHIFT): waypoints are ignored and stay as they are"
+          },
           "waypoints" : {
             "type" : "array",
             "items" : {
@@ -3036,7 +3041,7 @@
           },
           "kind" : {
             "type" : "string",
-            "enum" : [ "ALTERNATIVES", "KEEP_ROUTE", "DEPARTURE_SHIFT" ]
+            "enum" : [ "ALTERNATIVES", "DEPARTURE_SHIFT" ]
           },
           "labels" : {
             "type" : "array",
@@ -3142,7 +3147,7 @@
           "problem" : {
             "type" : [ "string", "null" ],
             "description" : "MISSING_COORDINATES, MISSING_DEPARTURE or NO_ROUTE, null if there are suggestions",
-            "enum" : [ "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE" ]
+            "enum" : [ "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE", "WAYPOINT_UNREACHABLE", "CONSEQUENCE_PASSED" ]
           },
           "reference" : {
             "$ref" : "#/components/schemas/ReferenceRouteDto",
