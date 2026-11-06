@@ -14,6 +14,8 @@ import com.nfv.input.data.EventSourceRepository;
 import com.nfv.input.entities.Event;
 import com.nfv.input.entities.EventSourceType;
 import com.nfv.input.logic.Attribution;
+import com.nfv.incidents.logic.TravelDirection;
+import com.nfv.input.logic.EnrichmentDeferredException;
 import com.nfv.input.logic.EnrichmentModel;
 import com.nfv.input.logic.FetchContext;
 import com.nfv.input.logic.PollPolicy;
@@ -59,6 +61,10 @@ import java.util.function.Supplier;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
@@ -177,6 +183,8 @@ class TrafficProcessingTest {
             regionImport.importRegion("wellington");
         }
         for (String source : List.of(NZTA, UNLOADED)) {
+            jdbc.update("DELETE FROM message_enrichment WHERE source_id IN (SELECT id FROM event_source WHERE name = ?)",
+                    source);
             jdbc.update("DELETE FROM input_event WHERE source_id IN (SELECT id FROM event_source WHERE name = ?)",
                     source);
             jdbc.update("DELETE FROM source_subject WHERE source_id IN (SELECT id FROM event_source WHERE name = ?)",
@@ -215,7 +223,7 @@ class TrafficProcessingTest {
                 + " ON i.segment_id = s.id WHERE i.incident_id = ?", String.class, tunnel.getId())).containsOnly("SH 1");
         Consequence consequence = consequenceRepository.findByRouteId(routeId).stream()
                 .filter(c -> c.getIncident().getId() == tunnel.getId()).findFirst().orElseThrow();
-        assertThat(consequence.getImpact()).isEqualTo(Impact.DELAYED);
+        assertThat(consequence.impact()).isEqualTo(Impact.DELAYED);
         // a closure at unconfirmed times: "check times", not NO_IMPACT, adds no delay
         assertThat(tunnel.isTimesUnconfirmed()).isTrue();
         assertThat(consequence.getCategory()).isEqualTo(Category.DELAYED);
@@ -293,7 +301,7 @@ class TrafficProcessingTest {
                 nights.add(new EnrichmentModel.LocalWindow(night.atTime(21, 0), night.plusDays(1).atTime(4, 30)));
             }
         }
-        when(enrichmentModel.extract(argThat(text -> text.contains("between 9pm and 4:30am")), any()))
+        when(enrichmentModel.extract(argThat(text -> text.contains("between 9pm and 4:30am")), any(), any()))
                 .thenReturn(Optional.of(new EnrichmentModel.Answer(nights)));
 
         polling.pollNow(NZTA);
@@ -310,7 +318,7 @@ class TrafficProcessingTest {
         assertThat(windows.getFirst().startsAt()).isAtSameInstantAs(tunnel.getValidFrom());
 
         Consequence blocked = tunnelConsequence(wednesdayNight, tunnel).orElseThrow();
-        assertThat(blocked.getImpact()).isEqualTo(Impact.BLOCKED);
+        assertThat(blocked.impact()).isEqualTo(Impact.BLOCKED);
         assertThat(blocked.getWindowStart()).isAtSameInstantAs(OffsetDateTime.parse("2026-11-04T21:00:00+13:00"));
         assertThat(blocked.getWindowEnd()).isAtSameInstantAs(OffsetDateTime.parse("2026-11-05T04:30:00+13:00"));
         assertThat(tunnelConsequence(wednesdayNoon, tunnel)).isEmpty();
@@ -322,6 +330,214 @@ class TrafficProcessingTest {
         assertThat(tunnelConsequence(thursdayNight, tunnel)).hasValueSatisfying(c -> assertThat(c.getWindowStart())
                 .isAtSameInstantAs(OffsetDateTime.parse("2026-11-05T21:00:00+13:00")));
         assertThat(tunnelConsequence(saturdayNight, tunnel)).isEmpty();
+    }
+
+    @Test
+    void sameTextAsksTheModelOnce() {
+        when(enrichmentModel.extract(any(), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of())));
+
+        polling.pollNow(NZTA);
+        processor.processPending();
+        // 197 events, 30 of them ended: those never ask
+        verify(enrichmentModel, times(167)).extract(any(), any(), any());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM message_enrichment", Long.class)).isEqualTo(167);
+
+        // only the status changed: no new question; new text: one question
+        clearInvocations(enrichmentModel);
+        polling.pollNow(NZTA, "classpath:sources/nz-nzta/events-changed-text.json");
+        processor.processPending();
+        verify(enrichmentModel, times(1)).extract(any(), any(), any());
+
+        // a new version with text seen before asks nothing
+        clearInvocations(enrichmentModel);
+        polling.pollNow(NZTA);
+        processor.processPending();
+        verify(enrichmentModel, never()).extract(any(), any(), any());
+    }
+
+    @Test
+    void newValidityAsksAgainAndReplacesTheWindows() {
+        OffsetDateTime night = OffsetDateTime.parse("2027-01-20T22:00:00+13:00");
+        long routeId = plannedRoute(night);
+        when(enrichmentModel.extract(mentioning("between 9pm and 4:30am"), any(), any())).thenAnswer(call -> {
+            // dated windows as far as the validity the model is given
+            TrafficReport report = call.getArgument(1);
+            LocalDate last = report.validTo().toLocalDate();
+            List<EnrichmentModel.LocalWindow> nights = new ArrayList<>();
+            for (LocalDate day = LocalDate.of(2026, 12, 1); day.isBefore(last); day = day.plusDays(1)) {
+                nights.add(new EnrichmentModel.LocalWindow(day.atTime(21, 0), day.plusDays(1).atTime(4, 30)));
+            }
+            return Optional.of(new EnrichmentModel.Answer(nights.subList(Math.max(0, nights.size() - 200), nights.size())));
+        });
+        polling.pollNow(NZTA);
+        processor.processPending();
+        Incident tunnel = incidentRepository.findById(event("566003").getIncidentId()).orElseThrow();
+        assertThat(tunnelConsequence(routeId, tunnel)).as("after the old end").isEmpty();
+
+        // NZTA extends the closure, the text stays the same
+        String extended = event("566003").getPayload()
+                .replace("2026-12-18T04:30:26+13:00", "2027-01-31T04:30:26+13:00");
+        org.mockito.Mockito.clearInvocations(enrichmentModel);
+        transactionTemplate.executeWithoutResult(_ -> eventRepository.save(new com.nfv.input.entities.TrafficEvent(
+                eventSourceRepository.findByName(NZTA).orElseThrow(), "566003@extended", "566003", null, extended,
+                NOW)));
+        processor.processPending();
+
+        verify(enrichmentModel, times(1)).extract(any(), any(), any());
+        assertThat(event("566003", "extended").getProcessingNote()).as("not FAILED").isNull();
+        assertThat(tunnelConsequence(routeId, tunnel)).as("the extended closure is found").isPresent();
+
+        // another version with the same text and validity asks nothing
+        org.mockito.Mockito.clearInvocations(enrichmentModel);
+        transactionTemplate.executeWithoutResult(_ -> eventRepository.save(new com.nfv.input.entities.TrafficEvent(
+                eventSourceRepository.findByName(NZTA).orElseThrow(), "566003@same", "566003", null, extended, NOW)));
+        processor.processPending();
+        verify(enrichmentModel, never()).extract(any(), any(), any());
+        assertThat(event("566003", "same").getProcessingNote()).as("not FAILED").isNull();
+        assertThat(event("566003", "same").getIncidentId()).isEqualTo(tunnel.getId());
+    }
+
+    @Test
+    void closureWithWindowsCanEnd() {
+        when(enrichmentModel.extract(mentioning("between 9pm and 4:30am"), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of(
+                        new EnrichmentModel.LocalWindow(LocalDate.of(2026, 11, 4).atTime(21, 0),
+                                LocalDate.of(2026, 11, 5).atTime(4, 30)),
+                        new EnrichmentModel.LocalWindow(LocalDate.of(2026, 11, 5).atTime(21, 0),
+                                LocalDate.of(2026, 11, 6).atTime(4, 30))))));
+        long routeId = plannedRoute(OffsetDateTime.parse("2026-11-04T22:00:00+13:00"));
+        polling.pollNow(NZTA);
+        processor.processPending();
+        Incident tunnel = incidentRepository.findById(event("566003").getIncidentId()).orElseThrow();
+        assertThat(tunnelConsequence(routeId, tunnel)).isPresent();
+
+        polling.pollNow(NZTA, "classpath:sources/nz-nzta/events-changed-status.json");
+        processor.processPending();
+
+        Event ended = event("566003", "2026-11-04T09:30:00.000+13:00");
+        assertThat(ended.getProcessingNote()).as("not FAILED").isNull();
+        assertThat(ended.getIncidentId()).isEqualTo(tunnel.getId());
+        assertThat(incidentRepository.findById(tunnel.getId()).orElseThrow().getValidTo()).isAtSameInstantAs(NOW);
+        assertThat(tunnelConsequence(routeId, tunnel)).isEmpty();
+    }
+
+    @Test
+    void answerFromTheTextChangesTheIncident() {
+        when(enrichmentModel.extract(mentioning("between 9pm and 4:30am"), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of(), null, false, null, 25,
+                        TravelDirection.NORTHBOUND, "closed to northbound traffic", EnrichmentModel.Confidence.HIGH)));
+        // the warning that NZTA rates Caution, closed according to its text
+        when(enrichmentModel.extract(mentioning("between Terrace Tunnel and Ngauranga"), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of(), null, true, null, null, null, null,
+                        EnrichmentModel.Confidence.HIGH)));
+
+        polling.pollNow(NZTA);
+        processor.processPending();
+
+        Incident tunnel = incidentRepository.findById(event("566003").getIncidentId()).orElseThrow();
+        assertThat(tunnel.getType()).isEqualTo(IncidentType.CLOSURE);
+        assertThat(tunnel.isTimesUnconfirmed()).isFalse();
+        // a figure from the text counts as an estimate
+        assertThat(tunnel.getAssumedDelay()).isEqualTo(Duration.ofMinutes(25));
+        // the road number is in both directions of the tunnel, the text limits it to one
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM incident_segment WHERE incident_id = ?", Long.class,
+                tunnel.getId())).isEqualTo(1);
+        assertThat(incidentRepository.findById(event("566353").getIncidentId()).orElseThrow().getType())
+                .isEqualTo(IncidentType.CLOSURE);
+    }
+
+    @Test
+    void lowConfidenceAndFalseEvidenceAreIgnored() {
+        when(enrichmentModel.extract(mentioning("between 9pm and 4:30am"), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of(), null, false, null, null, null,
+                        "this quote is not in the message", EnrichmentModel.Confidence.HIGH)));
+        when(enrichmentModel.extract(mentioning("between Terrace Tunnel and Ngauranga"), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of(), null, true, null, null, null, null,
+                        EnrichmentModel.Confidence.LOW)));
+
+        polling.pollNow(NZTA);
+        processor.processPending();
+
+        Incident tunnel = incidentRepository.findById(event("566003").getIncidentId()).orElseThrow();
+        assertThat(tunnel.isTimesUnconfirmed()).isTrue();
+        assertThat(incidentRepository.findById(event("566353").getIncidentId()).orElseThrow().getType())
+                .isEqualTo(IncidentType.OTHER);
+    }
+
+    @Test
+    void withoutAnAnswerTheEventWaitsAndIsCaughtUp() {
+        when(enrichmentModel.extract(any(), any(), any())).thenThrow(new EnrichmentDeferredException("quota"));
+
+        polling.pollNow(NZTA);
+        processor.processPending();
+
+        // tried once, then left alone for this run; processed like without a model
+        verify(enrichmentModel, times(1)).extract(any(), any(), any());
+        Event waiting = event("566003");
+        assertThat(waiting.isEnrichmentPending()).isTrue();
+        assertThat(waiting.getProcessingNote()).startsWith("TIMES_IN_TEXT");
+        long incidentId = waiting.getIncidentId();
+        assertThat(incidentRepository.findById(incidentId).orElseThrow().isTimesUnconfirmed()).isTrue();
+
+        // the model answers again: same incident, now a real closure
+        org.mockito.Mockito.reset(enrichmentModel);
+        when(enrichmentModel.extract(any(), any(), any()))
+                .thenReturn(Optional.of(new EnrichmentModel.Answer(List.of())));
+        processor.processPending();
+
+        Event caughtUp = event("566003");
+        assertThat(caughtUp.isEnrichmentPending()).isFalse();
+        assertThat(caughtUp.getIncidentId()).isEqualTo(incidentId);
+        assertThat(caughtUp.getProcessingNote()).isNull();
+        Incident closure = incidentRepository.findById(incidentId).orElseThrow();
+        assertThat(closure.getType()).isEqualTo(IncidentType.CLOSURE);
+        assertThat(closure.isTimesUnconfirmed()).isFalse();
+    }
+
+    @Test
+    void anAnswerThatNeverComesIsGivenUpAfterSomeTries() {
+        when(enrichmentModel.extract(any(), any(), any())).thenThrow(new EnrichmentDeferredException("refused"));
+        polling.pollNow(NZTA, "classpath:sources/nz-nzta/events-empty.json");
+        transactionTemplate.executeWithoutResult(_ -> eventRepository.save(new com.nfv.input.entities.TrafficEvent(
+                eventSourceRepository.findByName(NZTA).orElseThrow(), "tries@1", "tries", null,
+                polledPayload(), NOW)));
+
+        for (int i = 0; i < 25; i++) {
+            processor.processPending();
+        }
+
+        Event event = event("tries");
+        assertThat(event.isEnrichmentPending()).isFalse();
+        assertThat((int) event.getEnrichmentAttempts()).isEqualTo(20);
+    }
+
+    @Test
+    void aUsedUpQuotaIsNoFailedTry() {
+        when(enrichmentModel.extract(any(), any(), any()))
+                .thenThrow(new EnrichmentDeferredException("quota", true));
+        polling.pollNow(NZTA);
+
+        for (int i = 0; i < 25; i++) {
+            processor.processPending();
+        }
+
+        assertThat(event("566003").isEnrichmentPending()).isTrue();
+        assertThat(jdbc.queryForObject("SELECT MAX(enrichment_attempts) FROM input_event", Integer.class)).isZero();
+    }
+
+    /** A later stubbing calls the mock with {@code null}, the matcher must cope. */
+    private static String mentioning(String text) {
+        return argThat(message -> message != null && message.contains(text));
+    }
+
+    /** The Terrace Tunnel event, read from the sample. */
+    private String polledPayload() {
+        polling.pollNow(NZTA);
+        String payload = event("566003").getPayload();
+        jdbc.update("DELETE FROM input_event WHERE subject_id <> 'tries' AND source_id IN "
+                + "(SELECT id FROM event_source WHERE name = ?)", NZTA);
+        return payload;
     }
 
     @Test

@@ -211,7 +211,7 @@ class RoutePlanningTest {
         List<Consequence> consequences = consequenceRepository.findByIncidentId(incident.getId()).stream()
                 .filter(consequence -> consequence.getRouteId() == routeId).toList();
         assertThat(consequences).singleElement().satisfies(consequence -> {
-            assertThat(consequence.getImpact()).isEqualTo(Impact.BLOCKED);
+            assertThat(consequence.impact()).isEqualTo(Impact.BLOCKED);
             assertThat(consequence.getRouteSectionId()).isEqualTo(tunnel.getId());
         });
     }

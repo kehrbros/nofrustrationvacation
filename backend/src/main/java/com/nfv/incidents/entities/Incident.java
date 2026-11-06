@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Something that affects travelling on one or more segments of the road network during {@code [validFrom, validTo]}.
@@ -109,8 +110,13 @@ public class Incident extends AbstractEntity {
         Set<Long> newSegments = Set.copyOf(segmentIds);
         this.segmentIds.clear();
         this.segmentIds.addAll(newSegments);
-        this.windows.clear();
-        details.windows().forEach(window -> this.windows.add(new IncidentWindow(window)));
+        // only the difference: the history (Envers) should not see unchanged windows as removed and added
+        Set<IncidentWindow> newWindows = details.windows().stream().map(IncidentWindow::new)
+                .collect(Collectors.toSet());
+        if (!this.windows.equals(newWindows)) {
+            this.windows.retainAll(newWindows);
+            this.windows.addAll(newWindows);
+        }
     }
 
     /** All values except the segments, e.g. to change only some of them. */

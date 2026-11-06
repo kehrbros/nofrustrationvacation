@@ -6,9 +6,12 @@ import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.incidents.entities.IncidentType;
+import com.nfv.incidents.entities.VehicleScope;
+import com.nfv.incidents.logic.IncidentDetails;
 import com.nfv.incidents.logic.IncidentLogic;
 import com.nfv.incidents.logic.IncidentReporting;
 import com.nfv.incidents.logic.ReportedIncident;
+import com.nfv.incidents.logic.TimeWindow;
 import com.nfv.incidents.logic.TripIncidents;
 import com.nfv.network.data.ExtractVersionRepository;
 import com.nfv.network.data.RoadSegmentRepository;
@@ -114,7 +117,7 @@ class ConsequenceMatchingTest {
         List<Consequence> consequences = consequenceRepository.findByIncidentId(incident.getId());
         assertThat(consequences).singleElement().satisfies(c -> {
             assertThat(c.getRouteId()).isEqualTo(routeId);
-            assertThat(c.getImpact()).isEqualTo(Impact.BLOCKED);
+            assertThat(c.impact()).isEqualTo(Impact.BLOCKED);
             assertThat(c.getRouteSectionId()).isEqualTo(sectionOn(routeId, second));
         });
     }
@@ -159,7 +162,7 @@ class ConsequenceMatchingTest {
 
         plan(routeId, first, second);
         assertThat(consequenceRepository.findByRouteId(routeId)).singleElement()
-                .satisfies(c -> assertThat(c.getImpact()).isEqualTo(Impact.DELAYED));
+                .satisfies(c -> assertThat(c.impact()).isEqualTo(Impact.DELAYED));
 
         plan(routeId, first, elsewhere);
         assertThat(consequenceRepository.findByRouteId(routeId)).isEmpty();
@@ -255,6 +258,43 @@ class ConsequenceMatchingTest {
                 null, null, null, null, "test", true, List.of(), null, false, false), scheduled.getId());
 
         assertThat(consequenceRepository.findByIncidentId(scheduled.getId())).isEmpty();
+    }
+
+    @Test
+    void windowsCanChangeAgainAndAgainAndStayInTheHistory() {
+        Incident incident = inTransaction(() -> incidentLogic.create(details(0, 40), Set.of(first)));
+
+        // overlapping sets of windows in another offset than the database hands back: partly the same, partly new
+        for (int shift = 1; shift <= 25; shift++) {
+            int from = shift;
+            inTransaction(() -> incidentLogic.change(incident.getId(), details(from, 40), Set.of(first)));
+        }
+        // nothing changes
+        inTransaction(() -> incidentLogic.change(incident.getId(), details(25, 40), Set.of(first)));
+        // fewer, a subset
+        inTransaction(() -> incidentLogic.change(incident.getId(), details(30, 5), Set.of(first)));
+
+        inTransaction(() -> {
+            var reader = AuditReaderFactory.get(entityManager);
+            List<Number> revisions = reader.getRevisions(Incident.class, incident.getId());
+            assertThat(reader.find(Incident.class, incident.getId(), revisions.getLast()).timeWindows())
+                    .extracting(window -> window.startsAt().toInstant())
+                    .containsExactlyElementsOf(details(30, 5).windows().stream()
+                            .map(window -> window.startsAt().toInstant()).toList());
+            assertThat(reader.find(Incident.class, incident.getId(), revisions.getFirst()).timeWindows()).hasSize(40);
+            return null;
+        });
+    }
+
+    /** {@code count} nights, one per day, starting {@code first} days after {@link #DEPARTURE}. */
+    private static IncidentDetails details(int first, int count) {
+        List<TimeWindow> windows = new ArrayList<>();
+        OffsetDateTime start = DEPARTURE.withOffsetSameInstant(ZoneOffset.ofHours(13));
+        for (int i = first; i < first + count; i++) {
+            windows.add(new TimeWindow(start.plusDays(i), start.plusDays(i).plusHours(7)));
+        }
+        return new IncidentDetails(IncidentType.CLOSURE, null, DEPARTURE.minusDays(1), DEPARTURE.plusDays(90), null, null,
+                windows, VehicleScope.ALL, false);
     }
 
     @Test
