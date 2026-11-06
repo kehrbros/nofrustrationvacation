@@ -9,23 +9,19 @@ import java.util.List;
 
 /**
  * Accommodations when a route cannot be driven in time, see
- * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Not implemented yet, so no tool uses it.
+ * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Places on the route and the onward drive belong
+ * to {@code recommendations} ({@code Stopovers}, planned). Not implemented yet, so no tool uses it.
  */
 public interface StayOptions {
-    /** Places before the obstacle that can be reached by {@code latestArrival}. */
-    List<OvernightArea> areasOnRoute(long appUserId, long routeId, OffsetDateTime latestArrival, int maxResults);
-
     List<StayOffer> search(long appUserId, StaySearch search);
-
-    record OvernightArea(String name, double latitude, double longitude, OffsetDateTime arrivalAt,
-                         double remainingMeters) {
-    }
 
     record StaySearch(double latitude, double longitude, int radiusMeters, LocalDate checkIn, LocalDate checkOut,
                       @Nullable BigDecimal maxPrice) {
     }
 
-    record StayOffer(String hotelId, String offerId, String name, int distanceMeters, BigDecimal price,
-                     String currency, boolean refundable, @Nullable OffsetDateTime freeCancellationUntil) {
+    /** With the position of the hotel, which {@code evaluate_stopover} routes to. */
+    record StayOffer(String hotelId, String offerId, String name, double latitude, double longitude,
+                     int distanceMeters, BigDecimal price, String currency, boolean refundable,
+                     @Nullable OffsetDateTime freeCancellationUntil) {
     }
 }

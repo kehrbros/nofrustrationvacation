@@ -18,6 +18,7 @@
   - Kanten der Länge 0 (GraphHopper teilt an Sperren wie Pollern) haben kein Segment und werden in Routen übersprungen.
   - Gilt nur für eine Graph-Version (Schlüssel `extract_version_id`, `edge_key`): eine Aktualisierung schreibt ihr Mapping neben das alte, nach dem Umschalten wird das alte gelöscht. Keine Entity, nur JDBC.
 - Staging nur für Segmente, als temporäre Tabelle im Import, nicht im Schema.
+- **Geplant: `place`** (Orte für Übernachtungen unterwegs, Schnittstelle `Places.along`), siehe [advisor.md](advisor.md#find_overnight_areas). Noch nicht umgesetzt.
 - Fuß- und Radwege, Treppen usw. werden nicht importiert (`import.osm.ignored_highways`): Straßen werden nur an Kreuzungen für Autos geteilt, das macht Segmente stabiler. Fußgängerzonen (`pedestrian`) bleiben, manche sind für Autos frei.
 
 ## Import und Aktualisierung

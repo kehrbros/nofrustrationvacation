@@ -84,17 +84,15 @@ flowchart LR
 Noch nicht umgesetzt. Vorerst gibt es nur die Schnittstellen, ohne Implementierung und ohne Tool. Das Modell bekommt diese Tools also nicht angeboten, solange sie fehlen.
 
 ```java
-/** Unterkünfte, wenn die Route nicht rechtzeitig fahrbar ist. */
+/** Unterkünfte, wenn die Route nicht rechtzeitig fahrbar ist. Orte und Weiterfahrt: siehe Stopovers unten. */
 public interface StayOptions {
-    List<OvernightArea> areasOnRoute(long appUserId, long routeId, OffsetDateTime latestArrival, int maxResults);
     List<StayOffer> search(long appUserId, StaySearch search);
 
-    record OvernightArea(String name, double latitude, double longitude, OffsetDateTime arrivalAt,
-                         double remainingMeters) {}
     record StaySearch(double latitude, double longitude, int radiusMeters, LocalDate checkIn, LocalDate checkOut,
                       @Nullable BigDecimal maxPrice) {}
-    record StayOffer(String hotelId, String offerId, String name, int distanceMeters, BigDecimal price,
-                     String currency, boolean refundable, @Nullable OffsetDateTime freeCancellationUntil) {}
+    record StayOffer(String hotelId, String offerId, String name, double latitude, double longitude,
+                     int distanceMeters, BigDecimal price, String currency, boolean refundable,
+                     @Nullable OffsetDateTime freeCancellationUntil) {}
 }
 
 /** Entwurf einer Nachricht an die Unterkunft bei später Ankunft, senden muss der Nutzer. */
@@ -108,12 +106,63 @@ public interface LateArrivalNotices {
 
 - Feldtypen beim Umsetzen gegen `bookings` prüfen. Die Implementierung liegt später als Adapter in `advisor`, damit `bookings` das Modul nicht kennt.
 - **Geplante Tools:**
-  - `find_overnight_areas(latest_arrival?, route_option_id?, max_results)`: Orte vor dem Hindernis, die rechtzeitig erreichbar sind. Nötig, weil `AlternativeSearch.criteriaFor` um die gebuchte Unterkunft sucht, also genau dort, wo der Nutzer nicht hinkommt.
-  - `search_accommodations(area_id | TARGET_STOP, radius_meters, check_in, check_out, max_price?)`: braucht eine Variante von `AlternativeSearch` ohne `bookingId` und ohne `AlternativeRanking`, sonst ruft ein Tool des Modells wieder das Modell auf. Harte Prüfung und `SearchLimiter` bleiben.
-  - `evaluate_stopover(area_id, continue_at)`: Weiterfahrt am nächsten Morgen.
+  - `find_overnight_areas(latest_arrival?, max_results)`: Orte vor dem Hindernis, die rechtzeitig erreichbar sind, siehe [unten](#find_overnight_areas). Nötig, weil `AlternativeSearch.criteriaFor` um die gebuchte Unterkunft sucht, also genau dort, wo der Nutzer nicht hinkommt.
+  - `search_accommodations(area_id | TARGET_STOP, radius_meters, check_in, check_out, max_price?)`: braucht eine Variante von `AlternativeSearch` ohne `bookingId` und ohne `AlternativeRanking`, sonst ruft ein Tool des Modells wieder das Modell auf. Harte Prüfung und `SearchLimiter` bleiben. Jedes Angebot bekommt eine `offer_ref` im `RunContext`, mit Koordinaten des Hotels.
+  - `evaluate_stopover(offer_ref, continue_at)`: Fahrt zum Hotel und Weiterfahrt am nächsten Morgen, siehe [unten](#evaluate_stopover).
   - `draft_late_arrival_notice`: oft die günstigste Lösung, wenn nur der Check-in zu spät ist. Kontaktdaten ergänzt das Backend, sie gehen nicht an das Modell.
 - **Neue `kind`:** `STOPOVER`, `NOTIFY_ACCOMMODATION`, kommen mit den Tools (Spalte `VARCHAR`, keine Migration nötig). Ebenso das Ziel `STAY_OVERNIGHT` und die Buchungen im Kontext des Modells.
 - Es gilt [accommodation-alternatives.md](accommodation-alternatives.md#rollen-assistant-und-liteapi): Das Modell löst keine Buchung aus.
+
+#### Logik in `recommendations` (`Stopovers`, Entwurf 2026-11-07)
+
+- Orte und Weiterfahrt sind Routing ohne Modell, deshalb in `recommendations.logic` neben `Suggestions`. `recommendations` kennt `trips`, `incidents` und `network` schon, `advisor` braucht so keine neue Abhängigkeit.
+- `advisor` ruft beides als Tools auf, wie `forConsequence`. Kein Aufruf in einer Transaktion.
+
+```java
+/** Übernachtung unterwegs, wenn die Route nicht rechtzeitig fahrbar ist. */
+public class Stopovers {
+    List<OvernightArea> areas(long appUserId, long consequenceId, OffsetDateTime latestArrival, int maxResults);
+    StopoverResult evaluate(long appUserId, long consequenceId, double latitude, double longitude,
+                            OffsetDateTime continueAt);
+
+    record OvernightArea(String name, PlaceKind kind, double latitude, double longitude, OffsetDateTime arrivalAt,
+                         double remainingMeters, double offRouteMeters) {}
+    record StopoverResult(Leg toStay, Leg onward, @Nullable SuggestionProblem problem) {}
+    record Leg(OffsetDateTime departure, OffsetDateTime arrival, double distanceMeters, Duration duration,
+               Duration delay, List<Long> conflictingIncidentIds) {}
+}
+```
+
+#### `find_overnight_areas`
+
+- **Orte (neu in `network`):** Tabelle `place` (Flyway, nächste Version), gefüllt aus demselben `.osm.pbf` beim `RegionImport`: OSM-Knoten mit `place=city|town|village`, Name, `kind`, `population`, `geometry(Point, 4326)` mit GIST-Index, `extract_version_id`.
+  - Eigener Durchlauf über die Datei, GraphHopper behält keine Knoten. Ersetzt die Orte der Region je Version, kein stabiler Schlüssel nötig, niemand verweist darauf.
+  - Schnittstelle `network.logic.Places.along(GeoLine line, int maxDistanceMeters, Set<PlaceKind> kinds)` → Ort, Anteil entlang der Linie (`ST_LineLocatePoint`), Abstand zur Linie.
+  - Kein externer Reverse-Geocoder: Massenabfragen verletzen die Nutzungsbedingungen von Nominatim, und die Route ginge an Dritte.
+- **Ablauf `Stopovers.areas`:**
+  1. Route (`RouteSnapshots.of`) und Consequences der Route laden. Hindernis = erste Section der Consequence des Laufs.
+  2. Abschnitt kürzen: ab der aktuellen Position (unterwegs: erste Section mit Ende nach jetzt, sonst Start) bis vor das Hindernis.
+  3. Ankunft je Section: geplante Durchfahrt plus Verzögerung der Consequences davor (`DELAYED`), wie `passageAt`. Sections nach `latestArrival` entfallen.
+  4. Linie des übrigen Abschnitts aus den Segmenten, `Places.along` mit Abstand `max-off-route` (Vorschlag 5 km). Ankunft und Restweg aus dem Anteil entlang der Linie interpoliert.
+  5. Rangfolge: `city`/`town` vor `village` (dort gibt es eher Unterkünfte), dann nah am Hindernis (wenig Restweg für morgen). Mindestabstand zwischen Orten (Vorschlag 15 km), sonst fünf Vororte derselben Stadt. Höchstens `max_results`, 1–5.
+- **Tool:** liefert je Ort `area_id`, Name, `kind`, `arrival_at`, `remaining_km`, `off_route_km`. Kein Problem → leere Liste mit Grund (z. B. `NOTHING_REACHABLE`).
+- **`area_id`:** eigene Registrierung im `RunContext` (`registerArea`), getrennt von den Optionen. `submit_proposals` kann keinen Ort nennen, Orte sind nur Eingabe für `search_accommodations`.
+- **`latest_arrival`** fehlt → Standard aus der Konfiguration (Vorschlag 22:00 Ortszeit der Region, `nfv.advisor.stopover.latest-arrival`).
+- `appliesTo`: nur bei `TOO_LATE` oder Ziel `STAY_OVERNIGHT`.
+
+#### `evaluate_stopover`
+
+- **Warum mit Angebot statt Ort:** Das Hotel liegt oft einige Kilometer vom Ortsmittelpunkt, der Umweg zählt. Deshalb `offer_ref` aus `search_accommodations`, Koordinaten aus den Stammdaten von LiteAPI.
+- **Ablauf `Stopovers.evaluate`:**
+  1. **Heute:** aktuelle Position bzw. Start → Hotel, im Szenario mit allen aktiven Incidents der Route (wie `forConsequence`), Abfahrt wie geplant bzw. jetzt. Liefert Ankunft, Strecke, Dauer, Verzögerung, Konflikte.
+  2. **Morgen:** Hotel → Ziel-Stop, Abfahrt `continue_at`. Incidents mit ihren Zeitfenstern zu diesem Zeitpunkt, eine nächtliche Sperrung kann morgens vorbei sein oder noch gelten. Liefert dieselben Felder, dazu `meets_deadline` gegen die Ankunft des Ziel-Stops, falls die noch gilt.
+  3. Kein Weg zum Hotel oder weiter → `problem`, das Modell kann ein anderes Angebot prüfen.
+- **Tool:** `continue_at` muss nach der Ankunft im Hotel und nach dem Check-in liegen, sonst `ToolInputException`. Registriert einen Entwurf mit `kind` `STOPOVER` (`option_id` `stopover_<n>`): Angebot, beide Fahrten, Preis. Das Modell kann ihn neben `KEEP_ROUTE` und Umfahrungen vorschlagen.
+- **Übernehmen (nach Bestätigung des Nutzers, nicht durch das Modell):**
+  1. Buchen über den Ablauf in [accommodation-alternatives.md](accommodation-alternatives.md#ablauf): Prebook, PayPal, Book. Braucht eine Reservierung ohne `bookingId` (heute hängt jede Reservierung an einer bestehenden Buchung).
+  2. Erst danach `trips`: neuer Stop am Hotel mit Ankunft und Abfahrt `continue_at`, Route wird geteilt (Start → Hotel, Hotel → Ziel), beide neu geplant, `RouteChanged` → `incidents` bewertet neu. Die neue Buchung hängt am neuen Stop.
+  3. Reihenfolge, damit eine gescheiterte Buchung den Trip nicht ändert. Scheitert Schritt 2 nach der Buchung, bleibt die Buchung bestehen, der Nutzer bekommt einen Hinweis und kann den Stop von Hand anlegen.
+- Beim Übernehmen prüft das Backend Angebot und beide Fahrten erneut, der Entwurf kann veraltet sein.
 
 ## Kontext des Modells
 
@@ -204,5 +253,6 @@ nfv.advisor.auto-enabled=false
 - **Frontend:** Anzeige der Vorschläge im `IncidentSheet`, Hinweis `stale`, Knopf für den Lauf bei `DELAYED`.
 - **Mehrere Replicas:** Der Schutz vor doppelten Läufen hält über den Unique-Constraint, das Zurücksetzen beim Start müsste dann auf Läufe der eigenen Instanz oder ein Zeitlimit umgestellt werden.
 - **Aufräumen:** wie lange alte Läufe aufgehoben werden.
+- **Übernachtung unterwegs:** Standard für `latest_arrival` (feste Uhrzeit, Check-in des Hotels oder Wahl des Nutzers). Orte entlang einer Umfahrung (`route_option_id`) erst, wenn der Lauf die Geometrie der Optionen kennt. Werte für `max-off-route` und Mindestabstand an echten Routen prüfen.
 - **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).
