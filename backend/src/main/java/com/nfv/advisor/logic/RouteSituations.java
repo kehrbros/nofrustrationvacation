@@ -2,6 +2,7 @@ package com.nfv.advisor.logic;
 
 import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.incidents.logic.RouteConsequence;
+import com.nfv.incidents.logic.RouteTooLate;
 import com.nfv.trips.logic.RouteSchedule;
 import com.nfv.trips.logic.RouteSchedules;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,16 @@ class RouteSituations {
         String text = counting.stream().map(c -> c.incidentId() + ":" + c.category()).collect(Collectors.joining(","))
                 + "|" + (schedule == null || schedule.deadline() == null ? "" : schedule.deadline().toInstant())
                 + "|" + (schedule == null || schedule.plannedArrival() == null ? "" : schedule.plannedArrival().toInstant());
+        return hash(text);
+    }
+
+    /** Stays the same over a replanning, which replaces the consequences but not their incidents. */
+    String autoKey(RouteTooLate event) {
+        return hash(event.incidentIds().stream().sorted().map(String::valueOf).collect(Collectors.joining(","))
+                + "|" + event.deadline().toInstant());
+    }
+
+    private static String hash(String text) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
                     .digest(text.getBytes(StandardCharsets.UTF_8)));

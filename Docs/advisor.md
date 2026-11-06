@@ -1,6 +1,6 @@
 # Vorschläge durch den Agenten (`advisor`)
 
-- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers umgesetzt (`V43`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe (`RouteTooLate`) und Frontend fehlen noch.
+- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V43`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
 - **Ziel:** Trifft ein Incident eine Route, schlägt ein Agent vor, was der Nutzer tun kann. Bei `TOO_LATE` automatisch, bei `DELAYED` nur auf Anfrage des Nutzers.
 - **Grundsatz:** Das Modell wählt, vergleicht und begründet. Strecken, Zeiten und Konflikte berechnet das Backend. Das Modell ändert nichts an der Reise, das bestätigt immer der Nutzer.
 - **Abgrenzung:** `recommendations` berechnet Strecken deterministisch und ohne Modell ([recommendations.md](recommendations.md)). `advisor` nutzt diese Berechnung, entscheidet, was vorgeschlagen wird, und speichert das Ergebnis.
@@ -32,11 +32,13 @@ flowchart LR
 
 ### Automatisch: nur `TOO_LATE`
 
-- `ConsequenceAssessment.assessRoute` ist die einzige Stelle, die Kategorien schreibt. Sie läuft in der Transaktion der Änderung und veröffentlicht dort `RouteTooLate(routeId, incidentIds, deadline)`, wenn die Route mindestens eine `TOO_LATE`-Consequence hat, deren Durchfahrt nicht vorbei ist (`Consequence.isOver`).
+- `ConsequenceAssessment.assessRoute` ist die einzige Stelle, die Kategorien schreibt. Sie läuft in der Transaktion der Änderung und veröffentlicht dort `RouteTooLate(routeId, incidentIds, deadline)`, wenn die Route mindestens eine `TOO_LATE`-Consequence hat, deren Durchfahrt nicht vorbei ist (`Consequence.isOver`). `incidentIds` enthält alle `TOO_LATE`-Incidents der Route, auch schon passierte: Dass nur Zeit vergeht, ist keine neue Lage.
 - `advisor` hört mit `@TransactionalEventListener(AFTER_COMMIT)` und rechnet auf einem virtuellen Thread, wie `TrafficEventProcessor.afterPoll`. Wird die Transaktion zurückgerollt, startet kein Lauf.
 - **Warum ein Vergleich vorher/nachher nicht reicht:** Eine Neuplanung löscht die Consequences mit den Sections, eine weiterhin verspätete Route sähe neu aus. `NetworkRefreshed` könnte das für viele Routen zugleich auslösen. Der Verkehrsfeed committet zudem je Event, also mehrere Bewertungen kurz nacheinander.
-- **Keine doppelten Läufe:** `auto_key` = Hash aus den `TOO_LATE`-Incidents (sortiert) und der Frist, eindeutig je Route. Der Lauf wird zuerst angelegt, ein zweiter mit gleichem Schlüssel scheitert am Unique-Constraint und entfällt. Damit bleibt der Schutz über eine Neuplanung hinweg bestehen.
-- Scheitert ein Lauf (`FAILED`), wird `auto_key` geleert, die nächste Bewertung darf neu starten.
+- **Keine doppelten Läufe:** `auto_key` = Hash aus den `TOO_LATE`-Incidents (sortiert) und der Frist, eindeutig je Route. Der Lauf wird zuerst angelegt, ein zweiter mit gleichem Schlüssel scheitert am Unique-Constraint und entfällt. Damit bleibt der Schutz über eine Neuplanung hinweg bestehen. Der übliche Fall (Lage schon bearbeitet) wird vorher abgefragt, damit er nicht jedes Mal als SQL-Fehler im Log steht.
+- **Veraltetes Event:** `AlternativeProposals.startAutomatic` prüft die aktuelle Lage. Ist die Route nicht mehr `TOO_LATE` oder gelöscht, entfällt der Lauf. Er betrifft die schlimmste aktuelle `TOO_LATE`-Consequence, Ziel `ARRIVE_ON_TIME`.
+- Scheitert ein Lauf (`FAILED`), wird `auto_key` geleert, die nächste Bewertung darf neu starten. Ein abgebrochener Lauf (`run-timeout`) gibt den Schlüssel ebenfalls frei: `startAutomatic` beendet ihn in eigener Transaktion, bevor es den neuen anlegt.
+- **Nicht bearbeitet:** Ein `USER`-Lauf auf derselben Route hält keinen automatischen auf, beide laufen dann. Das kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - `DELAYED`, `NO_IMPACT` und Routen ohne Frist lösen nie automatisch aus. `MARGINAL` und `timesUnconfirmed` sind nie `TOO_LATE`, also auch nicht.
 
 ### Durch den Nutzer
@@ -152,7 +154,7 @@ public interface LateArrivalNotices {
 
 - **`assistant.logic.ToolConversation`** (umgesetzt, kennt keine Fachmodule): Schleife über die OpenAI Responses API mit Function Calling und `store: false`. Der Aufrufer bringt Anweisung, Eingabe und Tools mit, `submit_proposals` ist das letzte Tool (`finish`). Ein Tool-Aufruf je Runde. `StructuredExtraction` bleibt unverändert.
 - **Fehler in Tools:** Ungültige Eingaben meldet das Tool als `ToolInputException`, das Modell bekommt die Meldung und kann es neu versuchen. Jede andere Ausnahme (z. B. `RoutingUnavailableException`) beendet das Gespräch und geht an `advisor`.
-- **Kontingent:** Jede Runde ist ein Modellaufruf und zählt gegen das Limit. `AUTO` nutzt `system-requests-per-hour`, `USER` `requests-per-hour` des Nutzers.
+- **Kontingent:** Jede Runde ist ein Modellaufruf und zählt gegen das Limit. `AUTO` nutzt `system-requests-per-hour`, `USER` `requests-per-hour` des Nutzers. Das Systemkontingent (Standard 60) teilt sich `AUTO` mit der Anreicherung von Verkehrsmeldungen. Bei bis zu 8 Aufrufen je Lauf reicht es für etwa 7 volle Läufe je Stunde, danach endet ein Lauf als `COMPLETED_WITHOUT_MODEL`, behält seinen `auto_key` und wird für diese Lage nicht wiederholt.
 - **Grenzen:** `max-turns` je Lauf. In der letzten Runde muss das Modell `submit_proposals` aufrufen (`tool_choice`), es schließt also mit dem bisher Gefundenen ab. Tut es das trotzdem nicht, gilt der Lauf als ohne Modell (siehe unten).
 - **Ohne Modell** (kein Key, Limit erreicht, Fehler, kein Abschluss): die besten Optionen von `Suggestions.forConsequence` ohne Begründung, Status `COMPLETED_WITHOUT_MODEL`. Vorschläge dürfen wie bei der Suche nach Unterkünften nicht am Modell scheitern.
 - **`RoutingUnavailableException`, sonstige Fehler:** `FAILED`, siehe [Auslöser](#automatisch-nur-too_late).
@@ -163,7 +165,7 @@ public interface LateArrivalNotices {
 
 - `advisor → recommendations`, `→ incidents`, `→ trips`, `→ assistant`. Kein anderes Modul kennt `advisor`, kein Zyklus. Rückwärts nur über das Event `RouteTooLate` aus `incidents.logic`.
 - Vorerst kein `advisor → bookings`, das kommt mit dem Adapter für `StayOptions` und `LateArrivalNotices`.
-- **Neu in `trips.logic` (kommt mit den automatischen Läufen):** Eigentümer einer Route lesen, `RouteSnapshots.ownerOf(routeId)`. Der automatische Lauf kennt nur die `routeId`, `Suggestions` und `RouteSnapshots` verlangen `appUserId`.
+- **`trips.logic`:** Eigentümer einer Route lesen, `RouteSnapshots.ownerOf(routeId)`. Der automatische Lauf kennt nur die `routeId`, `Suggestions` und `RouteSnapshots` verlangen `appUserId`.
 - `TripTools` lassen sich nicht wiederverwenden: Sie lesen den Nutzer aus dem `SecurityContext`, den ein Hintergrundlauf nicht hat. Die Tools von `advisor` rufen dieselbe Logik auf.
 
 ## Konfiguration
@@ -172,7 +174,11 @@ public interface LateArrivalNotices {
 nfv.advisor.max-turns=8
 nfv.advisor.max-proposals=3
 nfv.advisor.run-timeout=15m
+nfv.advisor.auto-enabled=false
 ```
+
+- `auto-enabled`: Schaltet nur die Läufe durch `RouteTooLate`, die des Nutzers gehen immer. **Standard vorerst `false` (Lukas, 2026-11-07):** Eingeschaltet gehen Routen und Zeiten ohne Zutun des Nutzers an OpenAI. Einschalten erst nach dem Lauf gegen die echte API und mit dem Hinweis in App und Datenschutzerklärung. Solange gibt es trotz `TOO_LATE` keinen Lauf ohne Anfrage des Nutzers.
+- In den Test-Properties steht es ausdrücklich auf `false`, sonst würde jeder Test mit `TOO_LATE` einen Lauf im Hintergrund starten, auch nach einem Wechsel des Standards. Nur `RouteTooLateListenerTest` schaltet es ein.
 
 ## Reihenfolge der Umsetzung
 
@@ -180,7 +186,7 @@ nfv.advisor.run-timeout=15m
 2. `recommendations`: `forConsequence`, nur betroffene Abschnitte, `DEPARTURE_SHIFT`, bereits unterwegs, ohne Modell testbar.
 3. `assistant`: `ToolConversation`, gegen eine gemockte API getestet (`ToolConversationTest`). Vor dem ersten Betrieb einmal gegen die echte API prüfen, besonders das Wiederholen des verschlüsselten Reasonings.
 4. `advisor`: Migration `V43`, Agent, Tools, API, Schnittstellen `StayOptions` und `LateArrivalNotices`. Erste Läufe gegen die echte API.
-5. `incidents`: `RouteTooLate` in `assessRoute`, Listener und `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, Schalter `nfv.advisor.auto-enabled`. Erst damit laufen automatische Läufe.
+5. `incidents`: `RouteTooLate` in `assessRoute`, Listener und `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, Schalter `nfv.advisor.auto-enabled` (umgesetzt, Standard vorerst `false`). Erst damit und eingeschaltet laufen automatische Läufe.
 
 ## Tests
 
@@ -188,7 +194,7 @@ nfv.advisor.run-timeout=15m
 - Listener: gleicher `auto_key` nach Neuplanung startet keinen Lauf, geänderte Incidents oder Frist schon, `FAILED` gibt den Schlüssel frei.
 - Agent mit gemockter `ToolConversation` (Tests rufen OpenAI nie auf): unbekannte Kennungen verworfen, Werte kommen aus dem Backend, `max-turns`, ohne Modell `COMPLETED_WITHOUT_MODEL`.
 - API: `202`, fremde Route `404`, `DELAYED` startet nur durch den Nutzer, `NO_ACTIVE_CONSEQUENCE`, laufender Lauf wird wiederverwendet, `stale` nach geänderter Lage.
-- Umgesetzt in `AlternativeProposalsTest` (Tools, Kontext, Werte aus dem Backend, ohne Modell, abgebrochene Läufe, Neustart, API), `ConsequenceAssessment` und Listener folgen mit den automatischen Läufen.
+- Umgesetzt in `AlternativeProposalsTest` (Tools, Kontext, Werte aus dem Backend, ohne Modell, abgebrochene Läufe, Neustart, API), `ConsequenceMatchingTest` (`RouteTooLate`), `AutomaticProposalsTest` (`auto_key`, `runForSystem`, gleichzeitige Events, veraltetes Event, ausgeschaltet) und `RouteTooLateListenerTest` (Commit, Rollback).
 
 ## Offen
 
