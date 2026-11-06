@@ -175,14 +175,35 @@ class AutomaticProposalsTest {
     }
 
     @Test
-    void anotherDeadlineStartsARun() {
+    void anotherDeadlineWithoutACategoryChangePublishesNothing() {
+        closure(middleSegment());
+        int events = applicationEvents.stream(RouteTooLate.class).toList().size();
+
+        arriveAt(planned.plusMinutes(90));
+
+        assertThat(applicationEvents.stream(RouteTooLate.class).toList()).hasSize(events);
+    }
+
+    @Test
+    void tooLateAgainWithAnotherDeadlineStartsARun() {
         closure(middleSegment());
         long first = proposals.startAutomatic(lastEvent()).orElseThrow();
 
-        inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId, new NewStop("Thorndon", THORNDON[0],
-                THORNDON[1], planned.plusMinutes(90), null)));
+        arriveAt(planned.plusDays(1));
+        arriveAt(planned.plusMinutes(90));
 
         assertThat(proposals.startAutomatic(lastEvent())).isPresent().get().isNotEqualTo(first);
+    }
+
+    @Test
+    void tooLateAgainWithTheSameDeadlineStartsNoRun() {
+        closure(middleSegment());
+        assertThat(proposals.startAutomatic(lastEvent())).isPresent();
+
+        arriveAt(planned.plusDays(1));
+        arriveAt(planned.plusHours(1));
+
+        assertThat(proposals.startAutomatic(lastEvent())).isEmpty();
     }
 
     @Test
@@ -237,8 +258,7 @@ class AutomaticProposalsTest {
         closure(middleSegment());
         RouteTooLate event = lastEvent();
 
-        inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId, new NewStop("Thorndon", THORNDON[0],
-                THORNDON[1], planned.plusDays(1), null)));
+        arriveAt(planned.plusDays(1));
 
         assertThat(proposals.startAutomatic(event)).isEmpty();
         assertThat(runs()).isEmpty();
@@ -264,6 +284,11 @@ class AutomaticProposalsTest {
         assertThat(applicationEvents.stream(RouteTooLate.class)).isNotEmpty();
         verify(conversation, after(500).never()).runForSystem(any());
         assertThat(runs()).isEmpty();
+    }
+
+    private void arriveAt(OffsetDateTime arrival) {
+        inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId, new NewStop("Thorndon", THORNDON[0],
+                THORNDON[1], arrival, null)));
     }
 
     private RouteTooLate lastEvent() {
