@@ -48,6 +48,26 @@
 - Login-Session (sessionStorage) und PayPal-Rückkehr müssen im selben Origin landen, also nicht zwischen localhost und der ngrok-URL wechseln.
 - `npm run dev`: `ngrok http 18173` auf den Vite-Server, `NFV_FRONTEND_URL` setzen (`server.allowedHosts`).
 
+## PayPal-Button im Sheet
+
+- **Seit 2026-11-06** zahlt der Nutzer eine Alternative über den PayPal-Button im Sheet (PayPal JS SDK, `frontend/src/payments/`), nicht mehr per Weiterleitung. PayPal öffnet sich als Popup über der App und kehrt in dieselbe Seite zurück.
+  - **Warum:** In der installierten App (`display: standalone`) öffnet eine Weiterleitung PayPal in einem Browserfenster außerhalb der App. Die Rückkehr landete dort, ohne Login (`sessionStorage`), und die App selbst blieb beim Bezahlen stehen. Der Button braucht keine Return-URL, also auch kein ngrok für die Rückkehr.
+  - Ablauf: `POST …/alternative-reservations` legt die Order an (Antwort `payPalOrderId`), `createOrder` des Buttons gibt diese Id zurück, `onApprove` ruft `POST /booking-reservations/{id}/booking` (autorisieren, bei LiteAPI buchen, capturen).
+  - Script `https://www.paypal.com/sdk/js?client-id=…&currency=<Währung der Reservierung>&intent=authorize&components=buttons&commit=true`. Die Client-Id ist öffentlich und kommt aus `GET /bookings/alternatives/status` (`payPalClientId`, `payPalEnvironment`). Eine CSP gibt es derzeit nicht. Kommt eine, braucht sie `www.paypal.com` und `*.paypal.com` für `script-src`, `frame-src` und `connect-src`.
+  - Nur der PayPal-Button (`fundingSource: paypal`), weil die Order mit `payment_source.paypal` angelegt wird. Karte und Pay Later bräuchten eine Order ohne `payment_source`.
+  - Fallback: Lädt das SDK nicht (offline, blockiert), zeigt das Sheet den Link „Weiter zu PayPal“ (`approveUrl`, Weiterleitung mit Rückkehr wie bisher).
+- `nfv.paypal.brand-name` = `NoFrustration.Vacation.` (bei PayPal angezeigt).
+
+## Stabilität
+
+Stand 2026-11-06, mit gemockten Antworten getestet (`AlternativeApiTest`, `LiteApiTest`), noch nicht gegen die Sandbox.
+
+- **Abschluss im Hintergrund** (`bookings.logic.ReservationRecovery`, jede Minute, `nfv.bookings.alternatives.recovery-*`): Reservierungen in `PAYMENT_PENDING`, `AUTHORIZED` oder `PROVIDER_BOOKED`, an denen seit `recovery-grace` (2 min) keine Anfrage gearbeitet hat (`attempted_at`), setzt der Job mit derselben Logik fort wie `POST /booking-reservations/{id}/booking`. `PAYMENT_PENDING` nur, wenn die Order bei PayPal `APPROVED` ist. Nicht freigegebene Zahlungen scheitern nach `approval-timeout` (3 h). Fällige Erstattungen werden wiederholt. Damit bleibt kein Geld reserviert, wenn der Nutzer nach der Freigabe die App schließt.
+- **Doppelte Buchung (LiteAPI `4005`)**: Die Antwort einer früheren Buchung ging verloren. Die Buchung wird über `GET /bookings?clientReference=nfv-stay-<id>` gesucht und fortgesetzt. Feldnamen der Antwort sind laut Doku nicht beschrieben, gelesen werden `data[].bookingId`, `clientReference`, `hotelConfirmationCode`; bei der Sandbox prüfen.
+- **Capture abgelehnt** nach erfolgter Buchung: Reservierung `NEEDS_ATTENTION` statt einer Buchung ohne Zahlung. Das Frontend zeigt „Gebucht, Zahlung wird geprüft“, der Fall muss von Hand geklärt werden (Log `ERROR`). PayPal nicht erreichbar beim Capture: bleibt `PROVIDER_BOOKED`, der Job versucht es erneut.
+- **Offene Reservierungen sichtbar**: `GET /trips/{tripId}/booking-reservations`, Banner über der Karte (`OpenReservations`), fragt alle 15 s nach und lädt die Reise neu, wenn eine fertig wurde.
+- **Storno mit Erstattung**: `POST /bookings/{bookingId}/refund-cancellation` für in der App gebuchte Alternativen: Storno bei LiteAPI (`PUT /bookings/{id}`), bei `CANCELLED` voller Refund (inklusive unserer Provision), bei `CANCELLED_WITH_CHARGES` der von LiteAPI genannte Betrag (Feld `refund_amount`/`refundAmount`, sonst nichts, Hinweis in `failure`). Refund idempotent per `refund-stay-<id>`, scheitert er, erstattet der Job später.
+
 ## Offen
 
 - Webhooks (`PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.PAYOUTSBATCH.*`) statt Polling; braucht öffentliche URL und Webhook-Id.

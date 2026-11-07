@@ -937,6 +937,16 @@ a {
 .va-choice-off > .anticon {
   border-color: var(--line);
 }
+/* field taken from a confirmation or completed from public data: small accent dot after the label */
+.va-filled-mark {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: 6px;
+  border-radius: 50%;
+  background: var(--accent, #f2b705);
+  vertical-align: middle;
+}
 .va-ai-mark {
   color: #b38600;
   font-weight: 800;
@@ -1150,4 +1160,69 @@ a.va-button {
 .va-alternative-off .va-booking-icon {
   background: #ffffff;
   border-color: var(--line);
+}
+
+/* PayPal: button in the sheet, what PayPal does for the user, progress of the booking */
+.va-paypal {
+  min-height: 48px;
+}
+.va-paypal-disabled {
+  pointer-events: none;
+  opacity: 0.5;
+}
+.va-paypal-promise,
+.va-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.va-paypal-promise li,
+.va-progress li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+.va-paypal-promise .anticon,
+.va-progress-done .anticon {
+  color: #1f7a3d;
+}
+.va-progress li:not(.va-progress-done) {
+  font-weight: 700;
+}
+.va-success {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: #e8f5ec;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 14px;
+}
+.va-success > .anticon {
+  font-size: 28px;
+  color: #1f7a3d;
+}
+/* rebooking not finished yet, over the map */
+.va-trip-banner {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  right: 16px;
+  z-index: 3;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--accent-soft);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  color: var(--ink);
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+}
+.va-trip-banner > .anticon {
+  font-size: 20px;
+}
+.va-refund-note {
+  color: #1f7a3d;
 }

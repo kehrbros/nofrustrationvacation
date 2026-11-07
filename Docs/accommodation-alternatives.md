@@ -170,13 +170,33 @@
 - **Zahlung nur PayPal** (Entscheidung 2026-11-03), kein Payment SDK. Buchung bei LiteAPI immer mit `ACC_CREDIT_CARD`, Rates und Prebook mit `margin: 0`.
 - **Provision:** `fee-percent` (Standard 10 %) auf den Nettopreis, gedeckelt auf den `suggestedSellingPrice`, falls der über dem Nettopreis liegt. Der Max. Preis gilt für den Endpreis.
 - **Status** der Reservierung: `PREBOOKED`, `PAYMENT_PENDING` (Order angelegt), `AUTHORIZED`, `PROVIDER_BOOKED` (bei LiteAPI gebucht, Geld noch nicht eingezogen), `BOOKED`, `FAILED`.
-- **Kein Poller:** `POST /booking-reservations/{id}/booking` setzt beim letzten gespeicherten Schritt fort und ist wiederholbar (PayPal-Request-Ids, `clientReference` `nfv-stay-<id>`). Antwortet LiteAPI auf das Buchen mit `4005` (Referenz schon gebucht, Antwort davor verloren), bleibt das Geld reserviert und der Fall wird geloggt (manuell prüfen). Lehnt PayPal den Capture nach erfolgter Buchung ab, ebenso.
+- **Wiederaufnahme:** `POST /booking-reservations/{id}/booking` setzt beim letzten gespeicherten Schritt fort und ist wiederholbar (PayPal-Request-Ids, `clientReference` `nfv-stay-<id>`). Seit 2026-11-06 macht das auch ein Job im Hintergrund, `4005` wird über die Suche nach der `clientReference` aufgelöst, ein abgelehnter Capture führt zu `NEEDS_ATTENTION`, siehe [paypal.md](paypal.md#stabilität).
 - **Fehler von LiteAPI:** einen Code `2001` gibt es laut Referenz nicht. Jede 4xx-Antwort auf Prebook oder Book (außer 401/403) ist `OFFER_UNAVAILABLE`, 5xx und Netzwerkfehler `ALTERNATIVES_UNAVAILABLE`.
 - **Gäste:** LiteAPI braucht je Zimmer einen Gast; eingetragen wird der Buchende für jedes Zimmer. Gästezahl wird gleichmäßig auf die Zimmer verteilt (`Pricing.adultsPerRoom`).
 - **Hotel und Gastdaten** stehen in der Reservierung (Tabelle `booking_reservation`, `V30`), nicht historisiert. Gastdaten werden bei `BOOKED` oder `FAILED` gelöscht. Hotel-Daten kommen aus `GET /data/hotel`, Check-in/Check-out-Zeiten daraus, sonst 15:00/11:00.
 - **Grund** („falsch gebucht“ usw.) wird nicht gespeichert. Die bisherige Buchung wird nur auf Wunsch in der App als storniert markiert (`POST /bookings/{id}/cancellation`).
-- **Nicht umgesetzt:** Storno einer gebuchten Alternative (LiteAPI `PUT /bookings/{id}` und PayPal-Refund, `refundCapture` ist vorhanden), Abgleich per `GET /bookings/{id}`, MCP-Tools, Ausschluss der bisherigen Unterkunft über ähnliche Namen (nur über `placeRef` und die Markierung „möglicherweise die bisherige Unterkunft“ bis 50 m).
+- **Storno** einer gebuchten Alternative mit PayPal-Erstattung seit 2026-11-06 ([paypal.md](paypal.md#stabilität)). Die Provision wird bei kostenlosem Storno mit erstattet.
+- **Zahlung im Sheet** per PayPal-Button statt Weiterleitung ([paypal.md](paypal.md#paypal-button-im-sheet)). Gastdaten merkt sich das Gerät (`localStorage`), sind sie vollständig, geht es nach der Wahl eines Angebots direkt zur Zahlung. Sind die Kriterien aus der Buchung vollständig, sucht das Sheet sofort, das Formular gibt es nur unter „Suche anpassen“.
+- **Nicht umgesetzt:** Abgleich per `GET /bookings/{id}`, MCP-Tools, Ausschluss der bisherigen Unterkunft über ähnliche Namen (nur über `placeRef` und die Markierung „möglicherweise die bisherige Unterkunft“ bis 50 m).
 - **Lokal ausprobieren:** `LITEAPI_API_KEY` (Sandbox-Key `sand_…`), `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` (Sandbox), Frontend über ngrok (PayPal akzeptiert `localhost` nicht als Return-URL), siehe [paypal.md](paypal.md#lokal-ohne-localhost-sandbox). `OPENAI_API_KEY` optional für das Ranking. Im Stack Docker Secret `nfv_liteapi_api_key`, siehe [deployment.md](deployment.md).
+
+## Route nach dem Umbuchen
+
+- **Ausgangslage:** Routen laufen von Stop zu Stop über die Koordinaten der Stops (`RoutePlanning`), die Unterkunft spielt dafür keine Rolle. Liegt die Alternative im selben Ort, ändert sich an der Route nichts.
+- **Anderer Ort:** mehr als 10 km vom Stop (`trips.logic.StayPlaces.OTHER_PLACE_METERS`, Luftlinie). Nach der Buchung (`AlternativeReservations.followStay`, auch im Hintergrund-Job) zieht der Stop zum Hotel (`TripEditing.moveStopToStay`):
+  - Koordinaten des Hotels, Name = Ort des Hotels laut LiteAPI (`city` aus `GET /data/hotel`, wird nicht in der Reservierung gespeichert). Ohne Ort bleibt der Name. Ein Stop ohne Koordinaten bekommt nur die Koordinaten und behält seinen Namen.
+  - Wegpunkte aus Vorschlägen (`SUGGESTION`) der Routen zum und vom Stop fallen weg, sie führen zum alten Ort. Wegpunkte des Nutzers (`USER`) bleiben. Beide Routen werden neu geplant (schnellster Weg), Incidents bewerten sie danach wie gewohnt.
+  - Scheitert das Verschieben, bleibt die Buchung bestehen (nur Log).
+- **Antwort:** `ReservationDto.replannedRouteIds` nennt die neu geplanten Routen, nur in der Antwort, die gebucht hat (nicht gespeichert). Bucht der Hintergrund-Job, ist die Liste leer; der Stop ist trotzdem verschoben.
+- **Frontend:** Bei „Umgebucht“ steht „Der Stop liegt jetzt in …, die Route wurde neu geplant“. Liefern die Vorschläge für eine Route mehr als eine Option, gibt es den Knopf „Route … wählen“ zum bestehenden RouteSheet, sonst wird nichts gefragt.
+
+## Route vor dem Buchen prüfen
+
+- `GET /booking-reservations/{id}/route-check`, aufgerufen im Zahlschritt (nach dem Prebook, vor PayPal), berechnet und nicht gespeichert (`bookings.logic.StayRouteCheck`).
+- Nur bei anderem Ort: bester Weg von der Abfahrt am vorigen Stop zum Hotel (`recommendations.Suggestions.towards`: ohne Wegpunkte, ohne Referenz, Incidents wie bei der Planung). Ergebnis: Ankunft inkl. Verzögerung, spätester Check-in (`checkInUntil` des Hotels am Anreisetag in der Zeitzone des Hotels, Mitternacht gilt als unbekannt), `late`, `blocked` (auch der beste Weg führt durch eine Sperrung).
+- Ohne Prüfung (`problem`): erster Stop (`FIRST_STOP`), Abfahrt schon vorbei (`UNDER_WAY`, z. B. vor Ort), fehlende Abfahrt/Koordinaten, kein Weg, kein Graph. Dann zeigt die App nur den Hinweis auf den Ortswechsel.
+- Nur ein Hinweis im Zahlschritt („Anderer Ort“, Ankunft, Warnung), Buchen bleibt möglich. Geprüft wird nur die gewählte Unterkunft, nicht die ganze Ergebnisliste (Routing je Kandidat wäre zu langsam).
+- Neue Abhängigkeit `bookings --> recommendations` (kein Zyklus, `recommendations` kennt `bookings` nicht).
 
 ## Offene Punkte
 

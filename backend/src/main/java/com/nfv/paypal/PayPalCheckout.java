@@ -28,6 +28,19 @@ public class PayPalCheckout {
         return properties.isConfigured();
     }
 
+    /**
+     * Public client id of the PayPal app for the JS SDK in the browser (PayPal button in the app instead of a
+     * redirect), null without credentials.
+     */
+    public @Nullable String clientId() {
+        return properties.isConfigured() ? properties.clientId() : null;
+    }
+
+    /** {@code sandbox} or {@code live}, for the JS SDK. */
+    public String environment() {
+        return properties.environment().name().toLowerCase(java.util.Locale.ROOT);
+    }
+
     /** @throws PayPalNotConfiguredException without client id and secret */
     public void requireConfigured() {
         http.requireConfigured();
@@ -147,8 +160,18 @@ public class PayPalCheckout {
 
     /** Refunds a capture in full. Repeating with the same {@code requestId} returns the first result. */
     public Payment refundCapture(String captureId, String requestId) {
+        return refundCapture(captureId, null, requestId);
+    }
+
+    /**
+     * Refunds a capture, in full without {@code amount}. Repeating with the same {@code requestId} returns the first
+     * result; a capture refunded before counts as done.
+     */
+    public Payment refundCapture(String captureId, @Nullable PayPalAmount amount, String requestId) {
         http.requireConfigured();
-        return http.post("/v2/payments/captures/" + captureId + "/refund", Map.of(), PaymentResponse.class, requestId)
+        Map<String, Object> body = amount == null ? Map.of()
+                : Map.of("amount", new OrderAmount(amount.currency(), amount.formattedValue()));
+        return http.post("/v2/payments/captures/" + captureId + "/refund", body, PaymentResponse.class, requestId)
                 .toPayment();
     }
 

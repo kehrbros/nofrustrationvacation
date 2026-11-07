@@ -25,7 +25,8 @@ import java.util.Set;
 @RequiredArgsConstructor
 class StopDeletionListener {
     private static final Set<ReservationStatus> PAYMENT_RUNNING =
-            EnumSet.of(ReservationStatus.AUTHORIZED, ReservationStatus.PROVIDER_BOOKED);
+            EnumSet.of(ReservationStatus.AUTHORIZED, ReservationStatus.PROVIDER_BOOKED,
+                    ReservationStatus.NEEDS_ATTENTION);
 
     private final BookingRepository bookingRepository;
     private final AccommodationDetailsRepository accommodationRepository;

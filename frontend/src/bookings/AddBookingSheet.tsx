@@ -132,7 +132,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
             <button type="button" className="va-choice va-choice-main" onClick={() => setStep('paste')}>
               <SnippetsOutlined aria-hidden="true" />
               <span className="va-column">
-                <span className="va-option-title">Bestätigung einfügen <span className="va-ai-mark">✦</span></span>
+                <span className="va-option-title">Bestätigung einfügen</span>
                 <span className="va-small va-muted">
                   {shared
                     ? 'An die App Geteiltes liegt bereit, bei Bedarf um Mail-Text, Screenshot oder PDF ergänzen.'
@@ -177,7 +177,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
         <>
           {source !== 'MANUAL' && (
             <p className="va-note">
-              <span className="va-ai-mark">✦</span> aus der Bestätigung gelesen. <strong>Gelb markierte Felder bitte prüfen.</strong>
+              Aus der Bestätigung übernommen. <strong>Gelb markierte Felder bitte prüfen.</strong>
             </p>
           )}
           <AccommodationFields

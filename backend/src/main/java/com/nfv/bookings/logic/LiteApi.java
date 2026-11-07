@@ -23,6 +23,7 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -188,6 +189,59 @@ public class LiteApi {
         }
         return new ProviderBooking(bookingId, text(data.path("hotelConfirmationCode")),
                 data.path("status").asString(""));
+    }
+
+    /**
+     * Booking made with our {@code clientReference}, e.g. after the answer of {@link #book} got lost (LiteAPI
+     * {@code 4005}). {@code GET /bookings?clientReference=…}; the answer lists the matches under {@code data}.
+     */
+    public Optional<ProviderBooking> findBooking(String clientReference) {
+        JsonNode data = get(properties.bookUrl() + "/bookings?clientReference={reference}", clientReference)
+                .path("data");
+        Iterable<JsonNode> matches = data.isArray() ? data : List.of(data);
+        for (JsonNode booking : matches) {
+            String bookingId = text(booking.path("bookingId"));
+            String reference = text(booking.path("clientReference"));
+            if (bookingId != null && (reference == null || reference.equals(clientReference))) {
+                return Optional.of(new ProviderBooking(bookingId, text(booking.path("hotelConfirmationCode")),
+                        booking.path("status").asString("")));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Cancels a booking ({@code PUT /bookings/{id}}). {@code CANCELLED}: free of charge; {@code CANCELLED_WITH_CHARGES}:
+     * a fee applies, the refund (if LiteAPI states it) is in {@link Cancellation#refund()}.
+     *
+     * @throws OfferUnavailableException LiteAPI refused the cancellation
+     */
+    public Cancellation cancel(String bookingId) {
+        requireConfigured();
+        String url = properties.bookUrl() + "/bookings/{id}";
+        JsonNode data;
+        try {
+            String answer = liteApiRestClient.put().uri(url, bookingId)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, (_, response) -> {
+                        throw error(url, response.getStatusCode(), response.getBody().readAllBytes(), true);
+                    })
+                    .body(String.class);
+            data = parse(answer).path("data");
+        } catch (RestClientException e) {
+            log.warn("LiteAPI request failed: {}", e.getMessage());
+            throw new LiteApiUnavailableException("LiteAPI request failed");
+        }
+        String status = data.path("status").asString("");
+        BigDecimal refund = null;
+        for (String field : List.of("refund_amount", "refundAmount", "refund")) {
+            JsonNode node = data.path(field);
+            refund = node.isObject() ? decimal(node.path("amount")) : decimal(node);
+            if (refund != null) {
+                break;
+            }
+        }
+        return new Cancellation(status, refund);
     }
 
     private JsonNode post(String url, JsonNode body, boolean offer) {
@@ -393,5 +447,19 @@ public class LiteApi {
     }
 
     public record ProviderBooking(String bookingId, @Nullable String hotelConfirmationCode, String status) {
+    }
+
+    /**
+     * @param status e.g. {@code CANCELLED} (free) or {@code CANCELLED_WITH_CHARGES}
+     * @param refund what LiteAPI refunds to our account, null if not stated
+     */
+    public record Cancellation(String status, @Nullable BigDecimal refund) {
+        public boolean isFree() {
+            return "CANCELLED".equals(status);
+        }
+
+        public boolean isCancelled() {
+            return status.startsWith("CANCELLED");
+        }
     }
 }

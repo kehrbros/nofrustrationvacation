@@ -20,11 +20,15 @@ import java.time.Duration;
  * @param frontendUrl      base of the PayPal return URLs
  * @param timeout          per request to LiteAPI
  * @param searchesPerHour  per user, every search costs at LiteAPI
+ * @param approvalTimeout  a payment not approved at PayPal within this time fails (the background job releases it)
+ * @param recoveryEnabled  the background job continues open reservations (off in tests)
+ * @param recoveryGrace    the job leaves reservations alone that a request worked on more recently
  */
 @ConfigurationProperties("nfv.bookings.alternatives")
 public record AlternativesProperties(String apiKey, String searchUrl, String bookUrl, BigDecimal feePercent,
                                      int defaultRadius, int maxCandidates, String guestNationality,
-                                     String frontendUrl, Duration timeout, int searchesPerHour) {
+                                     String frontendUrl, Duration timeout, int searchesPerHour,
+                                     Duration approvalTimeout, boolean recoveryEnabled, Duration recoveryGrace) {
 
     public boolean isConfigured() {
         return apiKey != null && !apiKey.isBlank();

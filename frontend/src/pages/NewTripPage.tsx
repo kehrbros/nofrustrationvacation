@@ -107,7 +107,7 @@ export default function NewTripPage() {
             <input type="radio" name="cover" checked={cover === 'generate'} onChange={() => setCover('generate')} />
             <span>
               <span className="va-option-title">Automatisch erzeugen</span>
-              <span className="va-muted">Per KI passend zum Namen der Reise, später änderbar</span>
+              <span className="va-muted">Passend zum Namen der Reise, später änderbar</span>
             </span>
           </label>
           <label className={`va-option ${cover === 'upload' ? 'va-option-selected' : ''}`}>

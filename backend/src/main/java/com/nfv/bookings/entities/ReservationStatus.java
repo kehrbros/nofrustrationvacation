@@ -13,5 +13,12 @@ public enum ReservationStatus {
     /** Money captured, booking created. */
     BOOKED,
     /** Nothing booked, no money moved. */
-    FAILED
+    FAILED,
+    /**
+     * Booked at LiteAPI, but the money could not be captured (or the booking state is unclear): the booking is kept,
+     * someone has to look at it.
+     */
+    NEEDS_ATTENTION,
+    /** Booked, then cancelled at LiteAPI by the user; refunded with PayPal once {@code payPalRefundId} is set. */
+    CANCELLED
 }

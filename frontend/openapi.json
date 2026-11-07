@@ -851,6 +851,35 @@
         "tags" : [ "Alternative accommodations" ]
       }
     },
+    "/api/v1/bookings/{bookingId}/refund-cancellation" : {
+      "post" : {
+        "description" : "Cancels at LiteAPI and refunds the PayPal payment (in full while free of charge). Only for alternatives booked in the app. 409 CANCELLATION_NOT_POSSIBLE, 409 OFFER_UNAVAILABLE (LiteAPI refused), 503 ALTERNATIVES_UNAVAILABLE.",
+        "operationId" : "cancelWithRefund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "bookingId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Cancel a booking made in the app and refund it",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
     "/api/v1/incidents/trip-counts" : {
       "get" : {
         "description" : "Only TOO_LATE and DELAYED, only trips with at least one.",
@@ -1142,6 +1171,38 @@
         },
         "summary" : "Change name, period and travelers of a trip",
         "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/booking-reservations" : {
+      "get" : {
+        "description" : "Payment running (approved at PayPal, booking in progress) or to be checked (NEEDS_ATTENTION); the app shows them so nobody wonders what happened to the money.",
+        "operationId" : "unfinishedReservations",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/ReservationDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Unfinished reservations of a trip",
+        "tags" : [ "Alternative accommodations" ]
       }
     },
     "/api/v1/trips/{tripId}/bookings" : {
@@ -2261,6 +2322,14 @@
           "bookingAvailable" : {
             "type" : "boolean"
           },
+          "payPalClientId" : {
+            "type" : [ "string", "null" ],
+            "description" : "Public client id for the PayPal JS SDK, null without PayPal"
+          },
+          "payPalEnvironment" : {
+            "type" : "string",
+            "description" : "sandbox or live"
+          },
           "rankingAvailable" : {
             "type" : "boolean"
           },
@@ -2784,13 +2853,27 @@
             "type" : "integer",
             "format" : "int64"
           },
+          "payPalOrderId" : {
+            "type" : [ "string", "null" ],
+            "description" : "PayPal order, for the PayPal button in the app (JS SDK)"
+          },
           "price" : {
             "type" : "string",
             "format" : "decimal",
             "example" : "189.00"
           },
+          "refundAmount" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "description" : "Refunded with PayPal after a cancellation",
+            "example" : "189.00"
+          },
           "refundable" : {
             "type" : "boolean"
+          },
+          "refunded" : {
+            "type" : "boolean",
+            "description" : "The refund with PayPal is made"
           },
           "replacesBookingId" : {
             "type" : [ "integer", "null" ],
@@ -2802,7 +2885,7 @@
           },
           "status" : {
             "type" : "string",
-            "enum" : [ "PREBOOKED", "PAYMENT_PENDING", "AUTHORIZED", "PROVIDER_BOOKED", "BOOKED", "FAILED" ]
+            "enum" : [ "PREBOOKED", "PAYMENT_PENDING", "AUTHORIZED", "PROVIDER_BOOKED", "BOOKED", "FAILED", "NEEDS_ATTENTION", "CANCELLED" ]
           },
           "stopId" : {
             "type" : "integer",

@@ -3,6 +3,7 @@ package com.nfv.bookings.api;
 import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.bookings.logic.BookingNotFoundException;
+import com.nfv.bookings.logic.CancellationNotPossibleException;
 import com.nfv.bookings.logic.InvalidBookingInputException;
 import com.nfv.bookings.logic.LiteApiUnavailableException;
 import com.nfv.bookings.logic.OfferUnavailableException;
@@ -71,6 +72,11 @@ public class BookingExceptionHandler {
     @ExceptionHandler(OfferUnavailableException.class)
     public ResponseEntity<ProblemDetail> handleOfferUnavailable(OfferUnavailableException exception) {
         return problem(HttpStatus.CONFLICT, "OFFER_UNAVAILABLE", exception.getMessage());
+    }
+
+    @ExceptionHandler(CancellationNotPossibleException.class)
+    public ResponseEntity<ProblemDetail> handleCancellationNotPossible(CancellationNotPossibleException exception) {
+        return problem(HttpStatus.CONFLICT, "CANCELLATION_NOT_POSSIBLE", exception.getMessage());
     }
 
     @ExceptionHandler(PriceExceededException.class)
