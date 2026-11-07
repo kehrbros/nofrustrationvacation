@@ -88,9 +88,11 @@ export default function TripMap({
       style: MAP_STYLE,
       center: EUROPE,
       zoom: 3.5,
-      attributionControl: { compact: true },
+      attributionControl: false,
     });
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+    // top-left: the trip sheet covers the bottom corners on phones
+    instance.addControl(new maplibregl.AttributionControl({ compact: false }), 'top-left');
     instance.on('load', () => {
       instance.addSource('routes', { type: 'geojson', data: EMPTY });
       instance.addSource('route-preview', { type: 'geojson', data: EMPTY });
