@@ -30,6 +30,17 @@ public class RouteSnapshots {
         return snapshot(route);
     }
 
+    /**
+     * The user the route belongs to, for work in the background where nobody is logged in.
+     *
+     * @throws TripItemNotFoundException the route does not exist (any more)
+     */
+    @Transactional(readOnly = true)
+    public long ownerOf(long routeId) {
+        return routeRepository.findById(routeId).map(route -> route.getTrip().getAppUserId())
+                .orElseThrow(() -> new TripItemNotFoundException("route", routeId));
+    }
+
     private RouteSnapshot snapshot(Route route) {
         return new RouteSnapshot(route.getId(), route.getTrip().getId(), stop(route.getFromStop()),
                 stop(route.getToStop()),

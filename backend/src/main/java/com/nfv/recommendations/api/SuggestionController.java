@@ -53,12 +53,15 @@ public class SuggestionController {
     }
 
     @Operation(summary = "Choose a suggestion", description = "Its waypoints replace the waypoints of the route, "
-            + "which is planned again. Waypoints with waypointId stay as they are.")
+            + "which is planned again. Waypoints with waypointId stay as they are. With departureAt only the "
+            + "departure at the start stop changes.")
     @PutMapping("/routes/{routeId}/choice")
     public ChosenRouteDto choose(@AuthenticationPrincipal CurrentUser user, @PathVariable long routeId,
                                  @RequestBody RouteChoiceDto choice) {
         List<ChoicePointDto> waypoints = choice.waypoints() == null ? List.of() : choice.waypoints();
-        RouteChoice.Chosen chosen = routeChoice.choose(user.appUserId(), routeId, waypoints.stream()
+        RouteChoice.Chosen chosen = choice.departureAt() != null
+                ? routeChoice.chooseDeparture(user.appUserId(), routeId, choice.departureAt())
+                : routeChoice.choose(user.appUserId(), routeId, waypoints.stream()
                 .map(p -> new SuggestedOption.Point(p.latitude(), p.longitude(), p.roadHint(), p.waypointId()))
                 .toList());
         return new ChosenRouteDto(chosen.tripId(), chosen.routeId(),

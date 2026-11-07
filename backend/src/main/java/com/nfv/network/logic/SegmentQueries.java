@@ -1,11 +1,13 @@
 package com.nfv.network.logic;
 
+import com.nfv.network.config.NetworkProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.PreparedStatement;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -17,6 +19,25 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class SegmentQueries {
     private final JdbcTemplate jdbc;
+    private final NetworkProperties properties;
+
+    /**
+     * Time zone of the region a segment lies in.
+     *
+     * @throws IllegalArgumentException unknown segment
+     */
+    @Transactional(readOnly = true)
+    public ZoneId zone(long segmentId) {
+        String region = jdbc.query("SELECT region FROM road_segment WHERE id = ?",
+                        (rs, row) -> rs.getString(1), segmentId)
+                .stream().findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("unknown segment " + segmentId));
+        NetworkProperties.Region config = properties.regions().get(region);
+        if (config == null) {
+            throw new IllegalArgumentException("segment " + segmentId + " lies in unknown region " + region);
+        }
+        return config.zone();
+    }
 
     /** Details of the segments by id, unknown ids are missing. */
     @Transactional(readOnly = true)

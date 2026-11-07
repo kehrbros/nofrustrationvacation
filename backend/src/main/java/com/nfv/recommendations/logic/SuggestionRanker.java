@@ -72,6 +72,10 @@ class SuggestionRanker {
             if (reference != null && !e.outcome().incidentIds().containsAll(reference.incidentIds())) {
                 labels.add(OptionLabel.AVOIDS_INCIDENT);
             }
+            if (reference != null && e.candidate().kind() == OptionKind.DEPARTURE_SHIFT) {
+                labels.add(e.outcome().departure().isAfter(reference.departure())
+                        ? OptionLabel.LATER_DEPARTURE : OptionLabel.EARLIER_DEPARTURE);
+            }
             ranked.add(new Ranked(e, labels, via(e.candidate().segments(), baseIds, segments)));
         }
         return ranked;

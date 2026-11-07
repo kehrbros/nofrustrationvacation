@@ -26,6 +26,9 @@
     "description" : "Route suggestions when planning, see Docs/recommendations.md",
     "name" : "Suggestions"
   }, {
+    "description" : "What the agent proposes when incidents affect a route, see Docs/advisor.md. Choosing goes through PUT /routes/{routeId}/choice.",
+    "name" : "Alternative proposals"
+  }, {
     "description" : "Top up platform credit via PayPal",
     "name" : "Top-ups"
   }, {
@@ -560,6 +563,34 @@
         "tags" : [ "Top-ups" ]
       }
     },
+    "/api/v1/alternative-proposals/{runId}" : {
+      "get" : {
+        "operationId" : "get",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProposalRunDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "A run with its proposals",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
     "/api/v1/booking-reservations/{reservationId}" : {
       "get" : {
         "operationId" : "getReservation",
@@ -952,9 +983,74 @@
         "tags" : [ "Onboarding" ]
       }
     },
+    "/api/v1/routes/{routeId}/alternative-proposals" : {
+      "get" : {
+        "description" : "Also a run started automatically; run is null without.",
+        "operationId" : "latest",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/RouteProposalRunDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Last run of a route",
+        "tags" : [ "Alternative proposals" ]
+      },
+      "post" : {
+        "description" : "Runs in the background and can take minutes, poll the run. If one is already running for the route, its id comes back. 409 NO_ACTIVE_CONSEQUENCE.",
+        "operationId" : "start",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ProposalRequestDto"
+              }
+            }
+          }
+        },
+        "responses" : {
+          "202" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProposalRunStartedDto"
+                }
+              }
+            },
+            "description" : "Accepted"
+          }
+        },
+        "summary" : "Start a run of the agent",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
     "/api/v1/routes/{routeId}/choice" : {
       "put" : {
-        "description" : "Its waypoints replace the waypoints of the route, which is planned again. Waypoints with waypointId stay as they are.",
+        "description" : "Its waypoints replace the waypoints of the route, which is planned again. Waypoints with waypointId stay as they are. With departureAt only the departure at the start stop changes.",
         "operationId" : "choose",
         "parameters" : [ {
           "in" : "path",
@@ -2776,6 +2872,151 @@
           }
         }
       },
+      "ProposalDto" : {
+        "type" : "object",
+        "description" : "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose.",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Including waiting and delays, null if a closure cannot be passed"
+          },
+          "conflicts" : {
+            "type" : "array",
+            "description" : "Incidents still passed on this way",
+            "items" : {
+              "$ref" : "#/components/schemas/ConflictDto"
+            }
+          },
+          "delaySeconds" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "distanceMeters" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "durationSeconds" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE" ]
+          },
+          "meetsDeadline" : {
+            "type" : [ "boolean", "null" ],
+            "description" : "Reaches the arrival time of the target stop, null if it has none"
+          },
+          "rank" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "1 is the best"
+          },
+          "reason" : {
+            "type" : [ "string", "null" ],
+            "description" : "Written by the model, null without it"
+          },
+          "sharedRatio" : {
+            "type" : [ "number", "null" ],
+            "format" : "double",
+            "description" : "Part of the distance shared with the planned route"
+          },
+          "via" : {
+            "type" : [ "string", "null" ],
+            "description" : "Main road of the part that differs, e.g. SH 2"
+          },
+          "waypoints" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChoicePointDto"
+            }
+          }
+        }
+      },
+      "ProposalRequestDto" : {
+        "type" : "object",
+        "description" : "Request for a run of the agent",
+        "properties" : {
+          "consequenceId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Consequence to look at, default: the worst on the route"
+          },
+          "goal" : {
+            "type" : [ "string", "null" ],
+            "description" : "Default ARRIVE_ON_TIME",
+            "enum" : [ "ARRIVE_ON_TIME", "MINIMIZE_DELAY" ]
+          }
+        }
+      },
+      "ProposalRunDto" : {
+        "type" : "null",
+        "description" : "A run of the agent with its proposals",
+        "properties" : {
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "failure" : {
+            "type" : [ "string", "null" ],
+            "description" : "Why the run failed, e.g. ROUTING_UNAVAILABLE"
+          },
+          "finishedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "goal" : {
+            "type" : "string",
+            "enum" : [ "ARRIVE_ON_TIME", "MINIMIZE_DELAY" ]
+          },
+          "proposals" : {
+            "type" : "array",
+            "description" : "Best first",
+            "items" : {
+              "$ref" : "#/components/schemas/ProposalDto"
+            }
+          },
+          "routeId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "runId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "stale" : {
+            "type" : "boolean",
+            "description" : "The situation of the route changed since the run started, the numbers may be out of date"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PENDING", "RUNNING", "COMPLETED", "COMPLETED_WITHOUT_MODEL", "FAILED" ]
+          },
+          "summary" : {
+            "type" : [ "string", "null" ],
+            "description" : "Written by the model, null without it"
+          },
+          "trigger" : {
+            "type" : "string",
+            "enum" : [ "AUTO", "USER" ]
+          }
+        }
+      },
+      "ProposalRunStartedDto" : {
+        "type" : "object",
+        "description" : "The run that was started, or the one already running for the route",
+        "properties" : {
+          "runId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "ProviderOnboardingDto" : {
         "type" : "object",
         "properties" : {
@@ -2986,6 +3227,11 @@
         "type" : "object",
         "description" : "The chosen suggestion: its waypoints as returned with it, empty for the fastest way without waypoints",
         "properties" : {
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "New departure at the start stop (suggestion of kind DEPARTURE_SHIFT): waypoints are ignored and stay as they are"
+          },
           "waypoints" : {
             "type" : "array",
             "items" : {
@@ -3156,7 +3402,7 @@
           },
           "kind" : {
             "type" : "string",
-            "enum" : [ "ALTERNATIVES", "KEEP_ROUTE", "DEPARTURE_SHIFT" ]
+            "enum" : [ "ALTERNATIVES", "DEPARTURE_SHIFT" ]
           },
           "labels" : {
             "type" : "array",
@@ -3188,6 +3434,16 @@
             "items" : {
               "$ref" : "#/components/schemas/ChoicePointDto"
             }
+          }
+        }
+      },
+      "RouteProposalRunDto" : {
+        "type" : "object",
+        "description" : "The last run of a route",
+        "properties" : {
+          "run" : {
+            "$ref" : "#/components/schemas/ProposalRunDto",
+            "description" : "null if the route has no run"
           }
         }
       },
@@ -3309,7 +3565,7 @@
           "problem" : {
             "type" : [ "string", "null" ],
             "description" : "MISSING_COORDINATES, MISSING_DEPARTURE or NO_ROUTE, null if there are suggestions",
-            "enum" : [ "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE" ]
+            "enum" : [ "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE", "WAYPOINT_UNREACHABLE", "CONSEQUENCE_PASSED" ]
           },
           "reference" : {
             "$ref" : "#/components/schemas/ReferenceRouteDto",

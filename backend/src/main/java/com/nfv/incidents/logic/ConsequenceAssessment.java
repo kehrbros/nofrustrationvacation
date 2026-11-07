@@ -3,6 +3,7 @@ package com.nfv.incidents.logic;
 import com.nfv.incidents.config.AssessmentProperties;
 import com.nfv.incidents.data.ConsequenceRepository;
 import com.nfv.incidents.data.IncidentRepository;
+import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.Incident;
 import com.nfv.trips.data.RouteSectionRepository;
@@ -10,6 +11,7 @@ import com.nfv.trips.entities.RouteSection;
 import com.nfv.trips.logic.RouteSchedule;
 import com.nfv.trips.logic.RouteSchedules;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,6 +41,7 @@ public class ConsequenceAssessment {
     private final RouteSchedules routeSchedules;
     private final AssessmentProperties rules;
     private final Clock clock;
+    private final ApplicationEventPublisher events;
 
     @Transactional(propagation = Propagation.MANDATORY)
     public List<Consequence> assessRoute(long routeId) {
@@ -61,17 +64,27 @@ public class ConsequenceAssessment {
         Map<Long, Consequence> remaining = new HashMap<>(consequenceRepository.findByRouteId(routeId).stream()
                 .collect(Collectors.toMap(c -> c.getIncident().getId(), Function.identity())));
         List<Consequence> result = new ArrayList<>();
+        boolean becameTooLate = false;
         for (RouteAssessor.Assessment assessment : assessments) {
             Consequence consequence = remaining.remove(assessment.incidentId());
+            Category before = consequence == null ? null : consequence.getCategory();
             if (consequence == null) {
                 consequence = new Consequence(byId.get(assessment.incidentId()), routeId, assessment, deadline, now);
             } else {
                 consequence.assessed(assessment, deadline, now);
             }
+            becameTooLate |= before != Category.TOO_LATE && consequence.getCategory() == Category.TOO_LATE
+                    && !consequence.isOver(now, rules.maxWait());
             result.add(consequence);
         }
         consequenceRepository.deleteAll(remaining.values());
-        return consequenceRepository.saveAll(result);
+        List<Consequence> saved = consequenceRepository.saveAll(result);
+        if (becameTooLate) {
+            events.publishEvent(new RouteTooLate(routeId, saved.stream()
+                    .filter(c -> c.getCategory() == Category.TOO_LATE)
+                    .map(c -> c.getIncident().getId()).collect(Collectors.toSet()), deadline));
+        }
+        return saved;
     }
 
     static RouteAssessor.IncidentFacts facts(Incident incident) {

@@ -2,7 +2,7 @@
 
 - **Ziel der App:** Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen (z. B. Straßensperrung). Fachliches Modell siehe [domain.md](domain.md).
 - **Herkunft:** Das Repository war die App Nfv (Markt für LLM-Kapazität). Markt, Agents und LLM-Proxy sind entfernt (`V18`, `V19`). Auth, User, Infrastruktur und Deployment werden weiterverwendet. Abrechnung, PayPal und Provider-Onboarding sind Altbestand, siehe [Altbestand](#altbestand).
-- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md). Streckennetz und Routing mit eingebettetem GraphHopper und PostGIS, siehe [network.md](network.md). Streckenvorschläge siehe [recommendations.md](recommendations.md).
+- **Technik:** Backend Spring Boot (Java 25, Maven) in `backend/`, Frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, Betrieb als Docker Swarm Stack, siehe [deployment.md](deployment.md). Streckennetz und Routing mit eingebettetem GraphHopper und PostGIS, siehe [network.md](network.md). Streckenvorschläge siehe [recommendations.md](recommendations.md), Vorschläge durch den Agenten siehe [advisor.md](advisor.md).
 
 ## System Context
 
@@ -17,13 +17,13 @@ flowchart LR
     be -.->|Benachrichtigung, offen| notify[(Push / E-Mail)]
     be --> db[(PostgreSQL)]
     be -->|Kurse| ecb[(EZB)]
-    be -->|Bestätigungen auslesen, Titelfotos, Ranking| openai[(OpenAI)]
+    be -->|Bestätigungen auslesen, Titelfotos, Ranking, Agent| openai[(OpenAI)]
     be -->|Alternative Unterkünfte| liteapi[(LiteAPI)]
     be -->|Zahlung| paypal[(PayPal)]
 ```
 
 - **Reisende:** melden sich über den eigenen Identity Provider an (OIDC, durch Keycloak ersetzbar), siehe [authentication.md](authentication.md).
-- **OpenAI:** liest Buchungsbestätigungen aus, recherchiert fehlende Angaben zu Unterkünften im Web, zeichnet Titelfotos und sortiert alternative Unterkünfte (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
+- **OpenAI:** liest Buchungsbestätigungen aus, recherchiert fehlende Angaben zu Unterkünften im Web, zeichnet Titelfotos, sortiert alternative Unterkünfte und schlägt Lösungen bei Incidents vor (Modul `assistant`), nur wenn ein API-Key gesetzt ist, siehe [Assistant](#assistant).
 - **LiteAPI (Nuitee):** Hotelsuche nach Namen und Hoteldaten beim Erfassen einer Buchung, Hotelangebote, Prebook und Buchung alternativer Unterkünfte (Modul `bookings`, `LiteApi`), nur mit Key (`LITEAPI_API_KEY`), siehe [accommodation-alternatives.md](accommodation-alternatives.md).
 - **PayPal:** Zahlung alternativer Unterkünfte (Modul `paypal`, Orders API mit Autorisierung), siehe [paypal.md](paypal.md).
 - **MCP-Clients:** greifen im Namen eines Nutzers über `/mcp` zu (Autorisierung per CIMD). Tools für Trips, Stops und Waypoints, siehe [API](#api).
@@ -44,6 +44,7 @@ Jedes Modul ist ein Paket unter `com.nfv`.
 | `input` | Eingehende Ereignisse und ihre Quellen | neu |
 | `incidents` | Incidents, Consequences, Zuordnungslogik | neu |
 | `recommendations` | Streckenvorschläge aus Szenarien: bei der Planung und als Alternative zu Consequences (Umfahrung, spätere Abfahrt), siehe [recommendations.md](recommendations.md) | neu (Planung), Incidents Entwurf |
+| `advisor` | Agent, der bei Incidents Lösungen vorschlägt und speichert, automatisch bei `TOO_LATE`, sonst auf Anfrage, siehe [advisor.md](advisor.md) | neu, automatisch vorerst ausgeschaltet |
 | `auth` | Eigener Identity Provider (OAuth2/OIDC, MCP-Clients per CIMD), unabhängig von allen anderen Modulen | Basis |
 | `user` | `AppUser`, Absicherung von `/api/**` und `/mcp`, `CurrentUser` | Basis |
 | `common` | `AbstractEntity`, Envers-Revision, Konverter, Fehlerbehandlung, OpenAPI | Basis |
@@ -80,16 +81,21 @@ flowchart LR
     recommendations --> network
     recommendations --> incidents
     recommendations --> trips
-    incidents -.->|ConsequenceChanged| recommendations
+    advisor --> recommendations
+    advisor --> incidents
+    advisor --> trips
+    advisor --> assistant
+    incidents -.->|RouteTooLate| advisor
     network -.->|NetworkRefreshed| trips
 ```
 
 - **Referenzen über Modulgrenzen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, `routeSectionId`, `incidentId`), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls. Pfeile oben zeigen diese Id-Referenzen und die Aufrufe.
 - **Rückwärts über Events:** `trips` kennt `incidents` nicht. Nach dem Planen einer Route veröffentlicht `RouteLogic` das Spring-Event `RouteChanged`, `incidents` reagiert darauf (synchron, in derselben Transaktion).
-- **`network` nach außen nur über `network.logic`** (`Routing`, `SegmentQueries`, `RegionImport`, `NetworkRefreshed`), keine Entities, Repositories oder GraphHopper-Typen. Später per ArchUnit.
+- **`network` nach außen nur über `network.logic`** (`Routing`, `SegmentQueries`, `Places`, `RegionImport`, `NetworkRefreshed`), keine Entities, Repositories oder GraphHopper-Typen. Später per ArchUnit.
 - **`incidents` liest den Index aus `trips`:** `ConsequenceMatcher` nutzt `RouteSectionRepository` (Index Segment → RouteSection). Später ggf. durch eine schmale Schnittstelle in `trips.logic` ersetzen.
 - **`input` und `incidents`** (beschlossen 2026-11-04, umgesetzt): `input` empfängt, speichert, liest und reichert an (`→ assistant`), kennt `network` nicht. `incidents` verortet über `network.SegmentMatching` (`IncidentReporting`), legt Incidents an und bewertet Consequences. Bewertung bei geänderter Ankunft über das Event `StopArrivalChanged` aus `trips`.
 - **`recommendations`** liest Routen über `trips.logic`, berechnet Vorschläge flüchtig (nichts gespeichert) und speichert die gewählte Strecke über `TripEditing.replaceWaypoints` (danach Planung). Liegt nicht in `trips`, weil es `incidents` braucht und `incidents` von `trips` abhängt, siehe [recommendations.md](recommendations.md).
+- **`advisor`** sitzt ganz oben, kein Modul kennt es: Es ruft `recommendations` als Tools des Agenten auf und speichert seine Läufe und Vorschläge selbst. Dadurch bleibt `recommendations` deterministisch und ohne Modell. Rückwärts nur über das Event `RouteTooLate` aus `incidents`, nach dem Commit, siehe [advisor.md](advisor.md).
 - **`auth`** ist per ArchUnit (`AuthModuleIsolationTest`) isoliert. Für die neuen Module gibt es noch keine ArchUnit-Regeln.
 
 ## Runtime View
@@ -99,13 +105,14 @@ flowchart LR
    - **Bewerten** (Entwurf [consequence-assessment.md](consequence-assessment.md)): je Route gegen die Ankunft des Ziel-Stops, Kategorien `TOO_LATE`, `DELAYED`, `NO_IMPACT`.
 3. **Zuordnung:** `ConsequenceMatcher.matchIncident` findet über die Segmente die Routen, deren erwartete Durchfahrt die Gültigkeit überschneidet, und legt `Consequence`s an, aktualisiert oder entfernt sie.
 4. **Route planen:** REST oder MCP → `TripEditing` → Änderung in `TripLogic` (verwirft Sections betroffener Routen, committet) → je betroffene Route `RoutePlanning.plan` → `network.Routing` → `RouteLogic.replaceSections` → `RouteChanged` → `ConsequenceMatcher.matchRoute`.
-5. **Vorschläge:** Frontend fragt an → `recommendations` baut ein Szenario (mit Sperren bzw. Verzögerungen aktiver Incidents) und liefert bis zu `n` Vorschläge, ohne sie zu speichern. Nutzer wählt → `PUT /routes/{id}/choice` → `TripEditing.replaceWaypoints` → `RoutePlanning.plan`. Für Incidents (geplant) genauso: Vorschläge bei Bedarf neu berechnen, Zustand wie „benachrichtigt“ gehört an Consequence bzw. Benachrichtigung.
-6. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
-7. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
+5. **Vorschläge:** Frontend fragt an → `recommendations` baut ein Szenario (mit Sperren bzw. Verzögerungen aktiver Incidents) und liefert bis zu `n` Vorschläge, ohne sie zu speichern. Nutzer wählt → `PUT /routes/{id}/choice` → `TripEditing.replaceWaypoints` → `RoutePlanning.plan`. Zustand wie „benachrichtigt“ gehört an Consequence bzw. Benachrichtigung.
+6. **Vorschläge des Agenten** ([advisor.md](advisor.md), `TOO_LATE` umgesetzt, vorerst ausgeschaltet: `nfv.advisor.auto-enabled`): `TOO_LATE` → `RouteTooLate` nach dem Commit, oder Nutzer per `POST /routes/{id}/alternative-proposals` → `advisor` startet einen Lauf auf einem virtuellen Thread → Agent ruft Tools auf `recommendations` auf → Vorschläge gespeichert. Der Nutzer wählt wie unter 5.
+7. **Benachrichtigen** (offen): neue oder geänderte Consequences an den Nutzer des Trips.
+8. **Netz aktualisieren** (geplant): neuer Extrakt → `NetworkRefreshed` → betroffene Routen neu planen, siehe [network.md](network.md).
 
 ## Persistence
 
-- **Schema nur per Flyway** (`backend/src/main/resources/db/migration`, Auth unter `db/migration/auth`), Hibernate validiert nur (`ddl-auto=validate`). Nächste freie Version: `V44`.
+- **Schema nur per Flyway** (`backend/src/main/resources/db/migration`, Auth unter `db/migration/auth`), Hibernate validiert nur (`ddl-auto=validate`). Nächste freie Version: `V46`.
 - **Datenbank:** PostgreSQL mit PostGIS überall: Stack, lokal, Tests (Testcontainers). H2 ist entfernt. Migrationen weiter möglichst Standard-SQL, z. B. `SMALLINT` statt `TINYINT`, `VARCHAR(n)` statt `TEXT`, PostGIS nur für Geometrie.
 - **Ids:** `BIGINT GENERATED BY DEFAULT AS IDENTITY` über `AbstractEntity`.
 - **Zeiten:** `OffsetDateTime` / `TIMESTAMP(6) WITH TIME ZONE`, Dauern über `DurationConverter` als `BIGINT` (Nanosekunden).
@@ -124,7 +131,8 @@ flowchart LR
 - `GET/POST /trips`, `GET/PUT/DELETE /trips/{id}` (mit Stops und Routen), `GET/PUT /trips/{id}/cover-image` (JPEG, PNG, WebP bis 5 MB, Multipart), `POST /trips/{id}/cover-image/generation` (Titelfoto vom Bildmodell, synchron, dauert einige Sekunden; 503 `ASSISTANT_UNAVAILABLE`, 429 `ASSISTANT_RATE_LIMITED`).
 - Stops (`TripController`), Antwort jeweils der ganze Trip, da sich Routen mit ändern: `POST /trips/{id}/stops` (optional `position`, sonst ans Ende), `PUT /trips/{id}/stops/{stopId}`, `PUT /trips/{id}/stops/{stopId}/position`, `DELETE /trips/{id}/stops/{stopId}`.
 - Routen (`RouteController`), Antwort Route mit Waypoints: `GET /trips/{id}/routes/{routeId}`, `PUT /trips/{id}/routes/{routeId}/waypoints` (ganze geordnete Liste), `POST /trips/{id}/routes/{routeId}/plan` (erneut planen). `GET /trips/{id}/route-lines`: geplante Linie, Distanz, Dauer und „über …“ je geplanter Route für die Karte. Waypoints mit `origin` (`USER`, `SUGGESTION`).
-- Streckenvorschläge (`SuggestionController`): `POST /routes/{routeId}/suggestions` (berechnet, nicht gespeichert, Option mit `waypoints`), `PUT /routes/{routeId}/choice` (gewählte Strecke als Waypoints speichern und planen), Fehler über `RecommendationExceptionHandler` (`TRIP_NOT_FOUND`, `INVALID_SUGGESTION_INPUT`, `ROUTING_UNAVAILABLE`), siehe [recommendations.md](recommendations.md#api).
+- Streckenvorschläge (`SuggestionController`): `POST /routes/{routeId}/suggestions` (berechnet, nicht gespeichert, Option mit `waypoints`), `PUT /routes/{routeId}/choice` (gewählte Strecke als Waypoints speichern oder neue Abfahrt setzen, dann planen), Fehler über `RecommendationExceptionHandler` (`TRIP_NOT_FOUND`, `INVALID_SUGGESTION_INPUT`, `ROUTING_UNAVAILABLE`), siehe [recommendations.md](recommendations.md#api).
+- Vorschläge des Agenten (`AlternativeProposalController`): `POST /routes/{routeId}/alternative-proposals` (`202`, asynchron), `GET /routes/{routeId}/alternative-proposals` (letzter Lauf), `GET /alternative-proposals/{runId}`, Fehler über `AdvisorExceptionHandler` (`TRIP_NOT_FOUND`, `NO_ACTIVE_CONSEQUENCE`, `INVALID_PROPOSAL_INPUT`), siehe [advisor.md](advisor.md#api).
 - Ändernde Aufrufe planen betroffene Routen sofort (`TripEditing`, siehe [domain.md](domain.md#trips)). Ergebnis an jeder Route als `planOutcome`/`planReason`.
 - `GET /trips/{id}/incidents` (aktuelle Hinweise je Route mit Bewertung, sortiert nach Rangfolge), `GET /trips/{id}/incidents/routes` (Lage je Route: schlechteste Kategorie, erwartete Ankunft, Puffer), `GET /incidents/trip-counts` (Zähler für die Reiseliste, nur `TOO_LATE` und `DELAYED`), siehe [consequence-assessment.md](consequence-assessment.md#api-und-frontend).
 - Fremde oder unbekannte Trips: 404 mit `code` `TRIP_NOT_FOUND`, Stops, Routen, Waypoints, die nicht zum Trip gehören: 404 mit `STOP_NOT_FOUND`, `ROUTE_NOT_FOUND`, `WAYPOINT_NOT_FOUND`, ungültige Eingaben: 400 mit `INVALID_TRIP_INPUT` (`TripExceptionHandler`, nur für `trips` und `incidents`).
@@ -156,11 +164,12 @@ flowchart LR
 ## Assistant
 
 - **Modul `assistant`:** Zugriff auf das Sprachmodell, kennt keine Fachmodule. `StructuredExtraction.extract(…)` schickt Anweisung, JSON-Schema und Eingaben (Text, Bild, PDF) an die OpenAI Responses API (Structured Outputs, `strict`) und liefert das JSON zurück; mit `webSearch` darf das Modell vorher das Web durchsuchen (OpenAI-Tool `web_search`, nur für öffentliche Daten wie Name und Adresse einer Unterkunft). Schema und Anweisung bringt der Aufrufer mit (z. B. `bookings.logic.AccommodationExtractor`, `bookings.logic.AlternativeRanking`).
+- **Agenten:** `ToolConversation.run(…)` bzw. `runForSystem(…)` führt ein Gespräch mit Function Calling über die Responses API, bis das Modell ein vom Aufrufer bestimmtes letztes Tool aufruft, und liefert dessen Argumente. Anweisung, Eingabe und Tools (`ConversationTool`, strikte Schemata) bringt der Aufrufer mit, das Modul bleibt ohne Fachwissen. Ein Tool-Aufruf je Runde, jede Runde zählt gegen das Limit, in der letzten Runde muss das Modell abschließen. Wegen `store: false` wiederholt jede Anfrage alle bisherigen Ausgaben samt verschlüsseltem Reasoning. Aufrufer: `advisor`, siehe [advisor.md](advisor.md#modell-kontingent-ausfall).
 - **Bilder:** `ImageGeneration.generate(…)` schickt einen Prompt an die OpenAI Images API (`/images/generations`, 1536×1024, JPEG) und liefert die Bilddaten. Aufrufer: `trips.logic.CoverImageGeneration` (Prompt aus Name und Stops des Trips, ohne Transaktion um den Modellaufruf; ein inzwischen hochgeladenes Foto bleibt). Zählt gegen dasselbe Limit je Nutzer wie das Auslesen.
 - **HTTP direkt per `RestClient`**, ohne Spring-AI-Modell-Starter: volle Kontrolle über `store: false`, PDF-Eingabe und Schema, kein Pflicht-Key beim Start.
 - **Konfiguration** (`nfv.assistant.*`): `api-key` (`OPENAI_API_KEY`, im Stack Docker Secret, siehe [deployment.md](deployment.md)), `base-url`, `model` (Standard `gpt-5-mini`, `OPENAI_MODEL`), `image-model` (Standard `gpt-image-1-mini`, `OPENAI_IMAGE_MODEL`), `image-quality` (Standard `low`), `timeout`, `requests-per-hour` (je Nutzer, im Speicher, Standard 30), geplant `system-requests-per-hour` (Hintergrundaufrufe ohne Nutzer, z. B. Anreicherung von Verkehrsmeldungen, eigener Zähler, Standard 60, beschlossen 2026-11-04, siehe [traffic-feed.md](traffic-feed.md#anreicherung-messageenrichment)).
 - **Ohne Key** startet die App normal, `GET /bookings/assistant` meldet `extractionAvailable: false`, das Frontend bietet dann nur die manuelle Eingabe an.
-- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf (`nfv.assistant.api-key=` in den Test-Properties, `StructuredExtraction` und `ImageGeneration` gemockt). Der Trip-Name (und Stop-Namen) gehen beim Erzeugen eines Titelfotos an OpenAI.
+- **Datenschutz:** Eingaben werden nicht gespeichert und mit `store: false` gesendet; das Frontend weist vor dem Auslesen auf die Übertragung an OpenAI hin. Tests rufen OpenAI nie auf: Die Test-Properties setzen `nfv.assistant.api-key=` und eine `base-url` ins Leere (gilt auch mit `OPENAI_API_KEY` auf dem Rechner, `NoRealModelCallsTest` prüft es). Nicht alle Tests mocken das Modell: `ManualSourceApiTest` und `TrafficProcessingTest` hält teils nur der fehlende Key auf. `NFV_ASSISTANT_API_KEY` und `-Dnfv.assistant.api-key` schlagen die Test-Properties, deshalb nie zusammen mit einer echten `base-url` setzen. `ToolConversationTest` nutzt einen Mock-Server. Der Trip-Name (und Stop-Namen) gehen beim Erzeugen eines Titelfotos an OpenAI.
 
 ## Security
 
@@ -171,6 +180,7 @@ flowchart LR
 ## Tests
 
 - Integrationstests mit `@SpringBootTest` gegen PostGIS (Testcontainers, JDBC-URL `jdbc:tc:postgis:…`, ein Container je Testlauf) und alle Migrationen, z. B. `ConsequenceMatchingTest`. Docker nötig. Streckennetz gegen einen Wellington-Testextrakt, siehe [network.md](network.md#tests).
+- Jeder im Testlauf zwischengespeicherte Spring-Kontext hält einen eigenen Verbindungspool auf derselben Datenbank (Grenze 100 Verbindungen). Deshalb Pool in den Test-Properties auf 5 begrenzt: Mit 10 scheitert der Kontextstart ab etwa 11 Kontexten an `too many clients`.
 - Architekturregeln mit ArchUnit (`AuthModuleIsolationTest`, `MoneyArchitectureTest`, `PayPalModuleTest`).
 - CI (`.github/workflows/backend.yml`): `mvn verify`, danach Abgleich der generierten `frontend/openapi.json`.
 

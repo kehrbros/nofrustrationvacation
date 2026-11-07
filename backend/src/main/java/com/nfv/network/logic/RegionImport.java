@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 
 /** Imports the OSM extract of a region and switches to the new graph, see Docs/network.md#import-und-aktualisierung. */
@@ -23,6 +24,7 @@ public class RegionImport {
     private final ExtractSource extractSource;
     private final ExtractVersionRepository versionRepository;
     private final SegmentWriter segmentWriter;
+    private final PlaceWriter placeWriter;
     private final Graphs graphs;
     private final Clock clock;
 
@@ -39,6 +41,7 @@ public class RegionImport {
                     if (segmentWriter.hasLinks(region)) {
                         graphs.switchTo(region, loaded(current.get().getId(), NetworkGraphHopper.load(dir, config)));
                         log.info("Region {}: graph of version {} loaded", region, current.get().getId());
+                        fillMissingPlaces(region, config, current.get().getId());
                         return status(region);
                     }
                     log.info("Region {}: segments without link flag, importing again", region);
@@ -63,6 +66,7 @@ public class RegionImport {
             Path osmFile = extractSource.fetch(region, config);
             hopper = NetworkGraphHopper.importGraph(osmFile, dir, config);
             int segments = segmentWriter.write(region, version.getId(), hopper);
+            placeWriter.replace(region, version.getId(), PlaceReader.read(osmFile));
             version.ready(hopper.dataDate(), segments, OffsetDateTime.now(clock));
             versionRepository.save(version);
             Optional<Long> previous = graphs.switchTo(region, loaded(version.getId(), hopper));
@@ -86,6 +90,20 @@ public class RegionImport {
 
     public RegionStatus status(String region) {
         return graphs.status(region);
+    }
+
+    /** Graph imported before V45: only the places are missing, the graph in use stays whatever happens here. */
+    private void fillMissingPlaces(String region, NetworkProperties.Region config, long versionId) {
+        if (placeWriter.hasPlaces(region)) {
+            return;
+        }
+        try {
+            List<Place> places = PlaceReader.read(extractSource.fetch(region, config));
+            placeWriter.replace(region, versionId, places);
+            log.info("Region {}: {} places added to version {}", region, places.size(), versionId);
+        } catch (RuntimeException e) {
+            log.warn("Region {}: places could not be read, none until the next import or start", region, e);
+        }
     }
 
     private Graphs.LoadedGraph loaded(long versionId, NetworkGraphHopper hopper) {
