@@ -75,7 +75,7 @@
 7. **Angebot wählen → Prebook:** `/rates/prebook` (bei PayPal `usePaymentSdk: false`). Neuer Preis wird erneut gegen den Max. Preis geprüft; Preis-, Storno- oder Verpflegungsänderung wird vor der Zahlung angezeigt.
 8. **Bestätigen und zahlen:** Zusammenfassung mit Endpreis (Nettopreis + Provision), Gastdaten (Name, E-Mail aus dem Profil vorbelegt), Zahlung per PayPal, siehe [Zahlung](#zahlung).
 9. **Buchen:** `/rates/book` mit `ACC_CREDIT_CARD` (bzw. `TRANSACTION_ID` beim Payment SDK) und `clientReference` (Id der Reservierung, schützt vor doppelter Buchung). Danach legt `BookingLogic` eine neue `Booking` am selben Stop an: `source` `SEARCH`, Buchungsnummer, Preis, Stornofrist, Zeiten über die bestehende Zeitzonenlogik, `AccommodationDetails` aus den Hotel-Stammdaten, `placeRef` `liteapi:hotel/<hotelId>`.
-10. **Bisherige Buchung:** wird nicht automatisch geändert. Der Nutzer wird gefragt, ob sie als storniert markiert werden soll (`Booking.cancel()`, gibt es schon); stornieren beim fremden Anbieter muss er selbst (Link `manageUrl`).
+10. **Bisherige Buchung:** wird nicht automatisch geändert. Der Nutzer wird gefragt, ob sie als storniert markiert werden soll (`Booking.cancel()`, gibt es schon); stornieren beim fremden Anbieter muss er selbst (Link `manageUrl`). Seit 2026-11-07 kommt sie dazu auf die To-do-Liste der Reise (`REPLACED`, [domain.md](domain.md#bookings)), „Erledigt“ markiert sie als storniert.
 
 ## Zahlung
 
@@ -140,6 +140,7 @@
 - `POST /accommodation-bookings/{id}/alternative-searches` (Body: Kriterien) → geprüfte Treffer, Empfehlung, Begründungen.
 - `POST /accommodation-bookings/{id}/alternative-reservations` (Body: `offerId`) → Reservierung nach Prebook mit Endpreis und `approveUrl` der PayPal-Order.
 - `POST /booking-reservations/{id}/booking` (nach Rückkehr von PayPal) → autorisieren, bei LiteAPI buchen, capturen; liefert die neue `Booking`. Fehler: 422 `PAYMENT_NOT_APPROVED`/`PAYMENT_DECLINED` (wie in `accounting`).
+- `POST /stops/{stopId}/stay-reservations` (umgesetzt 2026-11-07): Reservierung ohne ersetzte Buchung für das Hotel eines Vorschlags des Agenten (`STOPOVER`, `TARGET_STAY` ohne gebuchte Unterkunft), gleicher Body wie `alternative-reservations`, PayPal kehrt auf `/reisen/{trip}/stops/{stopId}/unterkunft` zurück. Die neue Buchung hängt am Stop, siehe [advisor.md](advisor.md#übernachtung-übernehmen).
 - Später allgemein `POST /stops/{stopId}/accommodation-searches` für Use-Cases ohne bestehende Buchung, gleiche Kriterien.
 - Fehler über `BookingExceptionHandler`: 503 `ALTERNATIVES_UNAVAILABLE`, 409 `OFFER_EXPIRED` (LiteAPI `2001`), 409 `PRICE_EXCEEDED` (Prebook über Max. Preis), 429 `ALTERNATIVES_RATE_LIMITED`, 400 `INVALID_BOOKING_INPUT` (Kriterien unvollständig).
 - **MCP:** später lesend `find_alternative_accommodation`; Buchen bewusst nicht per MCP (Zahlung bestätigt der Nutzer bei PayPal).

@@ -64,6 +64,26 @@ public class AlternativeReservations {
         BookingView current = bookingLogic.accommodation(appUserId, bookingId);
         Stop stop = tripLogic.stop(appUserId, current.booking().getStopId())
                 .orElseThrow(() -> BookingNotFoundException.booking(bookingId));
+        return reserve(appUserId, stop, bookingId, input, "/reisen/" + stop.getTrip().getId() + "/buchungen/"
+                + bookingId + "/alternativen");
+    }
+
+    /**
+     * Like {@link #reserve(long, long, NewReservation)}, for a stop without accommodation to replace, e.g. a night on
+     * the way that the user took from a proposal of the agent (Docs/advisor.md#übernachtung-übernehmen). The booking
+     * is created at the stop.
+     *
+     * @throws BookingNotFoundException unknown stop or one of another user
+     */
+    public ReservationView reserveAtStop(long appUserId, long stopId, NewReservation input) {
+        Stop stop = tripLogic.stop(appUserId, stopId).orElseThrow(() -> BookingNotFoundException.stop(stopId));
+        return reserve(appUserId, stop, null, input, "/reisen/" + stop.getTrip().getId() + "/stops/" + stopId
+                + "/unterkunft");
+    }
+
+    /** @param pagePath page of the frontend the redirect fallback of PayPal comes back to */
+    private ReservationView reserve(long appUserId, Stop stop, @Nullable Long bookingId, NewReservation input,
+                                    String pagePath) {
         long tripId = stop.getTrip().getId();
         BookingReservation.Holder holder = validate(input);
         checkout.requireConfigured();
@@ -86,7 +106,7 @@ public class AlternativeReservations {
                         hotel.checkInUntil(), hotel.checkOutUntil()),
                 holder);
 
-        String page = properties.frontendUrl() + "/reisen/" + tripId + "/buchungen/" + bookingId + "/alternativen";
+        String page = properties.frontendUrl() + pagePath;
         PayPalCheckout.CheckoutOrder order;
         try {
             order = checkout.createOrder(reference(reservation), new PayPalAmount(reservation.getCurrency(),
@@ -244,8 +264,8 @@ public class AlternativeReservations {
                 return new Advanced(steps.find(reservationId), List.of());
             }
             long appUserId = reservation.getAppUserId();
-            String replacedName = reservation.getReplacesBookingId() == null ? "die bisherige Unterkunft"
-                    : bookingLogic.accommodation(appUserId, reservation.getReplacesBookingId()).accommodation().getName();
+            String replacedName = reservation.getReplacesBookingId() == null ? null
+                    : replacedName(appUserId, reservation.getReplacesBookingId());
             steps.booked(appUserId, reservationId, captureId, replacedName);
             reservation = steps.find(reservationId);
             return new Advanced(reservation, followStay(reservation));
@@ -279,7 +299,17 @@ public class AlternativeReservations {
         }
     }
 
+    /** Name of the replaced accommodation, a placeholder if it is gone meanwhile. */
+    private String replacedName(long appUserId, long bookingId) {
+        try {
+            return bookingLogic.accommodation(appUserId, bookingId).accommodation().getName();
+        } catch (BookingNotFoundException | InvalidBookingInputException e) {
+            return "die bisherige Unterkunft";
+        }
+    }
+
     /** Town of the hotel from LiteAPI's hotel data (not kept in the reservation), {@code null} if unknown. */
+
     private @Nullable String town(BookingReservation reservation) {
         try {
             return liteApi.hotel(reservation.getHotelId()).city();

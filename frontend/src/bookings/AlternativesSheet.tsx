@@ -477,7 +477,15 @@ function Results({ result, criteria, onPick }: {
   );
 }
 
-function HolderForm({ candidate, holder, onChange }: { candidate: Candidate; holder: Holder; onChange: (holder: Holder) => void }) {
+/** What is booked, as the holder form shows it: an offer of the search or of a proposal. */
+export interface HolderOffer {
+  name: string;
+  price: string;
+  currency: string;
+  roomName?: string | null;
+}
+
+export function HolderForm({ candidate, holder, onChange }: { candidate: HolderOffer; holder: Holder; onChange: (holder: Holder) => void }) {
   const set = (patch: Partial<Holder>) => onChange({ ...holder, ...patch });
   return (
     <div className="va-form">
@@ -512,7 +520,7 @@ function HolderForm({ candidate, holder, onChange }: { candidate: Candidate; hol
   );
 }
 
-function PaySummary({ reservation, holder }: { reservation: Reservation; holder: Holder }) {
+export function PaySummary({ reservation, holder }: { reservation: Reservation; holder: Holder }) {
   return (
     <div className="va-form">
       <div className="va-impact">
@@ -574,7 +582,7 @@ function RouteHint({ reservationId }: { reservationId: number }) {
 }
 
 /** While booking after the approval at PayPal: the three steps, the last ones still running. */
-function BookingProgress({ reservation }: { reservation: Reservation }) {
+export function BookingProgress({ reservation }: { reservation: Reservation }) {
   return (
     <div className="va-form" role="status" aria-live="polite">
       <div className="va-impact">
@@ -639,7 +647,8 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
       )}
       {!oldMarked ? (
         <div className="va-note">
-          <p>„{oldTitle}“ brauchst du nicht mehr? Markiere sie als storniert{oldManageUrl ? ' und storniere sie beim Anbieter' : ''}.</p>
+          <p>„{oldTitle}“ brauchst du nicht mehr? Sie steht auf deiner To-do-Liste der Reise. Markiere sie als storniert{oldManageUrl ? ' und storniere sie beim Anbieter' : ''}.</p>
+
           <div className="va-row va-gap">
             <button type="button" className="va-button va-button-outline" onClick={onMarkOld}>Als storniert markieren</button>
             {oldManageUrl && (
@@ -660,7 +669,7 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
  * After booking in another place: the stop moved there and its routes were planned again on the fastest way. Where
  * more than one way comes into question the user can choose (RouteSheet), otherwise nothing is asked.
  */
-function ReplannedRoutes({ stopId, routeIds }: { stopId: number; routeIds: number[] }) {
+export function ReplannedRoutes({ stopId, routeIds }: { stopId: number; routeIds: number[] }) {
   const { trip, stopById } = useTripContext();
   const stop = stopById.get(stopId);
   const [choices, setChoices] = useState<number[]>([]);
@@ -719,12 +728,12 @@ function canSearch(criteria: Criteria): boolean {
     && (!criteria.maxPrice.trim() || Number(criteria.maxPrice.replace(',', '.')) > 0);
 }
 
-function holderComplete(holder: Holder): boolean {
+export function holderComplete(holder: Holder): boolean {
   return !!holder.firstName.trim() && !!holder.lastName.trim() && /\S+@\S+\.\S+/.test(holder.email)
     && /^\+?[0-9 ()/-]{6,30}$/.test(holder.phone.trim());
 }
 
-function money(amount: string, currency: string): string {
+export function money(amount: string, currency: string): string {
   try {
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(Number(amount));
   } catch {
@@ -736,18 +745,18 @@ function distance(meters: number): string {
   return meters < 1000 ? `${Math.round(meters / 10) * 10} m` : `${(meters / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`;
 }
 
-function date(value: string): string {
+export function date(value: string): string {
   const [year, month, day] = value.split('-');
   return `${day}.${month}.${year}`;
 }
 
-function failureText(reservation: Reservation): string {
+export function failureText(reservation: Reservation): string {
   return reservation.status === 'FAILED'
     ? 'Die Buchung hat nicht geklappt, es wurde nichts abgebucht. Bitte wähle eine andere Unterkunft.'
     : 'Die Buchung ist noch nicht abgeschlossen.';
 }
 
-function errorText(failure: unknown): string {
+export function errorText(failure: unknown): string {
   const code = failure instanceof TripsApiError ? failure.code : undefined;
   switch (code) {
     case 'OFFER_UNAVAILABLE':

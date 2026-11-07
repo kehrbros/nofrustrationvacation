@@ -29,5 +29,7 @@ public record ProposalDto(
         @Nullable Boolean meetsDeadline,
         List<ChoicePointDto> waypoints,
         @Schema(description = "Incidents still passed on this way") List<ConflictDto> conflicts,
-        @Schema(description = "STOPOVER and TARGET_STAY only") @Nullable ProposalStayDto stay) {
+        // no @Nullable: springdoc would turn the referenced schema itself into type null
+        @Schema(description = "STOPOVER and TARGET_STAY only, absent otherwise") ProposalStayDto stay) {
+
 }

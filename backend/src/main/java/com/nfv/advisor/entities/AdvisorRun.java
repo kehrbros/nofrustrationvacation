@@ -10,6 +10,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import lombok.Getter;
+import org.hibernate.annotations.DynamicUpdate;
+
 
 import java.time.Duration;
 import java.time.OffsetDateTime;
@@ -22,6 +24,8 @@ import java.util.List;
  */
 @Getter
 @Entity
+// only changed columns: the database sets consequence_id to NULL when a new assessment replaces the consequence
+@DynamicUpdate
 public class AdvisorRun extends AbstractEntity {
     private static final int MAX_SUMMARY = 2000;
 
@@ -50,6 +54,15 @@ public class AdvisorRun extends AbstractEntity {
     @Column(nullable = false)
     private OffsetDateTime createdAt;
     private @Nullable OffsetDateTime finishedAt;
+    /** The incident the run was started for, {@code null} if unknown or gone. */
+    private @Nullable Long incidentId;
+    /** {@code null} while the user has not decided. */
+    @Enumerated(EnumType.STRING)
+    @Column(length = 16)
+    private @Nullable RunDecision decision;
+    /** Position of the proposal taken, {@code ACCEPTED} only. */
+    private @Nullable Integer chosenPosition;
+    private @Nullable OffsetDateTime decidedAt;
     @OneToMany(mappedBy = "run", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position")
     private List<AdvisorProposal> proposals = new ArrayList<>();
@@ -59,6 +72,12 @@ public class AdvisorRun extends AbstractEntity {
 
     public AdvisorRun(long routeId, long consequenceId, RunTrigger trigger, ProposalGoal goal, String situation,
                       @Nullable String autoKey, OffsetDateTime createdAt) {
+        this(routeId, consequenceId, null, trigger, goal, situation, autoKey, createdAt);
+    }
+
+    public AdvisorRun(long routeId, long consequenceId, @Nullable Long incidentId, RunTrigger trigger,
+                      ProposalGoal goal, String situation, @Nullable String autoKey, OffsetDateTime createdAt) {
+        this.incidentId = incidentId;
         this.routeId = routeId;
         this.consequenceId = consequenceId;
         this.trigger = trigger;
@@ -98,7 +117,29 @@ public class AdvisorRun extends AbstractEntity {
         this.finishedAt = at;
     }
 
+    /** The user took the proposal at the position; a later decision replaces an earlier one. */
+    public void accepted(int position, OffsetDateTime at) {
+        if (position < 0 || position >= proposals.size()) {
+            throw new IllegalArgumentException("run " + getId() + " has no proposal " + position);
+        }
+        this.decision = RunDecision.ACCEPTED;
+        this.chosenPosition = position;
+        this.decidedAt = at;
+    }
+
+    /** None of the proposals fits, the user plans again by hand. */
+    public void dismissed(OffsetDateTime at) {
+        this.decision = RunDecision.DISMISSED;
+        this.chosenPosition = null;
+        this.decidedAt = at;
+    }
+
+    public boolean isFinished() {
+        return status == RunStatus.COMPLETED || status == RunStatus.COMPLETED_WITHOUT_MODEL;
+    }
+
     /** A failed automatic run gives up its key, the next assessment may start again. */
+
     public void failed(String failure, OffsetDateTime at) {
         if (!isUnfinished()) {
             return;

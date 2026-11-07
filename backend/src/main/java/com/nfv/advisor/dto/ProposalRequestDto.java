@@ -7,5 +7,8 @@ import jakarta.annotation.Nullable;
 @Schema(description = "Request for a run of the agent")
 public record ProposalRequestDto(
         @Schema(description = "Consequence to look at, default: the worst on the route") @Nullable Long consequenceId,
-        @Schema(description = "Default ARRIVE_ON_TIME") @Nullable ProposalGoal goal) {
+        @Schema(description = "Default ARRIVE_ON_TIME") @Nullable ProposalGoal goal,
+        @Schema(description = "Incident to look at instead of the consequence, default: any of the route")
+        @Nullable Long incidentId) {
+
 }

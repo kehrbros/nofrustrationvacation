@@ -10,7 +10,7 @@
 |---|---|
 | `com.nfv.trips` | `Trip`, `TripCoverImage`, `Stop`, `Route`, `RouteSection`, `Waypoint`  |
 | `com.nfv.network` (Streckennetz) | `RoadSegment`, `ExtractVersion` |
-| `com.nfv.bookings` | `Booking`, `AccommodationDetails`, `BookingReservation` |
+| `com.nfv.bookings` | `Booking`, `AccommodationDetails`, `BookingReservation`, `BookingTodo` |
 | `com.nfv.input` | `EventSource`, `Event` mit `TrafficEvent`, `WebhookEvent`, `SourceSubject` |
 | `com.nfv.incidents` | `Incident`, `Consequence` |
 | `com.nfv.recommendations` | keine (Vorschläge werden flüchtig berechnet, gespeichert wird nur die gewählte Strecke als `Waypoint`s) |
@@ -80,6 +80,12 @@
 
 - **Alternative Unterkünfte** (Konzept und Ablauf: [accommodation-alternatives.md](accommodation-alternatives.md)): `BookingReservation` (Tabelle `booking_reservation`, nicht historisiert) ist ein Buchungsversuch über LiteAPI am Stop (`stopId`), optional mit der ersetzten Buchung (`replacesBookingId`) und der entstandenen (`bookingId`, eindeutig). Status `PREBOOKED` → `PAYMENT_PENDING` → `AUTHORIZED` → `PROVIDER_BOOKED` → `BOOKED`, oder `FAILED` (nichts gebucht, kein Geld bewegt). Hält Angebot, Nettopreis, Provision, Endpreis, Hotel (`ReservationHotel`) und bis zur Buchung die Gastdaten (danach gelöscht). Die entstandene `Booking` hat `source` `SEARCH`, `placeRef` `liteapi:hotel/<id>`, Anbieter `LiteAPI`.
 - **Als storniert markieren:** `BookingLogic.cancel` setzt `status` `CANCELLED`, nur in der App, der Anbieter wird nicht benachrichtigt.
+- **To-do-Liste** (`BookingTodo`, Tabelle `booking_todo`, `V47`, nicht historisiert, Logik `BookingTodos`): Buchungen, um die sich der Nutzer selbst kümmern muss. Nie automatisch stornieren, es geht um Geld (Philipp, 2026-11-07).
+  - Je Trip (`tripId`, `ON DELETE CASCADE`), `bookingId` optional (`ON DELETE SET NULL`). Kopiert Titel, Anbieter, Buchungsnummer, Link zum Verwalten, Telefon, E-Mail, Zeitraum, Stornofrist, damit der Eintrag auch nach dem Löschen der Buchung brauchbar bleibt.
+  - `kind`: `CANCEL` (stornieren) oder `NOTIFY_LATE_ARRIVAL` (Unterkunft über spätere Ankunft informieren, mit `newArrivalOn`). `reason`: `REPLACED` (Ersatz gebucht), `STOP_REMOVED` (Stop mit künftigen Buchungen gelöscht, nicht beim Löschen des ganzen Trips), `ARRIVAL_LATER` (Übernachtung unterwegs schiebt die Ankunft).
+  - Nur für bestätigte Buchungen (`CONFIRMED`), die nicht vorbei sind, und nur einmal je Buchung und Art solange offen. `bookedInApp`: über eine Reservierung der App gebucht (`BOOKED`), dann bietet das Frontend „Stornieren mit Erstattung“ an.
+  - „Erledigt“ (`done_at`) markiert bei `CANCEL` auch die Buchung als storniert, „Wieder öffnen“ nimmt nur den Merker zurück. Wird die Buchung anders storniert, schließen sich offene `CANCEL`-Einträge.
+  - API: `GET /trips/{tripId}/booking-todos`, `POST`/`DELETE /booking-todos/{todoId}/completion`, fremde oder unbekannte Einträge 404 `TODO_NOT_FOUND`.
 
 ## Input
 

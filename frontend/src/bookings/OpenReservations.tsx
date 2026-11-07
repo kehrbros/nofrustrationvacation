@@ -66,11 +66,14 @@ export default function OpenReservations({ tripId, bookings, onFinished }: {
       </span>
     </>
   );
-  return replaced && !attention ? (
-    <Link className="va-trip-banner" to={`buchungen/${replaced.id}/alternativen?reservierung=${reservation.id}`} role="status">
-      {content}
-    </Link>
-  ) : (
+  if (!attention && (replaced || reservation.replacesBookingId == null)) {
+    // continues in the sheet the payment started in: alternative to a booking, or a stay at the stop
+    const to = replaced ? `buchungen/${replaced.id}/alternativen?reservierung=${reservation.id}`
+      : `stops/${reservation.stopId}/unterkunft?reservierung=${reservation.id}`;
+    return <Link className="va-trip-banner" to={to} role="status">{content}</Link>;
+  }
+  return (
+
     <div className="va-trip-banner" role="status">{content}</div>
   );
 }

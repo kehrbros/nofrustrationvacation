@@ -58,6 +58,14 @@ class BookingApiTest {
     @MockitoBean
     private StructuredExtraction extraction;
 
+    @Autowired
+    private com.nfv.bookings.logic.BookingTodos todos;
+    @Autowired
+    private com.nfv.bookings.data.BookingTodoRepository todoRepository;
+    @Autowired
+    private org.springframework.transaction.support.TransactionTemplate transactionTemplate;
+
+    private long userId;
     private RequestPostProcessor user;
     private RequestPostProcessor otherUser;
     private long tripId;
@@ -145,14 +153,78 @@ class BookingApiTest {
         mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].id").value(kept));
+        // planned again by hand: the deleted booking is on the to-do list, as a copy
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].kind").value("CANCEL"))
+                .andExpect(jsonPath("$[0].reason").value("STOP_REMOVED"))
+                .andExpect(jsonPath("$[0].bookingId").doesNotExist())
+                .andExpect(jsonPath("$[0].title").value("Hotel Adler"))
+                .andExpect(jsonPath("$[0].provider").value("Booking.com"))
+                .andExpect(jsonPath("$[0].reference").value("4711"))
+                .andExpect(jsonPath("$[0].manageUrl").value("https://secure.booking.com/myreservations.html"))
+                .andExpect(jsonPath("$[0].startsAt").value("2027-07-12T15:00:00+02:00"))
+                .andExpect(jsonPath("$[0].cancellationDeadline").value("2027-07-10T18:00:00+02:00"))
+                .andExpect(jsonPath("$[0].bookedInApp").value(false));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(otherUser))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void toDoDoneMarksTheBookingCancelledAndCanBeOpenedAgain() throws Exception {
+        long next = addStop("Florenz");
+        long last = addStop("Venedig");
+        long bookingId = createBooking(next, booking("Hotel Adler", null, null, "Europe/Rome"));
+        createBooking(last, booking("Hotel Sole", null, null, "Europe/Rome"));
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, last).with(user).with(csrf()))
+                .andExpect(status().isOk());
+        String todos = mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andReturn().getResponse().getContentAsString();
+        long todoId = ((Number) JsonPath.read(todos, "$[0].id")).longValue();
+
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/completion", todoId).with(otherUser).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("TODO_NOT_FOUND"));
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/completion", todoId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doneAt").exists());
+        mockMvc.perform(delete("/api/v1/booking-todos/{id}/completion", todoId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.doneAt").doesNotExist());
+        // the booking at the remaining stop is untouched
+        mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
+                .andExpect(jsonPath("$[0].id").value(bookingId))
+                .andExpect(jsonPath("$[0].status").value("CONFIRMED"));
+    }
+
+    @Test
+    void doneToDoOfAnExistingBookingMarksItCancelled() throws Exception {
+        long next = addStop("Florenz");
+        long bookingId = createBooking(next, booking("Hotel Adler", null, null, "Europe/Rome"));
+        long todoId = inTransaction(() -> todos.obsolete(userId, bookingId,
+                com.nfv.bookings.entities.TodoReason.REPLACED).getId());
+        // a second time it is on the list already
+        assertThat(inTransaction(() -> todos.obsolete(userId, bookingId,
+                com.nfv.bookings.entities.TodoReason.REPLACED))).isNull();
+
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/completion", todoId).with(user).with(csrf()))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
+                .andExpect(jsonPath("$[0].status").value("CANCELLED"));
+        // cancelled already: nothing more to do
+        assertThat(inTransaction(() -> todos.obsolete(userId, bookingId,
+                com.nfv.bookings.entities.TodoReason.REPLACED))).isNull();
     }
 
     @Test
     void deletingATripDeletesTheBookingsAtItsStops() throws Exception {
         createBooking(stopId, booking("Hotel Adler", "41.9028", "12.4964", null));
+        long todoCount = inTransaction(() -> todoRepository.count());
 
         mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(user).with(csrf()))
                 .andExpect(status().isNoContent());
+        // nothing on a to-do list: the trip is gone with it
+        assertThat(inTransaction(() -> todoRepository.count())).isEqualTo(todoCount);
         mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
                 .andExpect(status().isNotFound());
     }
@@ -272,8 +344,16 @@ class BookingApiTest {
         return ((Number) JsonPath.read(result.andReturn().getResponse().getContentAsString(), "$.id")).longValue();
     }
 
+    private <T> T inTransaction(java.util.function.Supplier<T> action) {
+        return transactionTemplate.execute(_ -> action.get());
+    }
+
     private RequestPostProcessor login(String username) {
         AppUser appUser = appUserProvisioning.findOrCreate(username, null, null);
+        if (username.startsWith("bookings-") && !username.startsWith("bookings-other-")) {
+            userId = appUser.getId();
+        }
+
         Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject(username).build();
         return authentication(new AppUserAuthentication(new CurrentUser(appUser.getId(), username), jwt, List.of()));
     }

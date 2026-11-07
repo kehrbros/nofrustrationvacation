@@ -2,6 +2,8 @@ package com.nfv.advisor.api;
 
 import com.nfv.advisor.logic.InvalidProposalInputException;
 import com.nfv.advisor.logic.NoActiveConsequenceException;
+import com.nfv.advisor.logic.ProposalNotApplicableException;
+
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
 import org.springframework.core.Ordered;
@@ -34,6 +36,11 @@ public class AdvisorExceptionHandler {
     @ExceptionHandler(InvalidProposalInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidProposalInputException exception) {
         return problem(HttpStatus.BAD_REQUEST, "INVALID_PROPOSAL_INPUT", exception.getMessage());
+    }
+
+    @ExceptionHandler(ProposalNotApplicableException.class)
+    public ResponseEntity<ProblemDetail> handleNotApplicable(ProposalNotApplicableException exception) {
+        return problem(HttpStatus.CONFLICT, "PROPOSAL_NOT_APPLICABLE", exception.getMessage());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

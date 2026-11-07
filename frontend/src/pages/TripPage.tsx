@@ -8,6 +8,8 @@ import { fetchTripBookings } from '../bookings/bookingsApi';
 import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
 import OpenReservations from '../bookings/OpenReservations';
+import TodoList from '../bookings/TodoList';
+import ProposalsBanner from '../proposals/ProposalsBanner';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
@@ -148,7 +150,10 @@ export default function TripPage() {
       </header>
 
       <div className="va-trip-map">
-        <OpenReservations tripId={trip.id} bookings={bookings} onFinished={reload} />
+        <div className="va-trip-banners">
+          <OpenReservations tripId={trip.id} bookings={bookings} onFinished={reload} />
+          <ProposalsBanner trip={trip} incidentsByRoute={incidentsByRoute} stopById={stopById} />
+        </div>
         <Suspense fallback={<div className="va-map va-map-loading" />}>
           <TripMap
             stops={trip.stops}
@@ -187,6 +192,10 @@ export default function TripPage() {
           {deleteError && <Alert type="error" showIcon closable message={deleteError} onClose={() => setDeleteError(null)} />}
 
           {stopCount === 0 && <p className="va-empty">Noch keine Stops. Füge mit + den ersten Stop hinzu.</p>}
+
+          <TodoList tripId={trip.id} version={data} onChanged={reload} compact={!expanded} onExpand={() => setExpanded(true)} />
+
+
 
           {!expanded &&
             collapsedRoutes.slice(0, 1).map((route) => <RouteRow key={route.id} context={context} routeId={route.id} />)}

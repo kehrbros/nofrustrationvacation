@@ -1,9 +1,11 @@
 import { HomeOutlined, NodeIndexOutlined, RightOutlined, WarningOutlined } from '@ant-design/icons';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
 import Sheet from '../components/Sheet';
 import { HOME_PATH } from '../layout/navigation';
+import ProposalsPanel from '../proposals/ProposalsPanel';
 import { tripAlternatives, type TripAlternative } from '../trips/alternatives';
 import { categoryLabel, consequenceText, formatMinutes, incidentTitle, incidentTypeLabel } from '../trips/incidentText';
 import type { RouteIncidentSummary } from '../trips/model';
@@ -12,12 +14,13 @@ import { formatAgo } from '../trips/time';
 import { fetchRouteSummaries } from '../trips/tripsApi';
 
 /**
- * Opens when a consequence on the map is tapped: what it means for the trip and the TripAlternatives to get out of
- * it (another route, another accommodation). The alternatives are computed when asked for, never stored.
+ * Opens when a consequence on the map is tapped: what it means for the trip, the solutions found for it (proposals,
+ * taken with one tap) and, below, the ways to plan again by hand (another route, another accommodation).
  */
 export default function TripAlternativesSheet() {
   const { routeId, incidentId } = useParams();
-  const { trip, incidents, stopById, bookings, close } = useTripContext();
+  const { trip, incidents, stopById, bookings, reload, close } = useTripContext();
+  const [manualOpen, setManualOpen] = useState(false);
   const consequence = incidents.find(
     (candidate) => candidate.routeId === Number(routeId) && candidate.incidentId === Number(incidentId),
   );
@@ -30,6 +33,10 @@ export default function TripAlternativesSheet() {
   const alternatives = consequence && route ? tripAlternatives(consequence, route, target, bookings) : null;
   const text = consequence ? consequenceText(consequence, target?.name ?? 'dein Ziel') : null;
   const tripPath = `${HOME_PATH}/${trip.id}`;
+  const from = route ? stopById.get(route.fromStopId) : undefined;
+  const targetStay = target
+    ? bookings.find((booking) => booking.stopId === target.id && booking.type === 'ACCOMMODATION' && booking.status !== 'CANCELLED')
+    : undefined;
 
   return (
     <Sheet
@@ -53,19 +60,43 @@ export default function TripAlternativesSheet() {
             {summary && <RouteSituation summary={summary} incidentsOnRoute={incidents.filter((i) => i.routeId === route.id).length} />}
           </div>
 
-          <section className="va-section" aria-labelledby="va-alternatives-title">
-            <h3 id="va-alternatives-title" className="va-eyebrow">Alternativen</h3>
-            <ul className="va-alternatives">
-              {alternatives.alternatives.map((alternative) => (
-                <li key={alternative.kind}>
-                  <AlternativeRow alternative={alternative} tripPath={tripPath} />
-                </li>
-              ))}
-            </ul>
-            <p className="va-small va-muted">
-              Alternativen werden bei Bedarf neu berechnet. Gespeichert wird nur, was du auswählst.
-            </p>
+          <section className="va-section" aria-labelledby="va-proposals-title">
+            <h3 id="va-proposals-title" className="va-eyebrow">Lösungen</h3>
+            <ProposalsPanel
+              tripId={trip.id}
+              routeId={route.id}
+              incidentId={consequence.incidentId}
+              setting={{
+                fromName: from?.name ?? 'Start',
+                targetName: target?.name ?? 'dein Ziel',
+                targetStayTitle: targetStay?.title ?? null,
+              }}
+              onChanged={reload}
+              onPlanMyself={() => setManualOpen(true)}
+            />
           </section>
+
+          <section className="va-section" aria-labelledby="va-alternatives-title">
+            <button type="button" className="va-text-button va-eyebrow" id="va-alternatives-title"
+              aria-expanded={manualOpen} onClick={() => setManualOpen((value) => !value)}>
+              Selbst umplanen {manualOpen ? '↑' : '↓'}
+            </button>
+            {manualOpen && (
+              <>
+                <ul className="va-alternatives">
+                  {alternatives.alternatives.map((alternative) => (
+                    <li key={alternative.kind}>
+                      <AlternativeRow alternative={alternative} tripPath={tripPath} />
+                    </li>
+                  ))}
+                </ul>
+                <p className="va-small va-muted">
+                  Löschst du dabei einen Stop, kommen seine Buchungen auf deine To-do-Liste, damit du sie stornieren kannst.
+                </p>
+              </>
+            )}
+          </section>
+
 
           <Link to={`${tripPath}/hinweise/${route.id}/${consequence.incidentId}`} className="va-text-button">
             Details zum Hinweis · aktualisiert {formatAgo(consequence.updatedAt)}

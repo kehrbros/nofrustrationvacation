@@ -7,5 +7,6 @@ import java.util.List;
  * stops by id (bookings) delete what belongs to them; to stop the deletion, a listener throws
  * {@link StopInUseException}, which rolls the transaction back.
  */
-public record StopsDeleting(long tripId, List<Long> stopIds) {
+public record StopsDeleting(long tripId, List<Long> stopIds, boolean withTrip) {
+
 }

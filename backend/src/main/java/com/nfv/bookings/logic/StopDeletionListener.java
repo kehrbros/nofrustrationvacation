@@ -31,6 +31,7 @@ class StopDeletionListener {
     private final BookingRepository bookingRepository;
     private final AccommodationDetailsRepository accommodationRepository;
     private final BookingReservationRepository reservationRepository;
+    private final BookingTodos todos;
 
     @EventListener
     public void onStopsDeleting(StopsDeleting event) {
@@ -38,10 +39,16 @@ class StopDeletionListener {
         if (reservations.stream().anyMatch(reservation -> PAYMENT_RUNNING.contains(reservation.getStatus()))) {
             throw new StopInUseException("an alternative accommodation is being booked at the stop, try again later");
         }
-        reservationRepository.deleteAll(reservations);
         List<Booking> bookings = bookingRepository.findByStopIdInOrderByStartsAtAscIdAsc(event.stopIds());
+        if (!event.withTrip() && !bookings.isEmpty()) {
+            // planned again by hand: what is not needed any more goes on the to-do list of the trip (the copy stays,
+            // the database detaches it from the booking)
+            todos.stopsRemoved(event.tripId(), bookings);
+        }
+        reservationRepository.deleteAll(reservations);
         if (!bookings.isEmpty()) {
             accommodationRepository.deleteAll(
+
                     accommodationRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList()));
             bookingRepository.deleteAll(bookings);
         }

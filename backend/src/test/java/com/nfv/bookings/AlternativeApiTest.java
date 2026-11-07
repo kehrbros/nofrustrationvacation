@@ -82,6 +82,7 @@ class AlternativeApiTest {
     private RequestPostProcessor user;
     private long tripId;
     private long bookingId;
+    private long stopId;
 
     @BeforeEach
     void setUp() throws Exception {
@@ -91,7 +92,7 @@ class AlternativeApiTest {
         String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        long stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
+        stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
         bookingId = id(mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(BOOKING)).andExpect(status().isCreated()));
     }
@@ -198,16 +199,66 @@ class AlternativeApiTest {
         mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
                 .andExpect(jsonPath("$.status").value("BOOKED"));
         verify(liteApi).book(anyString(), any(), anyInt(), anyString());
+        // the replaced booking is on the to-do list, to cancel at its provider
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].kind").value("CANCEL"))
+                .andExpect(jsonPath("$[0].reason").value("REPLACED"))
+                .andExpect(jsonPath("$[0].bookingId").value(bookingId))
+                .andExpect(jsonPath("$[0].title").value("Hotel Adler"))
+                .andExpect(jsonPath("$[0].bookedInApp").value(false))
+                .andExpect(jsonPath("$[0].doneAt").doesNotExist());
 
         mockMvc.perform(post("/api/v1/bookings/{id}/cancellation", bookingId).with(user).with(csrf()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$[0].doneAt").exists());
         mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
                 .andExpect(jsonPath("$", hasSize(2)));
     }
 
     @Test
+    void reservationAtAStopWithoutBookingCreatesTheBookingThere() throws Exception {
+        prebookAndHotel("150.00");
+        when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
+                .thenReturn(new PayPalCheckout.CheckoutOrder("O-9", "https://paypal.test/O-9"));
+        long otherStop = ((Number) JsonPath.read(mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Florenz\"}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.stops[1].id"))
+                .longValue();
+
+        String reserved = mockMvc.perform(post("/api/v1/stops/{id}/stay-reservations", otherStop).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(reservation()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PAYMENT_PENDING"))
+                .andExpect(jsonPath("$.stopId").value(otherStop))
+                .andExpect(jsonPath("$.replacesBookingId").doesNotExist())
+                .andReturn().getResponse().getContentAsString();
+        long reservationId = ((Number) JsonPath.read(reserved, "$.id")).longValue();
+        ArgumentCaptor<URI> returnUrl = ArgumentCaptor.forClass(URI.class);
+        verify(checkout).createOrder(anyString(), any(), anyString(), any(), returnUrl.capture(), any());
+        assertThat(returnUrl.getValue().toString()).endsWith("/reisen/" + tripId + "/stops/" + otherStop
+                + "/unterkunft?reservierung=" + reservationId);
+
+        mockPaymentAndBooking(reservationId, "O-9");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BOOKED"))
+                .andExpect(jsonPath("$.booking.stopId").value(otherStop))
+                .andExpect(jsonPath("$.booking.notes").value(org.hamcrest.Matchers.startsWith(
+                        "In der App gebucht, bezahlt mit PayPal.")));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(0)));
+        // foreign stop
+        mockMvc.perform(post("/api/v1/stops/{id}/stay-reservations", otherStop).with(login("other-" + UUID.randomUUID()))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(reservation()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void hotelInAnotherPlaceMovesTheStopAndPlansItsRoutesAgain() throws Exception {
+
         // trip Florenz -> Rom, the booking in Rom gets replaced by a hotel in Tivoli, about 26 km away
         String florenz = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Florenz\",\"latitude\":43.7696,"
