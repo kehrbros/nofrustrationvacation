@@ -45,6 +45,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -203,6 +204,76 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
         mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
                 .andExpect(jsonPath("$", hasSize(2)));
+    }
+
+    @Test
+    void hotelInAnotherPlaceMovesTheStopAndPlansItsRoutesAgain() throws Exception {
+        // trip Florenz -> Rom, the booking in Rom gets replaced by a hotel in Tivoli, about 26 km away
+        String florenz = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Florenz\",\"latitude\":43.7696,"
+                                + "\"longitude\":11.2558,\"departureAt\":\"2027-07-12T09:00:00+02:00\",\"position\":0}"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long romId = ((Number) JsonPath.read(florenz, "$.stops[1].id")).longValue();
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, romId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Rom\",\"latitude\":41.9028,\"longitude\":12.4964}"))
+                .andExpect(status().isOk());
+        long routeId = ((Number) JsonPath.read(mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andReturn().getResponse().getContentAsString(), "$.routes[0].id")).longValue();
+        prebookAndHotel("150.00");
+        when(liteApi.hotel("sole")).thenReturn(new LiteApi.HotelDetails("sole", "Hotel Sole", "Via Tiburtina 5",
+                "Tivoli", "IT", 41.9631, 12.7980, "+39 0774 123", null, null, LocalTime.of(14, 0),
+                LocalTime.of(22, 0), LocalTime.of(11, 0)));
+        when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
+                .thenReturn(new PayPalCheckout.CheckoutOrder("O-1", "https://www.sandbox.paypal.com/checkoutnow?token=O-1"));
+        long reservationId = id(mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations",
+                        bookingId).with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(reservation()))
+                .andExpect(status().isCreated()));
+
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}/route-check", reservationId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.otherPlace").value(true))
+                .andExpect(jsonPath("$.distanceMeters").value(org.hamcrest.Matchers.greaterThan(20_000)))
+                .andExpect(jsonPath("$.routeId").value(routeId))
+                .andExpect(jsonPath("$.checkInUntil").value("2027-07-12T22:00:00+02:00"));
+
+        mockPaymentAndBooking(reservationId, "O-1");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("BOOKED"))
+                .andExpect(jsonPath("$.replannedRouteIds", contains((int) routeId)));
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.stops[1].name").value("Tivoli"))
+                .andExpect(jsonPath("$.stops[1].latitude").value(41.9631))
+                .andExpect(jsonPath("$.stops[1].longitude").value(12.7980))
+                .andExpect(jsonPath("$.stops[0].name").value("Florenz"));
+    }
+
+    @Test
+    void hotelInTheSamePlaceLeavesTheStop() throws Exception {
+        long stopId = ((Number) JsonPath.read(mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andReturn().getResponse().getContentAsString(), "$.stops[0].id")).longValue();
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, stopId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Rom Zentrum\",\"latitude\":41.9028,\"longitude\":12.4964}"))
+                .andExpect(status().isOk());
+        prebookAndHotel("150.00");
+        when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
+                .thenReturn(new PayPalCheckout.CheckoutOrder("O-1", "https://www.sandbox.paypal.com/checkoutnow?token=O-1"));
+        long reservationId = id(mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations",
+                        bookingId).with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON).content(reservation()))
+                .andExpect(status().isCreated()));
+
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}/route-check", reservationId).with(user))
+                .andExpect(jsonPath("$.otherPlace").value(false))
+                .andExpect(jsonPath("$.arrivalAt").doesNotExist());
+        mockPaymentAndBooking(reservationId, "O-1");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("BOOKED"))
+                .andExpect(jsonPath("$.replannedRouteIds", hasSize(0)));
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.stops[0].name").value("Rom Zentrum"))
+                .andExpect(jsonPath("$.stops[0].latitude").value(41.9028));
     }
 
     @Test

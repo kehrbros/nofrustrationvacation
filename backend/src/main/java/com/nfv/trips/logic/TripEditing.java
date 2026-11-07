@@ -42,6 +42,17 @@ public class TripEditing {
         return plan(tripLogic.replaceWaypoints(appUserId, tripId, routeId, waypoints));
     }
 
+    /**
+     * Moves the stop to a new accommodation in another place and plans the routes to and from it, see
+     * {@link TripLogic#moveStopToStay}.
+     *
+     * @return outcome per planned route id, empty within the same place
+     */
+    public Map<Long, PlanResult> moveStopToStay(long appUserId, long stopId, double latitude, double longitude,
+                                                @Nullable String place) {
+        return plan(tripLogic.moveStopToStay(appUserId, stopId, latitude, longitude, place));
+    }
+
     /** Plans the route again without a change, e.g. after {@code ROUTING_UNAVAILABLE}. */
     public PlanResult plan(long appUserId, long tripId, long routeId) {
         tripLogic.route(appUserId, tripId, routeId);
