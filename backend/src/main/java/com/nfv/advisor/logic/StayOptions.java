@@ -9,8 +9,8 @@ import java.util.List;
 
 /**
  * Accommodations when a route cannot be driven in time, see
- * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Places on the route and the onward drive belong
- * to {@code recommendations} ({@code Stopovers}). Not implemented yet, so no tool uses it.
+ * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Places on the route belong to
+ * {@code recommendations} ({@code Stopovers}). Not implemented yet, so no tool uses it.
  */
 public interface StayOptions {
     List<StayOffer> search(long appUserId, StaySearch search);
@@ -19,7 +19,7 @@ public interface StayOptions {
                       @Nullable BigDecimal maxPrice) {
     }
 
-    /** With the position of the hotel, which {@code evaluate_stopover} routes to. */
+    /** With the position of the hotel, for the new stop when the user takes the stay. */
     record StayOffer(String hotelId, String offerId, String name, double latitude, double longitude,
                      int distanceMeters, BigDecimal price, String currency, boolean refundable,
                      @Nullable OffsetDateTime freeCancellationUntil) {
