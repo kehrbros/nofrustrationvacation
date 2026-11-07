@@ -646,6 +646,35 @@
         "tags" : [ "Alternative accommodations" ]
       }
     },
+    "/api/v1/booking-reservations/{reservationId}/route-check" : {
+      "get" : {
+        "description" : "Before paying: if the hotel lies in another place than the stop, the arrival on the best way to it (incidents included) and whether it is after the latest check-in. Not stored.",
+        "operationId" : "checkReservationRoute",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "reservationId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/StayRouteCheckDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Check the way to the hotel of a reservation",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
     "/api/v1/bookings/accommodation-drafts" : {
       "post" : {
         "description" : "Pasted or shared text and/or a screenshot (JPEG, PNG, WebP, GIF) or PDF up to 5 MB. The content is sent to the language model (OpenAI) and not stored. 503 ASSISTANT_UNAVAILABLE if the assistant is not configured or fails, 429 ASSISTANT_RATE_LIMITED.",
@@ -2879,6 +2908,14 @@
             "type" : [ "integer", "null" ],
             "format" : "int64"
           },
+          "replannedRouteIds" : {
+            "type" : "array",
+            "description" : "Routes planned again because the stop moved to the place of the new hotel (more than 10 km away), only in the answer that booked it",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
           "rooms" : {
             "type" : "integer",
             "format" : "int32"
@@ -3151,6 +3188,53 @@
             "items" : {
               "$ref" : "#/components/schemas/ChoicePointDto"
             }
+          }
+        }
+      },
+      "StayRouteCheckDto" : {
+        "type" : "object",
+        "description" : "Way to the hotel of a reservation, checked before paying. Only if the hotel lies in another place than the stop (otherPlace): the stop moves there after booking. Computed, not stored; a hint only.",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Arrival on the best way, including delays of incidents"
+          },
+          "blocked" : {
+            "type" : "boolean",
+            "description" : "Even the best way passes a closure"
+          },
+          "checkInUntil" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Latest check-in at the hotel, if known"
+          },
+          "delaySeconds" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "Delay by incidents in seconds"
+          },
+          "distanceMeters" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "late" : {
+            "type" : "boolean",
+            "description" : "Arrival after the latest check-in"
+          },
+          "otherPlace" : {
+            "type" : "boolean",
+            "description" : "Hotel more than 10 km from the stop, the stop moves there after booking"
+          },
+          "problem" : {
+            "type" : [ "string", "null" ],
+            "description" : "Why the way was not checked",
+            "enum" : [ "FIRST_STOP", "UNDER_WAY", "MISSING_COORDINATES", "MISSING_DEPARTURE", "NO_ROUTE", "ROUTING_UNAVAILABLE" ]
+          },
+          "routeId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Route to the stop"
           }
         }
       },

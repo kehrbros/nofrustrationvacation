@@ -1,19 +1,22 @@
-import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, LoadingOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
+import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, LoadingOutlined, NodeIndexOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
 import { Alert, Spin } from 'antd';
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
 import { searchPlaces, type Place } from '../map/geocoding';
 import PayPalButton from '../payments/PayPalButton';
+import { substituteDeparture } from '../trips/routeOptionText';
+import { fetchSuggestions } from '../trips/routesApi';
 import { TripsApiError } from '../trips/tripsApi';
-import { useTripContext } from '../trips/tripContext';
+import { routeName, useTripContext } from '../trips/tripContext';
 import {
   abortReservation,
   bookReservation,
   fetchAlternativesStatus,
   fetchCriteria,
   fetchReservation,
+  fetchRouteCheck,
   markBookingCancelled,
   rememberedHolder,
   rememberHolder,
@@ -24,9 +27,11 @@ import {
   type Criteria,
   type Holder,
   type Reservation,
+  type RouteCheck,
   type SearchResult,
 } from './alternativesApi';
 import { formatLocalDateTime } from './localTime';
+import { routeCheckText } from './routeCheckText';
 import { directionsUrl } from './text';
 
 type Step =
@@ -531,11 +536,39 @@ function PaySummary({ reservation, holder }: { reservation: Reservation; holder:
             : 'nicht stornierbar'}
         </dd>
       </dl>
+      <RouteHint reservationId={reservation.id} />
       <ul className="va-plain-list va-paypal-promise">
         <li><CheckOutlined aria-hidden="true" /> Bezahlen ohne Kartendaten, du bleibst in der App.</li>
         <li><CheckOutlined aria-hidden="true" /> PayPal reserviert den Betrag nur. Abgebucht wird erst, wenn das Hotel bestätigt hat.</li>
         <li><CheckOutlined aria-hidden="true" /> Klappt die Buchung nicht, wird die Reservierung sofort freigegeben.</li>
       </ul>
+    </div>
+  );
+}
+
+/**
+ * Before paying: if the hotel lies in another place, the stop moves there after booking. Shows the arrival on the way
+ * to it and warns if it is after the check-in or passes a closure; booking stays possible. Nothing within the same place.
+ */
+function RouteHint({ reservationId }: { reservationId: number }) {
+  const [check, setCheck] = useState<RouteCheck | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetchRouteCheck(reservationId).then((result) => active && setCheck(result));
+    return () => {
+      active = false;
+    };
+  }, [reservationId]);
+  const text = routeCheckText(check);
+  if (!text) {
+    return null;
+  }
+  return (
+    <div className="va-note">
+      <p className="va-strong"><NodeIndexOutlined aria-hidden="true" /> Anderer Ort</p>
+      <p>{text.move}</p>
+      {text.arrival && <p>{text.arrival}</p>}
+      {text.warning && <Alert type="warning" showIcon message={text.warning} />}
     </div>
   );
 }
@@ -601,6 +634,9 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
           <EnvironmentOutlined aria-hidden="true" /> Route zur Unterkunft
         </a>
       )}
+      {reservation.replannedRouteIds.length > 0 && (
+        <ReplannedRoutes stopId={reservation.stopId} routeIds={reservation.replannedRouteIds} />
+      )}
       {!oldMarked ? (
         <div className="va-note">
           <p>„{oldTitle}“ brauchst du nicht mehr? Markiere sie als storniert{oldManageUrl ? ' und storniere sie beim Anbieter' : ''}.</p>
@@ -615,6 +651,53 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
         </div>
       ) : (
         <p className="va-small va-muted">„{oldTitle}“ ist als storniert markiert.</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * After booking in another place: the stop moved there and its routes were planned again on the fastest way. Where
+ * more than one way comes into question the user can choose (RouteSheet), otherwise nothing is asked.
+ */
+function ReplannedRoutes({ stopId, routeIds }: { stopId: number; routeIds: number[] }) {
+  const { trip, stopById } = useTripContext();
+  const stop = stopById.get(stopId);
+  const [choices, setChoices] = useState<number[]>([]);
+  const routes = trip.routes.filter((route) => routeIds.includes(route.id));
+  const routeKey = routes.map((route) => `${route.id}:${route.fromStopId}`).join(',');
+
+  useEffect(() => {
+    let active = true;
+    Promise.all(routes.map((route) => fetchSuggestions(route.id, {
+      includeWaypoints: false,
+      departureAt: substituteDeparture(trip, stopById.get(route.fromStopId)),
+    }).then((result) => (result.options.length > 1 ? route.id : null), () => null))).then((ids) => {
+      if (active) {
+        setChoices(ids.filter((id): id is number => id != null));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <div className="va-note">
+      <p>
+        <NodeIndexOutlined aria-hidden="true" /> Der Stop liegt jetzt in {stop?.name ?? 'dem Ort der Unterkunft'}. Die
+        Route{routes.length > 1 ? 'n' : ''} dorthin und weiter {routes.length > 1 ? 'wurden' : 'wurde'} neu geplant.
+      </p>
+      {choices.length > 0 && (
+        <div className="va-column va-gap">
+          <span className="va-small va-muted">Es gibt mehrere sinnvolle Wege, wähle deinen:</span>
+          {routes.filter((route) => choices.includes(route.id)).map((route) => (
+            <Link key={route.id} className="va-button va-button-outline va-block"
+              to={`/reisen/${trip.id}/routen/${route.id}`}>
+              Route {routeName(route, stopById)} wählen
+            </Link>
+          ))}
+        </div>
       )}
     </div>
   );

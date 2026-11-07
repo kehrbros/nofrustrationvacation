@@ -1,5 +1,6 @@
 package com.nfv.recommendations.logic;
 
+import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.NoRouteException;
 import com.nfv.recommendations.config.RecommendationProperties;
 import com.nfv.trips.logic.RouteSnapshot;
@@ -54,6 +55,28 @@ public class Suggestions {
         }
         return new SuggestionResult(scenario.waypoints(), scenario.departure(), result.options(),
                 reference(result.reference()), null);
+    }
+
+    /**
+     * The route to a stop as if the stop moved to {@code end} (new accommodation in another place), best way first,
+     * nothing is stored. Without departure or coordinates of the start stop a {@code problem}.
+     *
+     * @throws TripItemNotFoundException                         route unknown or of another user
+     * @throws com.nfv.network.logic.RoutingUnavailableException no graph yet
+     */
+    public SuggestionResult towards(long appUserId, long routeId, GeoPoint end) {
+        RouteSnapshot route = routeSnapshots.of(appUserId, routeId);
+        ScenarioFactory.Built built = ScenarioFactory.towards(route, end, 1);
+        if (built.problem() != null) {
+            return SuggestionResult.problem(built.problem());
+        }
+        Scenario scenario = Objects.requireNonNull(built.scenario());
+        try {
+            SuggestionEngine.Result result = engine.run(scenario);
+            return new SuggestionResult(scenario.waypoints(), scenario.departure(), result.options(), null, null);
+        } catch (NoRouteException e) {
+            return SuggestionResult.problem(SuggestionProblem.NO_ROUTE);
+        }
     }
 
     @Nullable

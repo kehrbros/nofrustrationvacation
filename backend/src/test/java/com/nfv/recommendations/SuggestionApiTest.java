@@ -4,7 +4,12 @@ import com.jayway.jsonpath.JsonPath;
 import com.nfv.incidents.data.ConsequenceRepository;
 import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.IncidentLogic;
+import com.nfv.network.logic.GeoPoint;
 import com.nfv.network.logic.RegionImport;
+import com.nfv.recommendations.logic.SuggestedOption;
+import com.nfv.recommendations.logic.SuggestionProblem;
+import com.nfv.recommendations.logic.SuggestionResult;
+import com.nfv.recommendations.logic.Suggestions;
 import com.nfv.network.logic.RegionStatus;
 import com.nfv.trips.data.RouteRepository;
 import com.nfv.trips.data.RouteSectionRepository;
@@ -64,6 +69,8 @@ class SuggestionApiTest {
     private MockMvc mockMvc;
     @Autowired
     private RoutePlanning routePlanning;
+    @Autowired
+    private Suggestions suggestions;
     @Autowired
     private RegionImport regionImport;
     @Autowired
@@ -299,6 +306,32 @@ class SuggestionApiTest {
                                                                       String waypoints) throws Exception {
         return mockMvc.perform(put("/api/v1/routes/{id}/choice", routeId).with(who).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content("{\"waypoints\":" + waypoints + "}"));
+    }
+
+    @Test
+    void routeTowardsAnotherEndIsComputedWithoutStoring() {
+        long routeId = plannedRoute();
+        int sections = routeSectionRepository.findByRouteIdOrderByPosition(routeId).size();
+
+        SuggestionResult result = suggestions.towards(userId, routeId, new GeoPoint(KELBURN[0], KELBURN[1]));
+
+        assertThat(result.problem()).isNull();
+        assertThat(result.options()).isNotEmpty();
+        SuggestedOption best = result.options().getFirst();
+        assertThat(best.departureAt()).isEqualTo(DEPARTURE);
+        assertThat(best.arrivalAt()).isAfter(DEPARTURE);
+        GeoPoint last = best.geometry().getLast();
+        assertThat(last.lat()).isCloseTo(KELBURN[0], org.assertj.core.data.Offset.offset(0.005));
+        assertThat(last.lon()).isCloseTo(KELBURN[1], org.assertj.core.data.Offset.offset(0.005));
+        assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).hasSize(sections);
+    }
+
+    @Test
+    void routeTowardsAnotherEndNeedsADeparture() {
+        long routeId = newRoute(null);
+
+        assertThat(suggestions.towards(userId, routeId, new GeoPoint(KELBURN[0], KELBURN[1])).problem())
+                .isEqualTo(SuggestionProblem.MISSING_DEPARTURE);
     }
 
     private long plannedRoute() {

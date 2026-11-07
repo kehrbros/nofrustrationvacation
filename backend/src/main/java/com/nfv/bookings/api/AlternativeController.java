@@ -8,6 +8,7 @@ import com.nfv.bookings.dto.AlternativesStatusDto;
 import com.nfv.bookings.dto.BookingDto;
 import com.nfv.bookings.dto.ReservationDto;
 import com.nfv.bookings.dto.ReservationInputDto;
+import com.nfv.bookings.dto.StayRouteCheckDto;
 import com.nfv.bookings.entities.BookingReservation;
 import com.nfv.bookings.logic.AlternativeCandidate;
 import com.nfv.bookings.logic.AlternativeCriteria;
@@ -17,6 +18,7 @@ import com.nfv.bookings.logic.BookingLogic;
 import com.nfv.bookings.logic.CriteriaProposal;
 import com.nfv.bookings.logic.InvalidBookingInputException;
 import com.nfv.bookings.logic.ReservationView;
+import com.nfv.bookings.logic.StayRouteCheck;
 import com.nfv.paypal.PayPalCheckout;
 import com.nfv.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -46,6 +48,7 @@ public class AlternativeController {
     private final AlternativeReservations reservations;
     private final BookingLogic bookingLogic;
     private final PayPalCheckout checkout;
+    private final StayRouteCheck stayRouteCheck;
 
     @Operation(summary = "Alternatives status", description = "Whether alternatives can be searched, booked, ranked.")
     @GetMapping("/bookings/alternatives/status")
@@ -97,6 +100,18 @@ public class AlternativeController {
     public ReservationDto getReservation(@AuthenticationPrincipal CurrentUser user,
                                          @PathVariable long reservationId) {
         return toDto(reservations.get(user.appUserId(), reservationId));
+    }
+
+    @Operation(summary = "Check the way to the hotel of a reservation",
+            description = "Before paying: if the hotel lies in another place than the stop, the arrival on the best "
+                    + "way to it (incidents included) and whether it is after the latest check-in. Not stored.")
+    @GetMapping("/booking-reservations/{reservationId}/route-check")
+    public StayRouteCheckDto checkReservationRoute(@AuthenticationPrincipal CurrentUser user,
+                                                   @PathVariable long reservationId) {
+        StayRouteCheck.Result result = stayRouteCheck.check(user.appUserId(), reservationId);
+        return new StayRouteCheckDto(result.otherPlace(), result.distanceMeters(), result.routeId(),
+                result.arrivalAt(), result.checkInUntil(), result.late(), result.blocked(),
+                result.delay().toSeconds(), result.problem());
     }
 
     @Operation(summary = "Book a reservation after the payment was approved",
@@ -181,6 +196,7 @@ public class AlternativeController {
                 reservation.getFee(), reservation.getCurrency(), reservation.isRefundable(),
                 reservation.getFreeCancellationUntil(), view.approveUrl(), reservation.getPayPalOrderId(),
                 reservation.getFailure(), reservation.getRefundAmount(), reservation.getPayPalRefundId() != null,
+                view.replannedRouteIds(),
                 view.booking() == null ? null : BookingController.toDto(view.booking()));
     }
 }

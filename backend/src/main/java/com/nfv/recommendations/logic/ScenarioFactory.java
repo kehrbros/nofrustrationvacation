@@ -45,6 +45,24 @@ final class ScenarioFactory {
                 RouteOptions.none(), route.sections(), Set.of(OptionKind.ALTERNATIVES), count), null);
     }
 
+    /**
+     * The route as if its end stop moved to {@code end}, e.g. a new accommodation in another place: from the start
+     * stop at its departure, without waypoints (they lead to the old end) and without reference (the planned route
+     * ends elsewhere). Incidents are evaluated as when planning.
+     */
+    static Built towards(RouteSnapshot route, GeoPoint end, int count) {
+        if (!route.from().hasCoordinates()) {
+            return new Built(null, SuggestionProblem.MISSING_COORDINATES);
+        }
+        OffsetDateTime start = route.from().departureAt();
+        if (start == null) {
+            return new Built(null, SuggestionProblem.MISSING_DEPARTURE);
+        }
+        return new Built(new Scenario(route.routeId(), SuggestionTrigger.PLANNING, null, stop(route.from()),
+                new RoutePoint(end, RoutePoint.Kind.STOP, null), List.of(), WaypointMode.IGNORE, start,
+                RouteOptions.none(), List.of(), Set.of(OptionKind.ALTERNATIVES), count), null);
+    }
+
     private static RoutePoint stop(RouteSnapshot.StopPoint stop) {
         return new RoutePoint(new GeoPoint(Objects.requireNonNull(stop.latitude()),
                 Objects.requireNonNull(stop.longitude())), RoutePoint.Kind.STOP, null);

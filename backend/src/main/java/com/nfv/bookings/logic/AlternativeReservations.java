@@ -9,6 +9,7 @@ import com.nfv.paypal.PayPalCheckout;
 import com.nfv.paypal.PayPalException;
 import com.nfv.paypal.PayPalRejectedException;
 import com.nfv.trips.entities.Stop;
+import com.nfv.trips.logic.TripEditing;
 import com.nfv.trips.logic.TripLogic;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 
@@ -44,6 +46,7 @@ public class AlternativeReservations {
 
     private final BookingLogic bookingLogic;
     private final TripLogic tripLogic;
+    private final TripEditing tripEditing;
     private final LiteApi liteApi;
     private final PayPalCheckout checkout;
     private final ReservationSteps steps;
@@ -111,7 +114,11 @@ public class AlternativeReservations {
     public ReservationView complete(long appUserId, long reservationId) {
         BookingReservation reservation = steps.owned(appUserId, reservationId);
         long tripId = tripId(appUserId, reservation);
-        return view(appUserId, advance(reservation), tripId);
+        Advanced advanced = advance(reservation);
+        BookingReservation current = advanced.reservation();
+        BookingView booking = current.getBookingId() == null ? null
+                : bookingLogic.accommodation(appUserId, current.getBookingId());
+        return new ReservationView(current, tripId, null, booking, advanced.replannedRouteIds());
     }
 
     /** Reservations of a trip that are not finished: payment running, or booked but to be checked. */
@@ -214,7 +221,11 @@ public class AlternativeReservations {
         return steps.refunded(reservation.getId(), refund.id());
     }
 
-    private BookingReservation advance(BookingReservation reservation) {
+    /** @param replannedRouteIds routes planned again because the stop moved to the new place, see {@link #followStay} */
+    private record Advanced(BookingReservation reservation, List<Long> replannedRouteIds) {
+    }
+
+    private Advanced advance(BookingReservation reservation) {
         long reservationId = reservation.getId();
         if (reservation.getStatus() == ReservationStatus.PAYMENT_PENDING
                 || reservation.getStatus() == ReservationStatus.AUTHORIZED
@@ -230,15 +241,52 @@ public class AlternativeReservations {
         if (reservation.getStatus() == ReservationStatus.PROVIDER_BOOKED) {
             String captureId = capture(reservation);
             if (captureId == null) {
-                return steps.find(reservationId);
+                return new Advanced(steps.find(reservationId), List.of());
             }
             long appUserId = reservation.getAppUserId();
             String replacedName = reservation.getReplacesBookingId() == null ? "die bisherige Unterkunft"
                     : bookingLogic.accommodation(appUserId, reservation.getReplacesBookingId()).accommodation().getName();
             steps.booked(appUserId, reservationId, captureId, replacedName);
             reservation = steps.find(reservationId);
+            return new Advanced(reservation, followStay(reservation));
         }
-        return reservation;
+        return new Advanced(reservation, List.of());
+    }
+
+    /**
+     * After booking: if the hotel lies in another place than the stop, the stop moves there (named after the town) and
+     * its routes are planned again, see Docs/accommodation-alternatives.md#route-nach-dem-umbuchen. The booking stays
+     * whatever happens here.
+     *
+     * @return the routes planned again, empty within the same place or if moving failed
+     */
+    private List<Long> followStay(BookingReservation reservation) {
+        ReservationHotel hotel = reservation.getHotel();
+        if (hotel.latitude() == null || hotel.longitude() == null) {
+            return List.of();
+        }
+        try {
+            Map<Long, ?> planned = tripEditing.moveStopToStay(reservation.getAppUserId(), reservation.getStopId(),
+                    hotel.latitude(), hotel.longitude(), town(reservation));
+            if (!planned.isEmpty()) {
+                log.info("Stop {} moved to the place of reservation {}", reservation.getStopId(), reservation.getId());
+            }
+            return List.copyOf(planned.keySet());
+        } catch (RuntimeException e) {
+            log.warn("Stop {} not moved after reservation {}: {}", reservation.getStopId(), reservation.getId(),
+                    e.getMessage());
+            return List.of();
+        }
+    }
+
+    /** Town of the hotel from LiteAPI's hotel data (not kept in the reservation), {@code null} if unknown. */
+    private @Nullable String town(BookingReservation reservation) {
+        try {
+            return liteApi.hotel(reservation.getHotelId()).city();
+        } catch (RuntimeException e) {
+            log.warn("Town of hotel {} unknown: {}", reservation.getHotelId(), e.getMessage());
+            return null;
+        }
     }
 
     private BookingReservation authorize(BookingReservation reservation) {

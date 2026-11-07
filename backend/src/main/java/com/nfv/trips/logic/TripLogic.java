@@ -12,6 +12,7 @@ import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.TripCoverImage;
 import com.nfv.trips.entities.Waypoint;
+import com.nfv.trips.entities.WaypointOrigin;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
@@ -203,6 +204,43 @@ public class TripLogic {
             // the deadline of the routes to the stop changed: incidents assesses them again
             stopRepository.flush();
             events.publishEvent(new StopArrivalChanged(stopId, arrivingRoutes));
+        }
+        return new TripChange(tripId, affected);
+    }
+
+    /**
+     * The stop follows a new accommodation in another place ({@link StayPlaces#isOtherPlace}): new coordinates, the
+     * name of the new place, and the waypoints from suggestions of the routes to and from it are dropped, they lead to
+     * the old place (waypoints of the user stay). The sections of these routes are discarded. Within the same place
+     * nothing changes; a stop without coordinates gets those of the accommodation and keeps its name.
+     *
+     * @param place name of the new place (town), {@code null} or blank: the name stays
+     * @return the routes to plan, none within the same place
+     * @throws TripItemNotFoundException unknown or foreign stop
+     */
+    @Transactional
+    public TripChange moveStopToStay(long appUserId, long stopId, double latitude, double longitude,
+                                     @Nullable String place) {
+        Stop stop = stop(appUserId, stopId).orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
+        long tripId = stop.getTrip().getId();
+        if (!StayPlaces.isOtherPlace(stop.getLatitude(), stop.getLongitude(), latitude, longitude)) {
+            return new TripChange(tripId, Set.of());
+        }
+        requireCoordinates(latitude, longitude);
+        boolean located = stop.getLatitude() != null;
+        stop.relocate(latitude, longitude);
+        // a stop without coordinates only gets them, its name is the user's
+        if (located && place != null && !place.isBlank() && place.strip().length() <= 255) {
+            stop.rename(place.strip());
+        }
+        Set<Long> affected = new LinkedHashSet<>();
+        for (Route route : routeRepository.findByTripId(tripId)) {
+            if (route.getFromStop().getId() == stopId || route.getToStop().getId() == stopId) {
+                waypointRepository.deleteAll(waypointRepository.findByRouteIdOrderByPosition(route.getId()).stream()
+                        .filter(waypoint -> waypoint.getOrigin() == WaypointOrigin.SUGGESTION).toList());
+                routeLogic.discardSections(route.getId());
+                affected.add(route.getId());
+            }
         }
         return new TripChange(tripId, affected);
     }

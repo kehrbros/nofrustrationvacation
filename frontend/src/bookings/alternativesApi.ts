@@ -5,6 +5,7 @@ import {
   bookReservation as bookReservationRequest,
   cancelBooking as cancelBookingRequest,
   cancelWithRefund as cancelWithRefundRequest,
+  checkReservationRoute,
   getReservation,
   reserveAlternative as reserveAlternativeRequest,
   searchAlternatives as searchAlternativesRequest,
@@ -74,6 +75,7 @@ export type ReservationStatus = 'PREBOOKED' | 'PAYMENT_PENDING' | 'AUTHORIZED' |
 export interface Reservation {
   id: number;
   tripId: number;
+  stopId: number;
   replacesBookingId: number | null;
   bookingId: number | null;
   status: ReservationStatus;
@@ -95,6 +97,31 @@ export interface Reservation {
   refunded: boolean;
   /** The booking created once booked, with the accommodation's coordinates and the booking number. */
   booking: { id: number; reference: string | null; latitude: number | null; longitude: number | null } | null;
+  /**
+   * Routes planned again because the stop moved to the place of the new hotel (more than 10 km away), only in the
+   * answer that booked it.
+   */
+  replannedRouteIds: number[];
+}
+
+export type RouteCheckProblem = 'FIRST_STOP' | 'UNDER_WAY' | 'MISSING_COORDINATES' | 'MISSING_DEPARTURE' | 'NO_ROUTE'
+  | 'ROUTING_UNAVAILABLE';
+
+/**
+ * Way to the hotel of a reservation before paying. Only with otherPlace the stop moves there after booking and the
+ * other values are set.
+ */
+export interface RouteCheck {
+  otherPlace: boolean;
+  distanceMeters: number;
+  routeId: number | null;
+  /** ISO with offset, arrival on the best way including delays. */
+  arrivalAt: string | null;
+  checkInUntil: string | null;
+  late: boolean;
+  blocked: boolean;
+  delaySeconds: number;
+  problem: RouteCheckProblem | null;
 }
 
 export interface Holder {
@@ -140,6 +167,7 @@ function toReservation(dto: ReservationDto): Reservation {
   return {
     id: dto.id!,
     tripId: dto.tripId!,
+    stopId: dto.stopId!,
     replacesBookingId: dto.replacesBookingId ?? null,
     bookingId: dto.bookingId ?? null,
     status: dto.status ?? 'FAILED',
@@ -165,7 +193,28 @@ function toReservation(dto: ReservationDto): Reservation {
       latitude: dto.booking.accommodation?.latitude ?? null,
       longitude: dto.booking.accommodation?.longitude ?? null,
     } : null,
+    replannedRouteIds: dto.replannedRouteIds ?? [],
   };
+}
+
+/** Way to the hotel before paying; null if it cannot be checked (the hint is left out then). */
+export async function fetchRouteCheck(reservationId: number): Promise<RouteCheck | null> {
+  try {
+    const dto = await unwrap(checkReservationRoute({ path: { reservationId } }));
+    return {
+      otherPlace: dto.otherPlace ?? false,
+      distanceMeters: dto.distanceMeters ?? 0,
+      routeId: dto.routeId ?? null,
+      arrivalAt: dto.arrivalAt ?? null,
+      checkInUntil: dto.checkInUntil ?? null,
+      late: dto.late ?? false,
+      blocked: dto.blocked ?? false,
+      delaySeconds: dto.delaySeconds ?? 0,
+      problem: (dto.problem ?? null) as RouteCheckProblem | null,
+    };
+  } catch {
+    return null;
+  }
 }
 
 /** Everything unavailable if the check fails. */
