@@ -108,7 +108,7 @@ class AlternativesAndViaPointsTest {
         for (Candidate candidate : candidates.subList(1, candidates.size())) {
             List<SuggestedOption.Point> points = viaPointExtractor.extract(scenario, candidate, base, segments);
             assertThat(points).isNotEmpty();
-            // as RoutePlanning plans it after applying: with curbsides at the stops
+            // as RoutePlanning plans it after applying
             List<RoutePoint> route = new ArrayList<>();
             route.add(scenario.start());
             points.forEach(p -> route.add(new RoutePoint(new GeoPoint(p.latitude(), p.longitude()),

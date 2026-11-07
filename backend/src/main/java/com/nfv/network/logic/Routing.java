@@ -13,7 +13,6 @@ import com.graphhopper.util.exceptions.PointNotFoundException;
 import com.graphhopper.util.exceptions.PointOutOfBoundsException;
 import com.graphhopper.util.shapes.GHPoint;
 import com.nfv.common.errorhandling.TechnicalException;
-import com.nfv.network.config.NetworkProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -29,7 +28,6 @@ public class Routing {
     static final double MAX_SNAP_DISTANCE_METERS = 500;
     private static final List<String> SNAP_PREVENTIONS = List.of("tunnel", "bridge", "ferry");
 
-    private final NetworkProperties properties;
     private final Graphs graphs;
     private final SegmentWriter segmentWriter;
 
@@ -44,14 +42,15 @@ public class Routing {
         String region = region(points);
         return graphs.withGraph(region, graph -> {
             GHRequest request = request(graph, points, options);
-            routeRequest(region, request, points);
+            routeRequest(request);
             return result(region, graph, points, response(graph, request).getBest());
         });
     }
 
     /**
      * Fastest route and alternatives between two stops with GraphHopper {@code alternative_route}. GraphHopper 11.1
-     * supports neither curbsides nor pass_through there, see Docs/recommendations.md#generatoren.
+     * does not support pass_through there, see Docs/recommendations.md#generatoren. Between two stops the request is
+     * the same as for {@link #route}, so the fastest alternative can be planned again.
      *
      * @return at least one route, the first is the fastest
      * @throws NoRouteException            point outside every region, too far from a road or not connected
@@ -118,15 +117,11 @@ public class Routing {
         return request;
     }
 
-    /** Curbsides at stops and no u-turn at via points, only for {@link #route}. */
-    private void routeRequest(String region, GHRequest request, List<RoutePoint> points) {
-        String stopSide = properties.regions().get(region).drivingSide() == NetworkProperties.DrivingSide.LEFT
-                ? Parameters.Curbsides.CURBSIDE_LEFT : Parameters.Curbsides.CURBSIDE_RIGHT;
-        request.setCurbsides(points.stream().map(point -> point.kind() == RoutePoint.Kind.STOP
-                ? stopSide : Parameters.Curbsides.CURBSIDE_ANY).toList());
-        // Keep to the curbside where possible, otherwise ignore it (one-way streets)
-        request.putHint("force_curbside", false);
-        // No u-turn at via points
+    /**
+     * No u-turn at via points, only for {@link #route}. No curbsides at the stops: {@code alternative_route} cannot
+     * keep them, and a suggestion must be plannable again, see Docs/network.md#routing-details.
+     */
+    private static void routeRequest(GHRequest request) {
         request.putHint(Parameters.Routing.PASS_THROUGH, true);
     }
 

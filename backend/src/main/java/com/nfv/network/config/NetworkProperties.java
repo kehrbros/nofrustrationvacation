@@ -22,14 +22,10 @@ public record NetworkProperties(boolean importOnStart, Map<String, Region> regio
      * @param ferries    false: ferries are not used for routing (part of the graph, change needs a new import)
      * @param zone       local time of the region, e.g. for an evening limit on a day's drive
      */
-    public record Region(@Nullable Path osmFile, Path graphDir, String dataAccess, DrivingSide drivingSide,
-                         boolean ferries, ZoneId zone) {
+    public record Region(@Nullable Path osmFile, Path graphDir, String dataAccess, boolean ferries,
+                         ZoneId zone) {
         public Region {
             Objects.requireNonNull(zone, "nfv.network.regions.*.zone is required");
         }
-    }
-
-    public enum DrivingSide {
-        LEFT, RIGHT
     }
 }

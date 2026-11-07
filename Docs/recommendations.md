@@ -73,7 +73,7 @@ flowchart LR
       - Kombiniert wird Abschnitt für Abschnitt, nach jedem bleiben nur die besten `n + 1` (statt vollem Kreuzprodukt, das mit vielen Waypoints stark wächst).
     - Kein `pass_through`: Kombinationen, die an einem Via-Punkt wenden (letztes Segment eines Abschnitts = Gegenrichtung des ersten des nächsten, `SegmentInfo.reverseId`), fallen weg.
       - Ausnahme: Wenden alle Kombinationen dort, bleiben sie. Ein Via-Punkt auf einer Sackgasse lässt sich nur so verlassen, auch `Routing.route` wendet dort (Wellington-Test: Kelburn landet auf einer 39-m-Stichstraße).
-    - Keine `curbsides`: Vorschläge ignorieren die Bordsteinseite an den Stops. Weil sie auch beim Planen nur weich gilt (`force_curbside=false`), ändert sich höchstens das letzte Stück. Nach dem Wählen plant `RoutePlanning` mit Bordsteinseite neu.
+    - Keine `curbsides`: auch `Routing.route` setzt sie seit 2026-11-07 nicht mehr, siehe [network.md](network.md#routing-details). Was als Vorschlag kommt, lässt sich so auch planen.
   - Liefert GraphHopper weniger als `n` Strecken (kurze Routen, wenig Netz), bekommt der Nutzer weniger Vorschläge. Keine eigenen Alternativen daneben.
 - **Route behalten (kein Generator, geändert 2026-11-06):** „Wie geplant“ steckt schon in `reference`, ein eigener `KEEP_ROUTE` brächte nur eine zweite Kopie. Die Referenz führt bei einer Sperrung `blocked`, ihre Ankunft enthält das Warten nicht; die Wartezeit steht an der Consequence (`assessedDelay`, `expectedArrival`).
 - **`DEPARTURE_SHIFT`** (`DepartureShiftGenerator`): höchstens je eine Richtung über alle zählenden Incidents, Strecke = Referenz, kein Routing, nur neue Durchfahrtszeiten:
@@ -108,7 +108,7 @@ flowchart LR
 ## Auswahl speichern
 
 - Gespeichert wird die **Absicht**, nicht die Segmentliste (wie bei Waypoints): Via-Punkte, die den Vorschlag reproduzieren.
-- Via-Punkte beim Erzeugen bestimmen (`ViaPointExtractor`): bei `FOLLOW` bleiben die Waypoints des Nutzers, bei `IGNORE` nicht; für jeden zusammenhängenden Abschnitt, der von der schnellsten Strecke abweicht, ein Punkt in der Mitte des längsten Segments dort, mit dessen `ref` als `roadHint`. Prüfen: Routing über diese Punkte ergibt ≥ 90 % gemeinsame Strecke mit dem Kandidaten, sonst weiteren Punkt im längsten noch abweichenden Abschnitt (höchstens 3 je Abschnitt).
+- Via-Punkte beim Erzeugen bestimmen (`ViaPointExtractor`): bei `FOLLOW` bleiben die Waypoints des Nutzers, bei `IGNORE` nicht; für jeden zusammenhängenden Abschnitt, der von der schnellsten Strecke abweicht, ein Punkt in der Mitte des längsten Segments dort, mit dessen `ref` als `roadHint`. Prüfen: Routing über diese Punkte ergibt ≥ 90 % gemeinsame Strecke mit dem Kandidaten, sonst weiteren Punkt im längsten noch abweichenden Abschnitt (höchstens 3 je Abschnitt). Jeder Punkt wird beim Setzen geprüft (Routing wie `RoutePlanning`): Lässt sich die Route über alle Punkte nicht planen, fliegt der Punkt wieder raus und das nächstlängere Segment des Abschnitts wird versucht (geändert 2026-11-07, vorher wurden ungeprüfte Punkte ausgeliefert). Erreicht die Option die 90 % nicht, gibt es eine Warnung im Log.
 - **Bei Incidents:** Bezug und Prüfung sind der Weg **ohne** Einschränkungen, denn so plant `RoutePlanning` nach der Wahl. Sonst bekäme die beste Umfahrung keinen Punkt, und die neue Planung führte wieder durch den Incident.
 - So bleibt die Wahl nach `NetworkRefreshed` und Änderungen der Abfahrt erhalten, und die Sperre selbst muss nicht dauerhaft gespeichert werden.
 - `RouteChoice.choose(appUserId, routeId, points)`:
@@ -136,7 +136,7 @@ flowchart LR
 - **`network`** (Erweiterung von `RouteOptions`, ersetzt den Satz „derzeit nur `blockedSegmentIds`“ in [network.md](network.md#schnittstellen-networklogic)):
   - `RouteOptions(blockedSegmentIds, delayedSegments: Map<Long, Duration>)`.
   - `BlockedEdgesWeighting` wird `ScenarioWeighting`: gesperrt → unendlich, Verzögerung → Gewicht + Sekunden (≥ 0). Gewichte steigen nur, die LM-Schätzung bleibt gültig. Gilt für normales Routing und `alternative_route` gleich.
-  - Neu `Routing.alternatives(RoutePoint from, RoutePoint to, RouteOptions, AlternativeOptions)`: genau zwei Punkte, `algorithm=alternative_route`, ohne `curbsides` und `pass_through`. Ergebnis `List<RouteResult>`, erster Eintrag = schnellste. `AlternativeOptions`: `maxPaths`, `maxWeightFactor`, `maxShareFactor`.
+  - Neu `Routing.alternatives(RoutePoint from, RoutePoint to, RouteOptions, AlternativeOptions)`: genau zwei Punkte, `algorithm=alternative_route`, ohne `pass_through`. Ergebnis `List<RouteResult>`, erster Eintrag = schnellste. `AlternativeOptions`: `maxPaths`, `maxWeightFactor`, `maxShareFactor`.
   - Neu `Routing.evaluate(segmentIds)` nicht nötig: Dauern der Referenz stehen schon in den Sections.
 - **`incidents`:** `IncidentOverlap` (reine Funktion, auch von `ConsequenceMatcher` genutzt), `ActiveIncidents.onSegments(segmentIds, from)`, `consequence(id)`, `consequencesOnRoute(routeId)` → `RouteConsequence` (Lesen, Records, keine Entities).
 - **`trips`:** `TripEditing.replaceWaypoints(…)` und `updateStop(…)` (vorhanden, `NewWaypoint` bekommt `origin`), Lesen von Stops, Waypoints und Sections über `RouteSnapshots.of(appUserId, routeId)` → Record `RouteSnapshot` in `trips.logic` statt Repositories (fremde oder unbekannte Route: `TripItemNotFoundException`).

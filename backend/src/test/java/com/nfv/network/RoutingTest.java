@@ -123,8 +123,8 @@ class RoutingTest {
 
         assertThat(alternatives).hasSizeBetween(2, ALTERNATIVES.maxPaths());
         assertThat(alternatives.getFirst().duration())
-                .as("without curbsides at the stops at least as fast as route()")
-                .isLessThanOrEqualTo(fastest.duration());
+                .as("same request as route() between two stops, so a suggestion can be planned again")
+                .isCloseTo(fastest.duration(), Duration.ofSeconds(1));
         assertThat(alternatives).allSatisfy(alternative -> {
             assertThat(alternative.segments()).isNotEmpty();
             assertThat(alternative.snappedPoints()).hasSize(2);
