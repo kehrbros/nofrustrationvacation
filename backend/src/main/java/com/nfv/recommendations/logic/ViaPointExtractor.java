@@ -9,6 +9,7 @@ import com.nfv.network.logic.RoutedSegment;
 import com.nfv.network.logic.Routing;
 import com.nfv.network.logic.SegmentInfo;
 import com.nfv.recommendations.config.RecommendationProperties;
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -39,8 +40,11 @@ class ViaPointExtractor {
 
     /**
      * With {@code FOLLOW} the waypoints of the user stay. For every part that differs from {@code base} (the fastest
-     * combination) a point in the middle of its longest segment; checked by routing over the points, more points in
-     * the longest part still different until {@code viaReproduceRatio} is reached.
+     * combination, planned without waypoints) a point in the middle of its longest segment; more points in the longest
+     * part still different until {@code viaReproduceRatio} is reached. Every point is checked by routing over all
+     * points the way {@code RoutePlanning} plans after choosing: a point that cannot be routed is replaced by the next
+     * longest segment of its part, so the returned points can always be planned (unless the waypoints of the user
+     * cannot), see Docs/recommendations.md#auswahl-speichern.
      *
      * @param base     see {@link #base}
      * @param segments details of all segments of the candidate
@@ -49,17 +53,14 @@ class ViaPointExtractor {
                                     Map<Long, SegmentInfo> segments) {
         List<RoutedSegment> all = candidate.segments();
         List<Placed> placed = new ArrayList<>();
-        Set<Integer> used = new HashSet<>();
+        List<List<Integer>> parts = new ArrayList<>();
         int offset = 0;
-        int runs = 0;
         for (int leg = 0; leg < candidate.legs().size(); leg++) {
             List<RoutedSegment> legSegments = candidate.legs().get(leg).segments();
             Set<Long> baseIds = ids(base.legs().get(leg));
-            for (List<Integer> run : runs(legSegments, baseIds::contains)) {
-                runs++;
-                int index = offset + longest(legSegments, run, Set.of());
-                place(placed, used, all, index, segments);
-            }
+            int legOffset = offset;
+            runs(legSegments, baseIds::contains)
+                    .forEach(run -> parts.add(run.stream().map(i -> legOffset + i).toList()));
             offset += legSegments.size();
             if (leg < scenario.vias().size()) {
                 Scenario.Via via = scenario.vias().get(leg);
@@ -67,33 +68,71 @@ class ViaPointExtractor {
                         via.point().point().lon(), via.point().roadHint(), via.waypointId())));
             }
         }
-        if (runs == 0) {
+        if (parts.isEmpty()) {
             return points(placed);
         }
-        int limit = runs * properties.maxViaPointsPerSection();
+        Set<Long> reproduced = routedIds(scenario, placed);
+        if (reproduced == null) {
+            log.warn("waypoints of route {} not routable, suggestion keeps them without via points",
+                    scenario.routeId());
+            return points(placed);
+        }
+        Set<Integer> used = new HashSet<>();
+        int limit = parts.size() * properties.maxViaPointsPerSection();
+        for (List<Integer> part : parts) {
+            reproduced = placeChecked(scenario, part, placed, used, limit, all, segments, reproduced);
+        }
         while (used.size() < limit) {
-            Set<Long> reproduced;
-            try {
-                reproduced = routedIds(scenario, points(placed));
-            } catch (NoRouteException e) {
-                log.debug("via points of a suggestion not routable: {}", e.getMessage());
-                break;
-            }
             Double ratio = CandidateEvaluator.sharedRatio(steps(all), reproduced);
             if (ratio == null || ratio >= properties.viaReproduceRatio()) {
                 break;
             }
-            List<List<Integer>> missing = runs(all, reproduced::contains);
-            List<Integer> worst = missing.stream()
+            Set<Long> current = reproduced;
+            List<Integer> worst = runs(all, current::contains).stream()
                     .filter(run -> run.stream().anyMatch(i -> !used.contains(i)))
                     .max(Comparator.comparingDouble(run -> length(all, run)))
                     .orElse(null);
             if (worst == null) {
                 break;
             }
-            place(placed, used, all, longest(all, worst, used), segments);
+            reproduced = placeChecked(scenario, worst, placed, used, limit, all, segments, reproduced);
+        }
+        Double ratio = CandidateEvaluator.sharedRatio(steps(all), reproduced);
+        if (ratio != null && ratio < properties.viaReproduceRatio()) {
+            log.warn("via points of a suggestion on route {} reproduce only {} of it", scenario.routeId(), ratio);
         }
         return points(placed);
+    }
+
+    /**
+     * Adds a point on the longest unused segment of the run that keeps all points routable, trying the next longest
+     * while routing fails: at most {@code maxViaPointsPerSection} segments of the run per call and until {@code limit}
+     * segments are used in total.
+     *
+     * @return segments routed over the points, unchanged if no segment of the run worked
+     */
+    private Set<Long> placeChecked(Scenario scenario, List<Integer> run, List<Placed> placed, Set<Integer> used,
+                                   int limit, List<RoutedSegment> all, Map<Long, SegmentInfo> segments,
+                                   Set<Long> reproduced) {
+        for (int tries = 0; tries < properties.maxViaPointsPerSection() && used.size() < limit
+                && run.stream().anyMatch(i -> !used.contains(i)); tries++) {
+            int index = longest(all, run, used);
+            used.add(index);
+            SegmentInfo info = segments.get(all.get(index).segmentId());
+            if (info == null) {
+                continue;
+            }
+            String hint = info.ref() != null ? info.ref() : info.name();
+            Placed point = new Placed(index, new SuggestedOption.Point(info.midpoint().lat(), info.midpoint().lon(),
+                    hint, null));
+            placed.add(point);
+            Set<Long> routed = routedIds(scenario, placed);
+            if (routed != null) {
+                return routed;
+            }
+            placed.remove(point);
+        }
+        return reproduced;
     }
 
     /**
@@ -123,25 +162,21 @@ class ViaPointExtractor {
         return new RoutePoint(point.point(), RoutePoint.Kind.STOP, point.roadHint());
     }
 
-    private static void place(List<Placed> placed, Set<Integer> used, List<RoutedSegment> all, int index,
-                              Map<Long, SegmentInfo> segments) {
-        used.add(index);
-        SegmentInfo info = segments.get(all.get(index).segmentId());
-        if (info == null) {
-            return;
-        }
-        String hint = info.ref() != null ? info.ref() : info.name();
-        placed.add(new Placed(index, new SuggestedOption.Point(info.midpoint().lat(), info.midpoint().lon(), hint, null)));
-    }
-
-    private Set<Long> routedIds(Scenario scenario, List<SuggestedOption.Point> points) {
+    /** Segments of the route over the points in their order, {@code null} if it cannot be routed. */
+    @Nullable
+    private Set<Long> routedIds(Scenario scenario, List<Placed> placed) {
         List<RoutePoint> route = new ArrayList<>();
         route.add(scenario.start());
-        points.forEach(point -> route.add(new RoutePoint(new GeoPoint(point.latitude(), point.longitude()),
+        points(placed).forEach(point -> route.add(new RoutePoint(new GeoPoint(point.latitude(), point.longitude()),
                 RoutePoint.Kind.VIA, point.roadHint())));
         route.add(scenario.end());
-        // without restrictions: that is how the route is planned after choosing
-        return ids(routing.route(route, RouteOptions.none()));
+        try {
+            // without restrictions: that is how the route is planned after choosing
+            return ids(routing.route(route, RouteOptions.none()));
+        } catch (NoRouteException e) {
+            log.debug("via points of a suggestion not routable: {}", e.getMessage());
+            return null;
+        }
     }
 
     /** Maximal runs of consecutive segment indices not matching {@code inOther}. */

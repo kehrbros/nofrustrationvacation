@@ -56,7 +56,7 @@
 - Andere Module nutzen nur diese Interfaces und Records, nie Entities, Repositories oder GraphHopper-Typen. Geometrie als eigene Records (`GeoPoint`, `GeoLine`, `GeoArea`).
 - `Routing.route(List<RoutePoint>, RouteOptions)`: `RoutePoint` mit `STOP`/`VIA` und optionalem Straßenhinweis. Stops nur als erster und letzter Punkt, dazwischen Via-Punkte (`RoutePlanning` plant je Stop-Paar), sonst `IllegalArgumentException`.
   - `RouteOptions(blockedSegmentIds, delayedSegments)`: gesperrte Segmente und Verzögerung je Segment (≥ 0, sonst `IllegalArgumentException`), siehe [recommendations.md](recommendations.md#schnittstellen). Gesperrt schlägt verzögert. Verzögerungen ändern nur die Wahl des Wegs, Dauern im `RouteResult` bleiben ohne Verzögerung (rechnet die Bewertung in `recommendations`). Vorlieben (unbefestigte Straßen meiden, bevorzugte Straßen) folgen mit den Trip-Vorlieben.
-- `Routing.alternatives(from, to, RouteOptions, AlternativeOptions)`: schnellste Strecke und Alternativen zwischen zwei Stops über GraphHopper `alternative_route` (mit LM). In 11.1 nur zwei Punkte, ohne `pass_through` und `curbsides`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
+- `Routing.alternatives(from, to, RouteOptions, AlternativeOptions)`: schnellste Strecke und Alternativen zwischen zwei Stops über GraphHopper `alternative_route` (mit LM). In 11.1 nur zwei Punkte, ohne `pass_through`, Umgang damit in [recommendations.md](recommendations.md#generatoren).
   - `AlternativeOptions`: `maxPaths` (≥ 1, inkl. schnellster), `maxWeightFactor` (≥ 1), `maxShareFactor` (0–1).
   - Ergebnis `List<RouteResult>`, mindestens ein Eintrag, erster = schnellste. Weitere Einträge nicht streng nach Dauer sortiert.
   - Kurze Strecken (Wellington-Extrakt: ~3 km Te Aro → Thorndon) liefern oft keine Alternative, nur die schnellste.
@@ -81,7 +81,7 @@
 
 ## Routing-Details
 
-- **Stops:** `curbsides` nach `driving-side` der Region (NZ `left`), mit `force_curbside=false`: GraphHopper hält die Seite ein, wo möglich, sonst wird sie ignoriert. Strikt schlägt das Routing auf Einbahnstraßen fehl.
+- **Stops:** keine `curbsides` (geändert 2026-11-07). `alternative_route` kennt sie nicht, und mit ihnen ließ sich ein Vorschlag nicht immer wieder planen: Wānaka → Christchurch fand `alternatives` Wege, `route` mit `force_curbside=false` scheiterte mit „Connection between locations not found“. Zwischen zwei Stops stellen `route` und `alternatives` damit dieselbe Anfrage.
 - **Via-Punkte:** `curbside` `any`, `pass_through=true` (kein Wenden am Via-Punkt), `point_hints` aus dem Straßenhinweis.
 - **Sperren und Verzögerungen** (`ScenarioWeighting`): eigene `WeightingFactory`. `edge_key`s gesperrter Segmente (alle Kanten eines Segments, richtungsgenau) sind unpassierbar, verzögerte kosten Gewicht + Sekunden (Gewicht der Custom-Model-Gewichtung ≈ Sekunden). Mehrere `edge_key`s je Segment gibt es nur bei identischen Doppelkanten, eine Durchfahrt nutzt eine davon: jede bekommt die volle Verzögerung. Gewichte steigen nur, funktioniert mit LM. Gilt für `route` und `alternatives` gleich.
 - **Anteile:** nur am ersten und letzten Abschnitt einer Route kleiner als 0–1, Position des gesnappten Start- bzw. Endpunkts auf der Kantengeometrie.
@@ -98,7 +98,6 @@
   nfv.network.regions.nz.graph-dir=${NFV_DATA_DIR:${user.home}/data}/graphs/nz
   # MMAP: Graph außerhalb des Heaps, RAM_STORE in Tests
   nfv.network.regions.nz.data-access=MMAP
-  nfv.network.regions.nz.driving-side=LEFT
   nfv.network.regions.nz.ferries=true
   # Pflicht, Ortszeit der Region
   nfv.network.regions.nz.zone=Pacific/Auckland
