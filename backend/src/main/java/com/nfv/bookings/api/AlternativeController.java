@@ -95,7 +95,21 @@ public class AlternativeController {
                 input.lastName(), input.email(), input.phone())));
     }
 
+    @Operation(summary = "Reserve an accommodation at a stop",
+            description = "Like an alternative, for a stop without accommodation to replace, e.g. a night on the way "
+                    + "taken from a proposal of the agent. The booking is created at the stop. Same errors.")
+    @PostMapping("/stops/{stopId}/stay-reservations")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ReservationDto reserveAtStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long stopId,
+                                        @RequestBody ReservationInputDto input) {
+        return toDto(reservations.reserveAtStop(user.appUserId(), stopId, new AlternativeReservations.NewReservation(
+                input.hotelId(), input.offerId(), input.checkIn(), input.checkOut(), number(input.guests(), "guests"),
+                number(input.rooms(), "rooms"), input.maxPrice(), upper(input.currency()), input.firstName(),
+                input.lastName(), input.email(), input.phone())));
+    }
+
     @Operation(summary = "A reservation")
+
     @GetMapping("/booking-reservations/{reservationId}")
     public ReservationDto getReservation(@AuthenticationPrincipal CurrentUser user,
                                          @PathVariable long reservationId) {

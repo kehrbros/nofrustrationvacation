@@ -5,7 +5,9 @@ import com.nfv.advisor.entities.AdvisorRun;
 import com.nfv.advisor.entities.ProposalGoal;
 import com.nfv.advisor.entities.ProposalKind;
 import com.nfv.advisor.entities.ProposalStay;
+import com.nfv.advisor.entities.RunDecision;
 import com.nfv.advisor.entities.RunStatus;
+
 import com.nfv.advisor.entities.RunTrigger;
 import com.nfv.incidents.entities.Impact;
 import jakarta.annotation.Nullable;
@@ -19,9 +21,11 @@ import java.util.List;
  *
  * @param stale the situation of the route changed since the run started
  */
-public record ProposalRun(long runId, long routeId, RunTrigger trigger, ProposalGoal goal, RunStatus status,
+public record ProposalRun(long runId, long routeId, @Nullable Long consequenceId, @Nullable Long incidentId,
+                          RunTrigger trigger, ProposalGoal goal, RunStatus status,
                           boolean stale, @Nullable String summary, @Nullable String failure, OffsetDateTime createdAt,
-                          @Nullable OffsetDateTime finishedAt, List<Proposal> proposals) {
+                          @Nullable OffsetDateTime finishedAt, @Nullable RunDecision decision,
+                          @Nullable Integer chosenRank, @Nullable OffsetDateTime decidedAt, List<Proposal> proposals) {
 
     public record Proposal(int rank, ProposalKind kind, @Nullable String reason, @Nullable String via,
                            @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
@@ -37,8 +41,11 @@ public record ProposalRun(long runId, long routeId, RunTrigger trigger, Proposal
     }
 
     static ProposalRun of(AdvisorRun run, boolean stale) {
-        return new ProposalRun(run.getId(), run.getRouteId(), run.getTrigger(), run.getGoal(), run.getStatus(), stale,
-                run.getSummary(), run.getFailure(), run.getCreatedAt(), run.getFinishedAt(),
+        return new ProposalRun(run.getId(), run.getRouteId(), run.getConsequenceId(), run.getIncidentId(),
+                run.getTrigger(), run.getGoal(), run.getStatus(), stale,
+                run.getSummary(), run.getFailure(), run.getCreatedAt(), run.getFinishedAt(), run.getDecision(),
+                run.getChosenPosition() == null ? null : run.getChosenPosition() + 1, run.getDecidedAt(),
+
                 run.getProposals().stream().map(ProposalRun::proposal).toList());
     }
 

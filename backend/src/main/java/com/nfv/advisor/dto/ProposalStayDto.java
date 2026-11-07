@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 
 @Schema(description = "Offer of a hotel as the agent found it. Booking checks it again. With replacesBookingId it is "
         + "booked like an alternative: POST /accommodation-bookings/{replacesBookingId}/alternative-reservations with "
-        + "hotelId, offerId, checkIn, checkOut, guests, rooms, currency and price as maxPrice. A stay without booking "
-        + "to replace cannot be booked yet.")
+        + "hotelId, offerId, checkIn, checkOut, guests, rooms, currency and price as maxPrice. Without it it is "
+        + "booked at the stop of the accepted proposal: POST /stops/{stayStopId}/stay-reservations with the same fields.")
 public record ProposalStayDto(
         String hotelId,
         String offerId,

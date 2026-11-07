@@ -591,6 +591,72 @@
         "tags" : [ "Alternative proposals" ]
       }
     },
+    "/api/v1/alternative-proposals/{runId}/dismissal" : {
+      "post" : {
+        "description" : "The user plans again by hand. New proposals can be asked for at any time.",
+        "operationId" : "dismiss",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ProposalRunDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Dismiss all proposals",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
+    "/api/v1/alternative-proposals/{runId}/proposals/{rank}/acceptance" : {
+      "post" : {
+        "description" : "Changes the trip: REROUTE and SHIFT_DEPARTURE like PUT /routes/{routeId}/choice, STOPOVER adds a stop at the hotel before the target stop (the route is split), KEEP_ROUTE and TARGET_STAY change nothing. Hotels are booked afterwards, see the answer. Replaces an earlier decision. 409 PROPOSAL_NOT_APPLICABLE (run not finished, trip changed), 400 INVALID_PROPOSAL_INPUT (no such rank).",
+        "operationId" : "accept",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "rank",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/AcceptedProposalDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Take a proposal",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
     "/api/v1/booking-reservations/{reservationId}" : {
       "get" : {
         "operationId" : "getReservation",
@@ -704,6 +770,62 @@
         },
         "summary" : "Check the way to the hotel of a reservation",
         "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/booking-todos/{todoId}/completion" : {
+      "delete" : {
+        "description" : "The booking stays as it is.",
+        "operationId" : "reopenTodo",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "todoId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingTodoDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Open a to-do again",
+        "tags" : [ "Bookings" ]
+      },
+      "post" : {
+        "description" : "CANCEL also marks the booking as cancelled in the app, the provider is not contacted.",
+        "operationId" : "completeTodo",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "todoId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/BookingTodoDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Mark a to-do as done",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/bookings/accommodation-drafts" : {
@@ -1163,6 +1285,45 @@
         "tags" : [ "Bookings" ]
       }
     },
+    "/api/v1/stops/{stopId}/stay-reservations" : {
+      "post" : {
+        "description" : "Like an alternative, for a stop without accommodation to replace, e.g. a night on the way taken from a proposal of the agent. The booking is created at the stop. Same errors.",
+        "operationId" : "reserveAtStop",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "stopId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/ReservationInputDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "201" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/ReservationDto"
+                }
+              }
+            },
+            "description" : "Created"
+          }
+        },
+        "summary" : "Reserve an accommodation at a stop",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
     "/api/v1/trips" : {
       "get" : {
         "description" : "Ascending by start, with the phase relative to now.",
@@ -1298,6 +1459,35 @@
         "tags" : [ "Trips" ]
       }
     },
+    "/api/v1/trips/{tripId}/alternative-proposals" : {
+      "get" : {
+        "description" : "Routes without a run are left out.",
+        "operationId" : "latestOfTrip",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripProposalRunsDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Last run of every route of a trip",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
     "/api/v1/trips/{tripId}/booking-reservations" : {
       "get" : {
         "description" : "Payment running (approved at PayPal, booking in progress) or to be checked (NEEDS_ATTENTION); the app shows them so nobody wonders what happened to the money.",
@@ -1328,6 +1518,38 @@
         },
         "summary" : "Unfinished reservations of a trip",
         "tags" : [ "Alternative accommodations" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/booking-todos" : {
+      "get" : {
+        "description" : "Bookings to cancel or to tell about a later arrival after the trip changed, the newest first, also those done.",
+        "operationId" : "listTodos",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "type" : "array",
+                  "items" : {
+                    "$ref" : "#/components/schemas/BookingTodoDto"
+                  }
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "To-do list of a trip",
+        "tags" : [ "Bookings" ]
       }
     },
     "/api/v1/trips/{tripId}/bookings" : {
@@ -1898,6 +2120,51 @@
   },
   "components" : {
     "schemas" : {
+      "AcceptedProposalDto" : {
+        "type" : "object",
+        "description" : "What taking a proposal changed. STOPOVER and TARGET_STAY: book the hotel next, with replacesBookingId via POST /accommodation-bookings/{replacesBookingId}/alternative-reservations, otherwise via POST /stops/{stayStopId}/stay-reservations.",
+        "properties" : {
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY" ]
+          },
+          "plannedRouteIds" : {
+            "type" : "array",
+            "description" : "Routes planned again; a stopover splits the route, the old one is gone",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "rank" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "replacesBookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "TARGET_STAY: the booking the hotel replaces"
+          },
+          "runId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "stayStopId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "STOPOVER: the new stop at the hotel. TARGET_STAY: the target stop"
+          },
+          "todosAdded" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "New entries on the to-do list of the trip"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "AccommodationBookingInputDto" : {
         "type" : "object",
         "description" : "Accommodation booking to create or replace. Check-in, check-out and cancellation deadline are local times at the accommodation without offset; the backend determines the time zone from the coordinates and uses fallbackTimeZone (the user's IANA zone) only without coordinates.",
@@ -2566,6 +2833,82 @@
           }
         }
       },
+      "BookingTodoDto" : {
+        "type" : "object",
+        "description" : "Something to do about a booking after the trip changed, with a copy of the booking. CANCEL: cancel it at the provider (bookedInApp: in the app, POST /bookings/{bookingId}/refund-cancellation). NOTIFY_LATE_ARRIVAL: the arrival moves to newArrivalOn, tell the accommodation.",
+        "properties" : {
+          "bookedInApp" : {
+            "type" : "boolean",
+            "description" : "Booked and paid in the app"
+          },
+          "bookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "null once the booking is deleted, e.g. with its stop"
+          },
+          "cancellationDeadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Free cancellation until then"
+          },
+          "createdAt" : {
+            "type" : "string",
+            "format" : "date-time"
+          },
+          "doneAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "null while open"
+          },
+          "email" : {
+            "type" : [ "string", "null" ]
+          },
+          "endsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "id" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "CANCEL", "NOTIFY_LATE_ARRIVAL" ]
+          },
+          "manageUrl" : {
+            "type" : [ "string", "null" ]
+          },
+          "newArrivalOn" : {
+            "type" : [ "string", "null" ],
+            "format" : "date",
+            "description" : "NOTIFY_LATE_ARRIVAL: day of the new arrival, local"
+          },
+          "phone" : {
+            "type" : [ "string", "null" ]
+          },
+          "provider" : {
+            "type" : [ "string", "null" ]
+          },
+          "reason" : {
+            "type" : "string",
+            "enum" : [ "REPLACED", "STOP_REMOVED", "ARRIVAL_LATER" ]
+          },
+          "reference" : {
+            "type" : [ "string", "null" ]
+          },
+          "startsAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "title" : {
+            "type" : "string"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
       "ChoicePointDto" : {
         "type" : "object",
         "description" : "Point of a route suggestion that becomes a waypoint when the suggestion is chosen",
@@ -2928,7 +3271,7 @@
           },
           "stay" : {
             "$ref" : "#/components/schemas/ProposalStayDto",
-            "description" : "STOPOVER and TARGET_STAY only"
+            "description" : "STOPOVER and TARGET_STAY only, absent otherwise"
           },
           "via" : {
             "type" : [ "string", "null" ],
@@ -2955,16 +3298,40 @@
             "type" : [ "string", "null" ],
             "description" : "Default ARRIVE_ON_TIME",
             "enum" : [ "ARRIVE_ON_TIME", "MINIMIZE_DELAY" ]
+          },
+          "incidentId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Incident to look at instead of the consequence, default: any of the route"
           }
         }
       },
       "ProposalRunDto" : {
-        "type" : "null",
+        "type" : "object",
         "description" : "A run of the agent with its proposals",
         "properties" : {
+          "chosenRank" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "ACCEPTED: rank of the proposal taken"
+          },
+          "consequenceId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Consequence the run is about, null once it was assessed again"
+          },
           "createdAt" : {
             "type" : "string",
             "format" : "date-time"
+          },
+          "decidedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "decision" : {
+            "type" : [ "string", "null" ],
+            "description" : "null while the user has not decided",
+            "enum" : [ "ACCEPTED", "DISMISSED" ]
           },
           "failure" : {
             "type" : [ "string", "null" ],
@@ -2977,6 +3344,11 @@
           "goal" : {
             "type" : "string",
             "enum" : [ "ARRIVE_ON_TIME", "MINIMIZE_DELAY" ]
+          },
+          "incidentId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "Incident the run was started for, null if unknown"
           },
           "proposals" : {
             "type" : "array",
@@ -3022,8 +3394,8 @@
         }
       },
       "ProposalStayDto" : {
-        "type" : "null",
-        "description" : "Offer of a hotel as the agent found it. Booking checks it again. With replacesBookingId it is booked like an alternative: POST /accommodation-bookings/{replacesBookingId}/alternative-reservations with hotelId, offerId, checkIn, checkOut, guests, rooms, currency and price as maxPrice. A stay without booking to replace cannot be booked yet.",
+        "type" : "object",
+        "description" : "Offer of a hotel as the agent found it. Booking checks it again. With replacesBookingId it is booked like an alternative: POST /accommodation-bookings/{replacesBookingId}/alternative-reservations with hotelId, offerId, checkIn, checkOut, guests, rooms, currency and price as maxPrice. Without it it is booked at the stop of the accepted proposal: POST /stops/{stayStopId}/stay-reservations with the same fields.",
         "properties" : {
           "checkIn" : {
             "type" : "string",
@@ -3517,7 +3889,7 @@
         "properties" : {
           "run" : {
             "$ref" : "#/components/schemas/ProposalRunDto",
-            "description" : "null if the route has no run"
+            "description" : "Absent if the route has no run"
           }
         }
       },
@@ -3866,6 +4238,18 @@
             "type" : [ "string", "null" ],
             "format" : "date-time",
             "description" : "Time window of the incident the passage falls into, null without windows"
+          }
+        }
+      },
+      "TripProposalRunsDto" : {
+        "type" : "object",
+        "description" : "The last run of every route of a trip that has one",
+        "properties" : {
+          "runs" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ProposalRunDto"
+            }
           }
         }
       },

@@ -5,6 +5,8 @@ import com.nfv.bookings.entities.BookingReservation;
 import com.nfv.bookings.entities.BookingSource;
 import com.nfv.bookings.entities.ReservationHotel;
 import com.nfv.bookings.entities.ReservationStatus;
+import com.nfv.bookings.entities.TodoReason;
+
 import jakarta.annotation.Nullable;
 import com.nfv.trips.logic.TripLogic;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +33,8 @@ class ReservationSteps {
     private final BookingReservationRepository repository;
     private final BookingLogic bookingLogic;
     private final TripLogic tripLogic;
+    private final BookingTodos todos;
+
     private final Clock clock;
 
     @Transactional(readOnly = true)
@@ -67,7 +71,7 @@ class ReservationSteps {
     }
 
     @Transactional
-    BookingReservation create(long appUserId, long stopId, long replacesBookingId, BookingReservation.Offer offer,
+    BookingReservation create(long appUserId, long stopId, @Nullable Long replacesBookingId, BookingReservation.Offer offer,
                               ReservationHotel hotel, BookingReservation.Holder holder) {
         return repository.save(new BookingReservation(appUserId, stopId, replacesBookingId, offer, hotel, holder,
                 OffsetDateTime.now(clock)));
@@ -133,9 +137,14 @@ class ReservationSteps {
         return reservation;
     }
 
-    /** Creates the booking at the stop (source {@code SEARCH}) and closes the reservation, in one transaction. */
+    /**
+     * Creates the booking at the stop (source {@code SEARCH}) and closes the reservation, in one transaction. The
+     * booking it replaces goes on the to-do list of the trip, to be cancelled.
+     *
+     * @param replacedName name of the replaced accommodation, {@code null} if it replaces none
+     */
     @Transactional
-    BookingView booked(long appUserId, long reservationId, String captureId, String replacedName) {
+    BookingView booked(long appUserId, long reservationId, String captureId, @Nullable String replacedName) {
         BookingReservation reservation = repository.findById(reservationId).orElseThrow();
         ReservationHotel hotel = reservation.getHotel();
         String reference = reservation.getProviderConfirmation() != null ? reservation.getProviderConfirmation()
@@ -149,9 +158,13 @@ class ReservationSteps {
                         null, hotel.checkInFrom(), hotel.checkInUntil(), hotel.checkOutUntil(), reservation.getGuests(),
                         reservation.getRooms(), reservation.getPrice(), reservation.getCurrency(),
                         reservation.isRefundable() ? reservation.getFreeCancellationUntil() : null,
-                        "In der App gebucht als Alternative zu „" + replacedName + "“, bezahlt mit PayPal. "
-                                + "LiteAPI-Buchung " + reservation.getProviderBookingId() + "."));
+                        (replacedName == null ? "In der App gebucht" : "In der App gebucht als Alternative zu „"
+                                + replacedName + "“") + ", bezahlt mit PayPal. LiteAPI-Buchung "
+                                + reservation.getProviderBookingId() + "."));
         reservation.booked(captureId, booking.booking().getId(), OffsetDateTime.now(clock));
+        if (reservation.getReplacesBookingId() != null) {
+            todos.obsolete(appUserId, reservation.getReplacesBookingId(), TodoReason.REPLACED);
+        }
         return booking;
     }
 }

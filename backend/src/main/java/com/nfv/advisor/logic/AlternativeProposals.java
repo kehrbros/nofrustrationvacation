@@ -10,7 +10,10 @@ import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.incidents.logic.RouteConsequence;
 import com.nfv.incidents.logic.RouteTooLate;
+import com.nfv.trips.entities.Route;
 import com.nfv.trips.logic.RouteSnapshots;
+import com.nfv.trips.logic.TripLogic;
+
 import com.nfv.trips.logic.TripItemNotFoundException;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +51,8 @@ public class AlternativeProposals {
             .thenComparingLong(RouteConsequence::id);
 
     private final RouteSnapshots routeSnapshots;
+    private final TripLogic tripLogic;
+
     private final ActiveIncidents activeIncidents;
     private final RouteSituations situations;
     private final AlternativeAgent agent;
@@ -67,8 +72,19 @@ public class AlternativeProposals {
      * @throws NoActiveConsequenceException   no current {@code TOO_LATE} or {@code DELAYED} consequence
      */
     public long start(long appUserId, long routeId, @Nullable Long consequenceId, @Nullable ProposalGoal goal) {
+        return start(appUserId, routeId, consequenceId, null, goal);
+    }
+
+    /**
+     * Like {@link #start(long, long, Long, ProposalGoal)}, the consequence also given by its incident (the app knows
+     * incidents, consequences are replaced by every assessment).
+     *
+     * @param incidentId {@code null}: any incident of the route
+     */
+    public long start(long appUserId, long routeId, @Nullable Long consequenceId, @Nullable Long incidentId,
+                      @Nullable ProposalGoal goal) {
         routeSnapshots.of(appUserId, routeId);
-        RouteConsequence consequence = chosen(routeId, consequenceId);
+        RouteConsequence consequence = chosen(routeId, consequenceId, incidentId);
         String situation = situations.of(routeId);
         OffsetDateTime now = OffsetDateTime.now(clock);
         record Started(long runId, boolean created) {
@@ -78,7 +94,7 @@ public class AlternativeProposals {
                     .filter(run -> !expired(run, now)).findFirst();
             return running.map(run -> new Started(run.getId(), false))
                     .orElseGet(() -> new Started(runRepository.save(new AdvisorRun(routeId, consequence.id(),
-                            RunTrigger.USER, goal == null ? ProposalGoal.ARRIVE_ON_TIME : goal, situation, null, now))
+                            consequence.incidentId(), RunTrigger.USER, goal == null ? ProposalGoal.ARRIVE_ON_TIME : goal, situation, null, now))
                             .getId(), true));
         }));
         if (started.created()) {
@@ -116,7 +132,7 @@ public class AlternativeProposals {
         long runId;
         try {
             runId = Objects.requireNonNull(transactionTemplate.execute(_ -> runRepository.save(new AdvisorRun(routeId,
-                    worst.get().id(), RunTrigger.AUTO, ProposalGoal.ARRIVE_ON_TIME, situation, key, now)).getId()));
+                    worst.get().id(), worst.get().incidentId(), RunTrigger.AUTO, ProposalGoal.ARRIVE_ON_TIME, situation, key, now)).getId()));
         } catch (DataIntegrityViolationException e) {
             // another event got there first, or route or consequence are gone by now
             log.debug("No automatic advisor run for route {}: {}", routeId, e.getMessage());
@@ -139,6 +155,15 @@ public class AlternativeProposals {
         routeSnapshots.of(appUserId, routeId);
         return transactionTemplate.execute(_ -> runRepository.findFirstByRouteIdOrderByIdDesc(routeId)
                 .map(AdvisorRun::getId)).map(runId -> read(routeId, runId));
+    }
+
+    /** The last run of every route of the trip that has one, in the order of the routes. */
+    public List<ProposalRun> latestOfTrip(long appUserId, long tripId) {
+        List<Long> routeIds = tripLogic.routes(appUserId, tripId).stream().map(Route::getId).toList();
+        return routeIds.stream()
+                .flatMap(routeId -> transactionTemplate.execute(_ -> runRepository.findFirstByRouteIdOrderByIdDesc(routeId)
+                        .map(AdvisorRun::getId)).map(runId -> read(routeId, runId)).stream())
+                .toList();
     }
 
     /** A restart ends what was running, otherwise those runs would keep the key of their situation. */
@@ -167,13 +192,17 @@ public class AlternativeProposals {
         return false;
     }
 
-    private RouteConsequence chosen(long routeId, @Nullable Long consequenceId) {
+    private RouteConsequence chosen(long routeId, @Nullable Long consequenceId, @Nullable Long incidentId) {
         List<RouteConsequence> all = activeIncidents.consequencesOnRoute(routeId);
         if (consequenceId != null && all.stream().noneMatch(c -> c.id() == consequenceId)) {
             throw new InvalidProposalInputException("consequence " + consequenceId + " is not on the route");
         }
+        if (incidentId != null && all.stream().noneMatch(c -> c.incidentId() == incidentId)) {
+            throw new InvalidProposalInputException("incident " + incidentId + " is not on the route");
+        }
         return all.stream()
                 .filter(c -> consequenceId == null || c.id() == consequenceId)
+                .filter(c -> incidentId == null || c.incidentId() == incidentId)
                 .filter(c -> !c.over() && (c.category() == Category.TOO_LATE || c.category() == Category.DELAYED))
                 .min(WORST_FIRST)
                 .orElseThrow(() -> new NoActiveConsequenceException(routeId));

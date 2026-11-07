@@ -8,6 +8,7 @@ import {
   checkReservationRoute,
   getReservation,
   reserveAlternative as reserveAlternativeRequest,
+  reserveAtStop as reserveAtStopRequest,
   searchAlternatives as searchAlternativesRequest,
   unfinishedReservations as unfinishedReservationsRequest,
 } from '../generated/api';
@@ -286,7 +287,35 @@ export async function reserveAlternative(bookingId: number, criteria: Criteria, 
   })));
 }
 
+/** An offer as a proposal holds it: hotel, offer, dates, guests and the total price, see Docs/advisor.md. */
+export interface StayOffer {
+  hotelId: string;
+  offerId: string;
+  checkIn: string;
+  checkOut: string;
+  guests: number;
+  rooms: number;
+  price: string;
+  currency: string;
+}
+
+/**
+ * Locks the price of an offer taken from a proposal and creates the PayPal payment: as an alternative to the booking
+ * it replaces, or at the stop (a night on the way). The price of the proposal is the maximum.
+ */
+export async function reserveStay(stopId: number, replacesBookingId: number | null, offer: StayOffer,
+  holder: Holder): Promise<Reservation> {
+  const body = {
+    hotelId: offer.hotelId, offerId: offer.offerId, checkIn: offer.checkIn, checkOut: offer.checkOut,
+    guests: offer.guests, rooms: offer.rooms, maxPrice: offer.price, currency: offer.currency, ...holder,
+  };
+  return toReservation(await unwrap(replacesBookingId != null
+    ? reserveAlternativeRequest({ path: { bookingId: replacesBookingId }, body })
+    : reserveAtStopRequest({ path: { stopId }, body })));
+}
+
 export async function fetchReservation(reservationId: number): Promise<Reservation> {
+
   return toReservation(await unwrap(getReservation({ path: { reservationId } })));
 }
 

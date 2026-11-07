@@ -8,15 +8,18 @@ import com.nfv.bookings.dto.AccommodationQueryDto;
 import com.nfv.bookings.dto.AccommodationSuggestionDto;
 import com.nfv.bookings.dto.AssistantStatusDto;
 import com.nfv.bookings.dto.BookingDto;
+import com.nfv.bookings.dto.BookingTodoDto;
 import com.nfv.bookings.entities.AccommodationDetails;
 import com.nfv.bookings.entities.Booking;
 import com.nfv.bookings.entities.BookingSource;
+import com.nfv.bookings.entities.BookingTodo;
 import com.nfv.bookings.logic.AccommodationDraft;
 import com.nfv.bookings.logic.AccommodationExtractor;
 import com.nfv.bookings.logic.AccommodationFacts;
 import com.nfv.bookings.logic.AccommodationLookup;
 import com.nfv.bookings.logic.AccommodationQuery;
 import com.nfv.bookings.logic.BookingLogic;
+import com.nfv.bookings.logic.BookingTodos;
 import com.nfv.bookings.logic.BookingView;
 import com.nfv.bookings.logic.NewAccommodationBooking;
 import com.nfv.user.security.CurrentUser;
@@ -51,6 +54,35 @@ public class BookingController {
     private final BookingLogic bookingLogic;
     private final AccommodationExtractor extractor;
     private final AccommodationLookup lookup;
+    private final BookingTodos todos;
+
+    @Operation(summary = "To-do list of a trip", description = "Bookings to cancel or to tell about a later arrival "
+            + "after the trip changed, the newest first, also those done.")
+    @GetMapping("/trips/{tripId}/booking-todos")
+    public List<BookingTodoDto> listTodos(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        return todos.list(user.appUserId(), tripId).stream().map(BookingController::toDto).toList();
+    }
+
+    @Operation(summary = "Mark a to-do as done", description = "CANCEL also marks the booking as cancelled in the "
+            + "app, the provider is not contacted.")
+    @PostMapping("/booking-todos/{todoId}/completion")
+    public BookingTodoDto completeTodo(@AuthenticationPrincipal CurrentUser user, @PathVariable long todoId) {
+        return toDto(todos.done(user.appUserId(), todoId));
+    }
+
+    @Operation(summary = "Open a to-do again", description = "The booking stays as it is.")
+    @DeleteMapping("/booking-todos/{todoId}/completion")
+    public BookingTodoDto reopenTodo(@AuthenticationPrincipal CurrentUser user, @PathVariable long todoId) {
+        return toDto(todos.reopen(user.appUserId(), todoId));
+    }
+
+    private static BookingTodoDto toDto(BookingTodo todo) {
+        return new BookingTodoDto(todo.getId(), todo.getTripId(), todo.getBookingId(), todo.getKind(),
+                todo.getReason(), todo.getTitle(), todo.getProvider(), todo.getReference(), todo.getManageUrl(),
+                todo.getPhone(), todo.getEmail(), todo.getStartsAt(), todo.getEndsAt(), todo.getCancellationDeadline(),
+                todo.isBookedInApp(), todo.getNewArrivalOn(), todo.getCreatedAt(), todo.getDoneAt());
+    }
+
 
     @Operation(summary = "Bookings of a trip", description = "All bookings at the stops of the trip, ascending by start.")
     @GetMapping("/trips/{tripId}/bookings")

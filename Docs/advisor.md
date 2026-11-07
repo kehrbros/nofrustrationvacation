@@ -1,6 +1,6 @@
 # Vorschläge durch den Agenten (`advisor`)
 
-- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V44`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Unterkünfte über `find_overnight_areas` und `search_accommodations` umgesetzt (`V46`, 2026-11-07), noch nicht gegen die LiteAPI-Sandbox geprüft, buchbar ist vorerst nur `TARGET_STAY` mit gebuchter Unterkunft. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
+- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V44`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Unterkünfte über `find_overnight_areas` und `search_accommodations` umgesetzt (`V46`, 2026-11-07), noch nicht gegen die LiteAPI-Sandbox geprüft, buchbar ist vorerst nur `TARGET_STAY` mit gebuchter Unterkunft. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Auswählen, Verwerfen und Frontend umgesetzt (`V47`, 2026-11-07), siehe [Auswählen und Verwerfen](#auswählen-und-verwerfen) und [Frontend](#frontend), nicht gegen LiteAPI- und PayPal-Sandbox geprüft.
 - **Ziel:** Trifft ein Incident eine Route, schlägt ein Agent vor, was der Nutzer tun kann. Bei `TOO_LATE` automatisch, bei `DELAYED` nur auf Anfrage des Nutzers.
 - **Grundsatz:** Das Modell wählt, vergleicht und begründet. Strecken, Zeiten und Konflikte berechnet das Backend. Das Modell ändert nichts an der Reise, das bestätigt immer der Nutzer.
 - **Abgrenzung:** `recommendations` berechnet Strecken deterministisch und ohne Modell ([recommendations.md](recommendations.md)). `advisor` nutzt diese Berechnung, entscheidet, was vorgeschlagen wird, und speichert das Ergebnis.
@@ -180,15 +180,40 @@ public class Stopovers {
   - Gespeichert wird das Angebot in den Spalten `stay_*` von `advisor_proposal` (`ProposalStay`), damit es ohne neue Suche gebucht werden kann. Das Backend prüft es beim Buchen erneut (Prebook).
 - **`appliesTo`:** wie `find_overnight_areas` (`overnightRelevant` und `stopover-enabled`), zusätzlich muss LiteAPI konfiguriert sein (`StayOptions.available`).
 - **Ohne Modell** (`withoutModel`): keine Unterkünfte, eine Suche kostet und braucht eine Abwägung.
-- **Buchen:** `TARGET_STAY` mit `replacesBookingId` über den bestehenden Ablauf: `POST /accommodation-bookings/{replacesBookingId}/alternative-reservations` mit `hotelId`, `offerId`, Zeitraum, `guests`, `rooms`, `currency` und `price` als `maxPrice`. Liegt das Hotel in einem anderen Ort, zieht der Stop mit ([accommodation-alternatives.md](accommodation-alternatives.md)). `STOPOVER` und `TARGET_STAY` ohne gebuchte Unterkunft brauchen eine Reservierung ohne `bookingId`, siehe unten.
+- **Buchen:** `TARGET_STAY` mit `replacesBookingId` über den bestehenden Ablauf: `POST /accommodation-bookings/{replacesBookingId}/alternative-reservations` mit `hotelId`, `offerId`, Zeitraum, `guests`, `rooms`, `currency` und `price` als `maxPrice`. Liegt das Hotel in einem anderen Ort, zieht der Stop mit ([accommodation-alternatives.md](accommodation-alternatives.md)). `STOPOVER` und `TARGET_STAY` ohne gebuchte Unterkunft: Reservierung am Stop ohne `bookingId`, `POST /stops/{stayStopId}/stay-reservations`, siehe unten.
 
 #### Übernachtung übernehmen
 
-- Entwurf, nach Bestätigung des Nutzers, nicht durch das Modell:
-  1. Buchen über den Ablauf in [accommodation-alternatives.md](accommodation-alternatives.md#ablauf): Prebook, PayPal, Book. Braucht eine Reservierung ohne `bookingId` (heute hängt jede Reservierung an einer bestehenden Buchung).
-  2. Erst danach `trips`: neuer Stop am Hotel mit Ankunft und Abfahrt am nächsten Tag, Route wird geteilt (Start → Hotel, Hotel → Ziel), beide neu geplant, `RouteChanged` → `incidents` bewertet neu. Die neue Buchung hängt am neuen Stop.
-  3. Reihenfolge, damit eine gescheiterte Buchung den Trip nicht ändert. Scheitert Schritt 2 nach der Buchung, bleibt die Buchung bestehen, der Nutzer bekommt einen Hinweis und kann den Stop von Hand anlegen.
-- Beim Übernehmen prüft das Backend das Angebot erneut, der Entwurf kann veraltet sein. Die Fahrten plant `trips` nach dem Teilen der Route.
+- **Umgesetzt anders als zuerst entworfen** (Philipp, 2026-11-07): erst den Stop anlegen, dann buchen. Der Entwurf („erst buchen, dann Stop“) brauchte eine Reservierung ohne Stop, und eine gescheiterte Buchung hätte den Trip nicht geändert. Jetzt sieht der Nutzer die neue Planung sofort und bucht danach am neuen Stop, wie jede Unterkunft.
+- Ablauf beim Übernehmen (`ProposalDecisions.accept`, nicht durch das Modell):
+  1. `trips`: neuer Stop am Hotel (Name = Ort des Angebots), Ankunft = ungefähre Ankunft des Vorschlags in der Zeitzone des Ziels, Abfahrt = Tag des Check-outs 09:00. Er kommt vor den Ziel-Stop der Route, die Route wird geteilt (Start → Hotel, Hotel → Ziel), beide neu geplant, `RouteChanged` → `incidents` bewertet neu. Die alte Route und mit ihr der Lauf werden gelöscht (`ON DELETE CASCADE`), die Entscheidung wird deshalb nicht gespeichert.
+  2. Ankunft am Ziel verschiebt sich um die Nächte, nicht vor die Abfahrt am neuen Stop und nicht nach die Abfahrt des Ziels.
+  3. Gebuchte Unterkünfte am Ziel, die vor dem Check-out-Tag beginnen, kommen auf die To-do-Liste (`NOTIFY_LATE_ARRIVAL`), siehe [domain.md](domain.md#bookings).
+  4. Danach öffnet das Frontend die Buchung am neuen Stop (`/reisen/{trip}/stops/{stayStopId}/unterkunft`), Ablauf wie [accommodation-alternatives.md](accommodation-alternatives.md#ablauf). Bucht der Nutzer nicht, bleibt der Stop ohne Unterkunft, er kann selbst eine eintragen oder den Stop löschen.
+- Der Weg zum Ort (`via`, Punkte der Option) wird vorerst nicht übernommen, die neue Route Start → Hotel plant `trips` neu.
+- Beim Buchen prüft das Backend das Angebot erneut, der Vorschlag kann veraltet sein.
+
+## Auswählen und Verwerfen
+
+- Der Nutzer wählt einen Vorschlag oder verwirft alle („Keine passt, ich plane selbst um“). Nur die Wahl wird an der Reise gespeichert, der Lauf behält die Entscheidung als Merker.
+- Läufe lassen sich jederzeit neu starten, auch nach dem Verwerfen. Ein verworfener Lauf kann trotzdem noch übernommen werden.
+- **Übernehmen** (`ProposalDecisions.accept`): Lauf muss fertig sein (`COMPLETED`, `COMPLETED_WITHOUT_MODEL`).
+  - `REROUTE`: Punkte des Vorschlags über `RouteChoice` wie `PUT /routes/{routeId}/choice`.
+  - `SHIFT_DEPARTURE`: neue Abfahrt über dasselbe `choice`.
+  - `KEEP_ROUTE`: ändert nichts.
+  - `TARGET_STAY`: ändert den Trip nicht, Antwort nennt `stayStopId` (Ziel-Stop) und `replacesBookingId`. Gebucht wird danach über den PayPal-Ablauf, mit `replacesBookingId` als Alternative, sonst über `stay-reservations`.
+  - `STOPOVER`: siehe [Übernachtung übernehmen](#übernachtung-übernehmen).
+  - Passt der Vorschlag nicht mehr zur Reise (Wegpunkte weg, Stop verschoben, ungültige Zeiten), `409` `PROPOSAL_NOT_APPLICABLE`, der Nutzer sucht neu.
+- **Ersatz gebucht:** Wird eine Unterkunft über `replacesBookingId` ersetzt, kommt die alte auf die To-do-Liste (`REPLACED`), sie wird nie automatisch storniert.
+
+## Frontend
+
+- `TripAlternativesSheet` (Klick auf eine Consequence auf der Karte oder im Banner): Abschnitt „Lösungen“ mit `ProposalsPanel`, darunter eingeklappt „Selbst umplanen“ mit den bisherigen abgeleiteten Wegen (Route, alternative Unterkunft).
+- `ProposalsPanel`: letzter Lauf der Route, Knopf „Lösungen suchen“/„Neu suchen“, Fortschritt (Abfrage alle 2,5 s, der Dialog darf geschlossen werden), Karten mit Titel, Kurzinfo, „Empfohlen“ für Rang 1, „Gewählt“ nach dem Übernehmen. Aufklappen zeigt die Wirkung und den Knopf zum Übernehmen. Hinweis bei `stale`.
+- **KI unsichtbar:** Texte baut das Frontend aus den Feldern (`proposalText.ts`), `summary` und `reason` des Modells werden nicht gezeigt (Englisch, siehe [Kontext des Modells](#kontext-des-modells)).
+- `ProposalsBanner` auf der Reiseseite: offener Lauf (fertig, Vorschläge, nicht entschieden) einer Route mit Incident verlinkt in den Dialog.
+- `StayBookingSheet` (`stops/:stopId/unterkunft`): Buchung des Hotels aus dem Vorschlag, Gastdaten, PayPal-Button, Rückkehr der Weiterleitung über `?reservierung=`.
+- To-do-Liste auf der Reiseseite (`TodoList`), siehe [domain.md](domain.md#bookings).
 
 ## Kontext des Modells
 
@@ -207,6 +232,7 @@ public class Stopovers {
   - `auto_key` (nur `AUTO`, eindeutig mit `route_id`; `NULL` kollidiert nicht)
   - `situation`: Hash aus Incidents mit Kategorie `TOO_LATE` oder `DELAYED`, Frist und Planankunft, siehe [Veraltete Vorschläge](#veraltete-vorschläge)
   - `summary`, `failure`, `created_at`, `finished_at`
+  - `V47`: `incident_id` (Incident, zu dem der Nutzer gefragt hat, `ON DELETE SET NULL`), `decision` (`ACCEPTED`, `DISMISSED`), `chosen_position`, `decided_at`. `@DynamicUpdate`, damit das Speichern der Entscheidung keine veralteten Spalten zurückschreibt.
 - `AdvisorProposal` (`advisor_proposal`): `run`, `position`, `kind`, `reason`, `via`, `departure_at`, `arrival_at`, `distance_meters`, `duration`, `delay`, `shared_ratio`, `meets_deadline`.
 - `advisor_proposal_point`: `proposal`, `position`, `latitude`, `longitude`, `road_hint`, `waypoint_id` (`ON DELETE SET NULL`). Reproduziert die Strecke beim Wählen.
 - `advisor_proposal_conflict`: `proposal`, `incident_id` (`ON DELETE CASCADE`), `impact`, `delay`.
@@ -220,11 +246,14 @@ public class Stopovers {
 
 ## API
 
-- `POST /api/v1/routes/{routeId}/alternative-proposals`: Body optional `consequenceId`, `goal` (`ARRIVE_ON_TIME`, `MINIMIZE_DELAY`, Standard `ARRIVE_ON_TIME`). Antwort `202` mit `runId`, läuft asynchron, weil mehrere Modellaufrufe nötig sind.
+- `POST /api/v1/routes/{routeId}/alternative-proposals`: Body optional `consequenceId`, `incidentId` (wählt die Consequence des Incidents auf der Route), `goal` (`ARRIVE_ON_TIME`, `MINIMIZE_DELAY`, Standard `ARRIVE_ON_TIME`). Antwort `202` mit `runId`, läuft asynchron, weil mehrere Modellaufrufe nötig sind.
 - `GET /api/v1/routes/{routeId}/alternative-proposals`: letzter Lauf der Route, auch der automatische. Ohne Lauf `200` mit `run: null`.
-- `GET /api/v1/alternative-proposals/{runId}`: `status`, `stale`, `summary`, `proposals`.
-- **Wählen:** `REROUTE` über `PUT /routes/{routeId}/choice` mit den Punkten des Vorschlags, `SHIFT_DEPARTURE` über dasselbe `choice` mit `departureAt` ([recommendations.md](recommendations.md#auswahl-speichern)). `KEEP_ROUTE` ändert nichts.
-- **Fehler** (`AdvisorExceptionHandler`): fremde oder unbekannte Route bzw. fremder Lauf `404` `TRIP_NOT_FOUND`, keine aktuelle `TOO_LATE`- oder `DELAYED`-Consequence `409` `NO_ACTIVE_CONSEQUENCE`, `consequenceId` gehört nicht zur Route `400` `INVALID_PROPOSAL_INPUT`.
+- `GET /api/v1/alternative-proposals/{runId}`: `status`, `stale`, `summary`, `proposals`, `consequenceId`, `incidentId`, `decision`, `chosenRank`, `decidedAt`.
+- `GET /api/v1/trips/{tripId}/alternative-proposals`: letzter Lauf je Route des Trips (für den Banner).
+- `POST /api/v1/alternative-proposals/{runId}/proposals/{rank}/acceptance`: übernimmt, Antwort `kind`, `plannedRouteIds`, `stayStopId`, `replacesBookingId`, `todosAdded`.
+- `POST /api/v1/alternative-proposals/{runId}/dismissal`: verwirft alle, Antwort der Lauf.
+- **Wählen:** über `acceptance`, siehe [Auswählen und Verwerfen](#auswählen-und-verwerfen). `PUT /routes/{routeId}/choice` ([recommendations.md](recommendations.md#auswahl-speichern)) bleibt für die Wahl von Hand.
+- **Fehler** (`AdvisorExceptionHandler`): fremde oder unbekannte Route bzw. fremder Lauf `404` `TRIP_NOT_FOUND`, keine aktuelle `TOO_LATE`- oder `DELAYED`-Consequence `409` `NO_ACTIVE_CONSEQUENCE`, `consequenceId` gehört nicht zur Route oder Rang unbekannt bzw. Lauf noch nicht fertig `400` `INVALID_PROPOSAL_INPUT`, Vorschlag passt nicht mehr zur Reise `409` `PROPOSAL_NOT_APPLICABLE`.
 - Geometrie für die Karte: siehe [Offen](#offen).
 
 ## Modell, Kontingent, Ausfall
@@ -282,15 +311,15 @@ nfv.recommendations.stopover.max-areas=5
 - Umgesetzt in `AlternativeProposalsTest` (Tools, Kontext, Werte aus dem Backend, ohne Modell, abgebrochene Läufe, Neustart, API), `ConsequenceMatchingTest` (`RouteTooLate`), `AutomaticProposalsTest` (`auto_key`, `runForSystem`, gleichzeitige Events, veraltetes Event, ausgeschaltet) und `RouteTooLateListenerTest` (Commit, Rollback).
 - `find_overnight_areas`: `OvernightAreaFinderTest` (Lage, Hindernis, Grenze, Auswahl), `StopoversTest` (Wellington: Ort hinter der Sperrung, frühere Sperrung, Verzögerung, Abendgrenze, unterwegs, Umfahrung, Eingaben), `OvernightAreaToolTest` (Kennungen, Fehler an das Modell, Schalter), `OvernightToolOfferedTest` (Lauf: Sperrung ohne Frist und `TOO_LATE` ja, Verzögerung innerhalb der Frist nein).
 - `search_accommodations`: `AccommodationSearchToolTest` (Ort und Ziel-Stop, Standardwerte, gebuchte Unterkunft, Umfahrung, Probleme und Fehler an das Modell, Schalter), `LiteApiStayOptionsTest` (harte Prüfung ohne Assistent, gebuchte Unterkunft, Fehler übersetzt), `StayProposalsTest` (Lauf mit `TARGET_STAY`, gespeichert und in der API).
+- Auswählen und Verwerfen: `ProposalDecisionsTest` (Wellington: `STOPOVER` legt Stop an und teilt die Route, To-do für die spätere Ankunft; `TARGET_STAY`; `SHIFT_DEPARTURE`; `REROUTE` mit Wegpunkten; Verwerfen und Läufe des Trips; Fehler 404/400/409; Start mit `incidentId`). To-do-Liste in `BookingApiTest` und `AlternativeApiTest`, Frontend-Texte in `proposalText.test.ts` und `todos.test.ts`.
 
 ## Offen
 
 - **Benachrichtigung:** Kanal und Schwellen offen ([architecture.md](architecture.md#offene-punkte)). Bis dahin sieht der Nutzer automatische Läufe nur in der App.
 - **Geometrie der Vorschläge:** Nicht gespeichert, die Karte braucht aber eine Linie. Speichern oder beim Öffnen aus den Punkten neu routen, beim Frontend zu entscheiden.
-- **Frontend:** Anzeige der Vorschläge im `IncidentSheet`, Hinweis `stale`, Knopf für den Lauf bei `DELAYED`.
 - **Mehrere Replicas:** Der Schutz vor doppelten Läufen hält über den Unique-Constraint, das Zurücksetzen beim Start müsste dann auf Läufe der eigenen Instanz oder ein Zeitlimit umgestellt werden.
 - **Aufräumen:** wie lange alte Läufe aufgehoben werden.
-- **Übernachtung unterwegs:** Standard für `latest_arrival` (feste Uhrzeit, Check-in des Hotels oder Wahl des Nutzers). Werte für `max-off-route-meters` und `min-spacing-meters` an echten Routen prüfen. **Ohne `evaluate_stopover` (Lukas, 2026-11-07, das Tool entfällt):** Ein `STOPOVER` übernimmt vorerst den Weg und die ungefähre Ankunft des Orts (2026-11-07). Offen bleibt die genaue Ankunft am Hotel und die Weiterfahrt am nächsten Tag.
-- **Unterkunft ohne gebuchte Unterkunft buchen:** `STOPOVER` und `TARGET_STAY` ohne `replacesBookingId` brauchen eine Reservierung ohne `bookingId` und danach den neuen Stop, siehe [Übernachtung übernehmen](#übernachtung-übernehmen). Bis dahin zeigt das Frontend sie nur an.
+- **Übernachtung unterwegs:** Standard für `latest_arrival` (feste Uhrzeit, Check-in des Hotels oder Wahl des Nutzers). Werte für `max-off-route-meters` und `min-spacing-meters` an echten Routen prüfen. **Ohne `evaluate_stopover` (Lukas, 2026-11-07, das Tool entfällt):** Ein `STOPOVER` übernimmt vorerst die ungefähre Ankunft des Orts, den Weg dorthin plant `trips` neu (2026-11-07). Offen bleibt die genaue Ankunft am Hotel, der Weg des Vorschlags und die Uhrzeit der Weiterfahrt (fest 09:00).
+- **Texte des Modells:** `summary` und `reason` sind Englisch und werden nicht gezeigt. Sollen sie sichtbar werden, braucht es Deutsch bzw. eine Sprache je Nutzer.
 - **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).

@@ -41,6 +41,7 @@ public class BookingLogic {
     private final AccommodationDetailsRepository accommodationRepository;
     private final TripLogic tripLogic;
     private final TimeZones timeZones;
+    private final BookingTodos todos;
 
     /** All bookings at the stops of the trip, ascending by start. */
     public List<BookingView> list(long appUserId, long tripId) {
@@ -99,6 +100,8 @@ public class BookingLogic {
     public BookingView cancel(long appUserId, long bookingId) {
         Booking booking = owned(appUserId, bookingId);
         booking.cancel();
+        todos.cancelled(bookingId);
+
         return new BookingView(booking, accommodationRepository.findByBookingId(bookingId).orElse(null));
     }
 

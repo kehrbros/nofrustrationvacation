@@ -1,8 +1,10 @@
 package com.nfv.advisor.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.annotation.Nullable;
 
 @Schema(description = "The last run of a route")
-public record RouteProposalRunDto(@Schema(description = "null if the route has no run") @Nullable ProposalRunDto run) {
+public record RouteProposalRunDto(
+        // no @Nullable: springdoc would turn the referenced schema itself into type null
+        @Schema(description = "Absent if the route has no run") ProposalRunDto run) {
+
 }

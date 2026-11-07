@@ -4,7 +4,9 @@ import AuthCallback from './auth/AuthCallback';
 import AlternativesSheet from './bookings/AlternativesSheet';
 import BookingSheet from './bookings/BookingSheet';
 import ShareTargetPage from './bookings/ShareTargetPage';
+import StayBookingSheet from './bookings/StayBookingSheet';
 import StopBookingSheet from './bookings/StopBookingSheet';
+
 import { CALLBACK_PATH } from './auth/paths';
 import RequireAuth from './auth/RequireAuth';
 import { SHARE_PATH } from './bookings/shareTarget';
@@ -51,6 +53,8 @@ export default function App() {
       >
         <Route path="stops/neu" element={<StopSheet />} />
         <Route path="stops/:stopId/buchung" element={<StopBookingSheet />} />
+        <Route path="stops/:stopId/unterkunft" element={<StayBookingSheet />} />
+
         <Route path="buchungen/:bookingId" element={<BookingSheet />} />
         <Route path="buchungen/:bookingId/alternativen" element={<AlternativesSheet />} />
         <Route path="hinweise/:routeId/:incidentId" element={<IncidentSheet />} />

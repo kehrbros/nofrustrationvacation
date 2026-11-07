@@ -15,6 +15,10 @@ public class BookingNotFoundException extends BusinessException {
         return new BookingNotFoundException("BOOKING_NOT_FOUND", "booking " + bookingId + " not found");
     }
 
+    public static BookingNotFoundException todo(long todoId) {
+        return new BookingNotFoundException("TODO_NOT_FOUND", "to-do " + todoId + " not found");
+    }
+
     public static BookingNotFoundException stop(long stopId) {
         return new BookingNotFoundException("STOP_NOT_FOUND", "stop " + stopId + " not found");
     }

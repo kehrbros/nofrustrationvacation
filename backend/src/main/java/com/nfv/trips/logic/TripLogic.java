@@ -148,7 +148,7 @@ public class TripLogic {
         Trip trip = get(appUserId, tripId);
         List<Stop> stops = stopRepository.findByTripIdOrderByPosition(tripId);
         if (!stops.isEmpty()) {
-            events.publishEvent(new StopsDeleting(tripId, stops.stream().map(Stop::getId).toList()));
+            events.publishEvent(new StopsDeleting(tripId, stops.stream().map(Stop::getId).toList(), true));
         }
         deleteRoutes(routeRepository.findByTripId(tripId));
         stopRepository.deleteAll(stops);
@@ -265,7 +265,8 @@ public class TripLogic {
         Trip trip = get(appUserId, tripId);
         List<Stop> stops = new ArrayList<>(stopRepository.findByTripIdOrderByPosition(tripId));
         Stop stop = find(stops, stopId);
-        events.publishEvent(new StopsDeleting(tripId, List.of(stopId)));
+        events.publishEvent(new StopsDeleting(tripId, List.of(stopId), false));
+
         stops.remove(stop);
         Set<Long> created = syncRoutes(trip, stops);
         stopRepository.delete(stop);
