@@ -134,11 +134,12 @@ class OvernightAreaToolTest {
     }
 
     private static RunContext run(boolean relevant) {
-        return new RunContext(1, 2, false, null, relevant, draft(ProposalKind.KEEP_ROUTE));
+        return new RunContext(1, 2, false, null, relevant, draft(ProposalKind.KEEP_ROUTE), null);
     }
 
     private static ProposalDraft draft(ProposalKind kind) {
         return new ProposalDraft(kind, null, DEPARTURE, DEPARTURE.plusHours(6), 1000.0, Duration.ofHours(6),
-                Duration.ZERO, null, null, List.of(), List.of(), kind == ProposalKind.KEEP_ROUTE ? List.of() : PATH);
+                Duration.ZERO, null, null, List.of(), List.of(), kind == ProposalKind.KEEP_ROUTE ? List.of() : PATH,
+                null);
     }
 }

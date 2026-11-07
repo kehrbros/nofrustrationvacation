@@ -10,7 +10,9 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 @Schema(description = "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. "
-        + "SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose.")
+        + "SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose. STOPOVER: a night at the hotel in "
+        + "stay, on the way given by waypoints (empty: the planned route), arrivalAt is approximate at the place. "
+        + "TARGET_STAY: another accommodation at the target stop, the route stays.")
 public record ProposalDto(
         @Schema(description = "1 is the best") int rank,
         ProposalKind kind,
@@ -26,5 +28,6 @@ public record ProposalDto(
         @Schema(description = "Reaches the arrival time of the target stop, null if it has none")
         @Nullable Boolean meetsDeadline,
         List<ChoicePointDto> waypoints,
-        @Schema(description = "Incidents still passed on this way") List<ConflictDto> conflicts) {
+        @Schema(description = "Incidents still passed on this way") List<ConflictDto> conflicts,
+        @Schema(description = "STOPOVER and TARGET_STAY only") @Nullable ProposalStayDto stay) {
 }

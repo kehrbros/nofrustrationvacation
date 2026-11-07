@@ -1,6 +1,6 @@
 # Vorschläge durch den Agenten (`advisor`)
 
-- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V44`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
+- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V44`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Unterkünfte über `find_overnight_areas` und `search_accommodations` umgesetzt (`V46`, 2026-11-07), noch nicht gegen die LiteAPI-Sandbox geprüft, buchbar ist vorerst nur `TARGET_STAY` mit gebuchter Unterkunft. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
 - **Ziel:** Trifft ein Incident eine Route, schlägt ein Agent vor, was der Nutzer tun kann. Bei `TOO_LATE` automatisch, bei `DELAYED` nur auf Anfrage des Nutzers.
 - **Grundsatz:** Das Modell wählt, vergleicht und begründet. Strecken, Zeiten und Konflikte berechnet das Backend. Das Modell ändert nichts an der Reise, das bestätigt immer der Nutzer.
 - **Abgrenzung:** `recommendations` berechnet Strecken deterministisch und ohne Modell ([recommendations.md](recommendations.md)). `advisor` nutzt diese Berechnung, entscheidet, was vorgeschlagen wird, und speichert das Ergebnis.
@@ -81,18 +81,25 @@ flowchart LR
 
 ### Später: Unterkünfte und Nachricht an die Unterkunft
 
-Bis auf `find_overnight_areas` noch nicht umgesetzt, dort gibt es vorerst nur die Schnittstellen, ohne Implementierung und ohne Tool. Das Modell bekommt diese Tools also nicht angeboten, solange sie fehlen. `find_overnight_areas` ist fertig, aber ausgeschaltet, bis `search_accommodations` da ist (`stopover-enabled`, siehe [Konfiguration](#konfiguration)).
+`find_overnight_areas` und `search_accommodations` sind umgesetzt, an beiden hängt `stopover-enabled` (Standard `true`, siehe [Konfiguration](#konfiguration)). `draft_late_arrival_notice` fehlt noch, dafür gibt es nur die Schnittstelle ohne Implementierung und ohne Tool.
 
 ```java
 /** Unterkünfte, wenn die Route nicht rechtzeitig fahrbar ist. Orte: siehe Stopovers unten. */
 public interface StayOptions {
-    List<StayOffer> search(long appUserId, StaySearch search);
+    boolean available();                                       // LiteAPI konfiguriert
+    List<StayOffer> search(long appUserId, StaySearch search);  // ohne Modell, harte Prüfung, SearchLimiter
+    Optional<BookedStay> bookedStay(long appUserId, long tripId, long stopId);
 
     record StaySearch(double latitude, double longitude, int radiusMeters, LocalDate checkIn, LocalDate checkOut,
-                      @Nullable BigDecimal maxPrice) {}
+                      int guests, int rooms, @Nullable BigDecimal maxPrice, String currency,
+                      @Nullable String excludeHotelId, int maxResults) {}
     record StayOffer(String hotelId, String offerId, String name, double latitude, double longitude,
-                     int distanceMeters, BigDecimal price, String currency, boolean refundable,
-                     @Nullable OffsetDateTime freeCancellationUntil) {}
+                     int distanceMeters, @Nullable Double stars, @Nullable Double rating, @Nullable String boardName,
+                     BigDecimal price, String currency, boolean refundable,
+                     @Nullable LocalDateTime freeCancellationUntil) {}
+    record BookedStay(long bookingId, ..., @Nullable LocalDate checkIn, @Nullable LocalDate checkOut,
+                      @Nullable Integer guests, int rooms, @Nullable BigDecimal maxPrice, String currency,
+                      @Nullable String hotelId) {}
 }
 
 /** Entwurf einer Nachricht an die Unterkunft bei später Ankunft, senden muss der Nutzer. */
@@ -104,12 +111,12 @@ public interface LateArrivalNotices {
 }
 ```
 
-- Feldtypen beim Umsetzen gegen `bookings` prüfen. Die Implementierung liegt später als Adapter in `advisor`, damit `bookings` das Modul nicht kennt.
+- Die Implementierungen liegen als Adapter in `advisor` (`LiteApiStayOptions`), damit `bookings` das Modul nicht kennt. Feldtypen wie in `bookings`: `freeCancellationUntil` ist lokal am Hotel (`LocalDateTime`), Preise sind Gesamtpreise des Aufenthalts in der Währung des Angebots.
 - **Tools:**
-  - `find_overnight_areas(route_option_id?, latest_arrival?, max_results?)` (umgesetzt, ausgeschaltet): Orte vor dem Hindernis, auf der geplanten Route oder einer Umfahrung, die rechtzeitig erreichbar sind, siehe [unten](#find_overnight_areas). Nötig, weil `AlternativeSearch.criteriaFor` um die gebuchte Unterkunft sucht, also genau dort, wo der Nutzer nicht hinkommt.
-  - `search_accommodations(area_id | TARGET_STOP, radius_meters, check_in, check_out, max_price?)`: braucht eine Variante von `AlternativeSearch` ohne `bookingId` und ohne `AlternativeRanking`, sonst ruft ein Tool des Modells wieder das Modell auf. Harte Prüfung und `SearchLimiter` bleiben.
+  - `find_overnight_areas(route_option_id?, latest_arrival?, max_results?)` (umgesetzt): Orte vor dem Hindernis, auf der geplanten Route oder einer Umfahrung, die rechtzeitig erreichbar sind, siehe [unten](#find_overnight_areas). Nötig, weil `AlternativeSearch.criteriaFor` um die gebuchte Unterkunft sucht, also genau dort, wo der Nutzer nicht hinkommt.
+  - `search_accommodations(area_id?, radius_km?, check_in?, check_out?, max_price?, max_results?)` (umgesetzt): Hotels um einen Ort oder den Ziel-Stop, siehe [unten](#search_accommodations).
   - `draft_late_arrival_notice`: oft die günstigste Lösung, wenn nur der Check-in zu spät ist. Kontaktdaten ergänzt das Backend, sie gehen nicht an das Modell.
-- **Neue `kind`:** `STOPOVER`, `NOTIFY_ACCOMMODATION`, kommen mit den Tools (Spalte `VARCHAR`, keine Migration nötig). Ebenso das Ziel `STAY_OVERNIGHT` und die Buchungen im Kontext des Modells.
+- **Neue `kind`:** `STOPOVER` und `TARGET_STAY` (umgesetzt, das Angebot steht in `stay`, Migration `V46`), `NOTIFY_ACCOMMODATION` kommt mit `draft_late_arrival_notice`. Ebenso das Ziel `STAY_OVERNIGHT`. Buchungen stehen weiter nicht im Kontext des Modells, `search_accommodations` sagt nur `replaces_booked_stay`.
 - Es gilt [accommodation-alternatives.md](accommodation-alternatives.md#rollen-assistant-und-liteapi): Das Modell löst keine Buchung aus.
 
 #### Logik in `recommendations` (`Stopovers`)
@@ -156,6 +163,25 @@ public class Stopovers {
 - **`appliesTo`** (`RunContext.overnightRelevant`): eine zählende Consequence ist `TOO_LATE` oder nicht passierbar (`delay == null`). Das zweite auch ohne Frist: Ohne Frist gibt es nie `TOO_LATE`, und bei einer Sperrung ohne Ende kann die Übernachtung die einzige Lösung sein (Lukas, 2026-11-07). Später auch beim Ziel `STAY_OVERNIGHT`. Dazu muss `stopover-enabled` an sein.
 - **Ohne Modell** (`withoutModel`): keine Orte, sie wären allein kein Vorschlag.
 
+#### `search_accommodations`
+
+- **Wozu:** Macht aus einem Ort von `find_overnight_areas` oder dem Ziel-Stop Vorschläge, die der Nutzer buchen kann. Nutzt dieselbe Suche wie [accommodation-alternatives.md](accommodation-alternatives.md): `AlternativeSearch.offers` in `bookings`, eine Variante von `search` ohne `bookingId` und ohne `AlternativeRanking` (ein Tool des Modells ruft nicht wieder das Modell auf). Harte Prüfung, günstigstes Angebot je Hotel und `SearchLimiter` (Suchen je Nutzer und Stunde) bleiben, ein Aufruf des Tools ist eine Suche des Nutzers.
+- **Parameter** (alle Pflicht, `null` für den Standard):
+  - `area_id`: `area_<n>` aus `find_overnight_areas` → `STOPOVER`; `null` → Ziel-Stop der Route → `TARGET_STAY`. Unbekannte Id → `ToolInputException`.
+  - `radius_km`: 0,5–50, Standard 5 (wie `default-radius`). Außerhalb → Fehler aus `AlternativeSearch.validate` an das Modell.
+  - `check_in`, `check_out` (ISO-Datum): Standard am Ort das Datum der ungefähren Ankunft und der Tag danach; am Ziel-Stop aus der gebuchten Unterkunft (`criteriaFor`), sonst Ankunft und Abfahrt des Stops, sonst eine Nacht. Ohne Ankunft am Stop muss das Modell `check_in` angeben.
+  - `max_price`: Gesamtpreis in der Währung der Antwort. Standard: am Ziel-Stop der (anteilige) Preis der gebuchten Unterkunft wie im bestehenden Ablauf, sonst ohne Grenze.
+  - `max_results`: 1–5, Standard 3.
+- **Vom Backend, nicht vom Modell:** Koordinaten (Ort, gebuchte Unterkunft oder Stop), Gäste und Zimmer (gebuchte Unterkunft, sonst `Trip.travelers`, sonst 2; ein Zimmer je zwei Gäste), Währung (gebuchte Unterkunft, sonst EUR), das gebuchte Hotel wird ausgeschlossen.
+- **Antwort:** `problem` (`null`, `NO_OFFERS`, `NO_LOCATION`, `RATE_LIMITED`, `SEARCH_UNAVAILABLE`), `place`, Zeitraum, `nights`, `guests`, `rooms`, `currency`, `max_price` und je Angebot eine Option `stay_<n>` wie die anderen Optionen, mit `stay`: Hotel, Entfernung, Sterne, Bewertung, Verpflegung, Preis, Storno, `replaces_booked_stay`. Ein Ausfall von LiteAPI oder ein verbrauchtes Kontingent beendet den Lauf nicht, das Modell sieht nur das Problem.
+- **Vorschlag:**
+  - `STOPOVER`: Weg wie die Option des Orts (`keep_route` oder `route_<n>`: `via`, Punkte, Abfahrt, Konflikte), `arrival_at` die ungefähre Ankunft am Ort. Der Weg zum Hotel wird nicht geroutet, `meets_deadline` bleibt leer.
+  - `TARGET_STAY`: geplante Route mit den Werten von `keep_route`, dazu das Angebot. Mit gebuchter Unterkunft am Stop `replacesBookingId`.
+  - Gespeichert wird das Angebot in den Spalten `stay_*` von `advisor_proposal` (`ProposalStay`), damit es ohne neue Suche gebucht werden kann. Das Backend prüft es beim Buchen erneut (Prebook).
+- **`appliesTo`:** wie `find_overnight_areas` (`overnightRelevant` und `stopover-enabled`), zusätzlich muss LiteAPI konfiguriert sein (`StayOptions.available`).
+- **Ohne Modell** (`withoutModel`): keine Unterkünfte, eine Suche kostet und braucht eine Abwägung.
+- **Buchen:** `TARGET_STAY` mit `replacesBookingId` über den bestehenden Ablauf: `POST /accommodation-bookings/{replacesBookingId}/alternative-reservations` mit `hotelId`, `offerId`, Zeitraum, `guests`, `rooms`, `currency` und `price` als `maxPrice`. Liegt das Hotel in einem anderen Ort, zieht der Stop mit ([accommodation-alternatives.md](accommodation-alternatives.md)). `STOPOVER` und `TARGET_STAY` ohne gebuchte Unterkunft brauchen eine Reservierung ohne `bookingId`, siehe unten.
+
 #### Übernachtung übernehmen
 
 - Entwurf, nach Bestätigung des Nutzers, nicht durch das Modell:
@@ -184,6 +210,7 @@ public class Stopovers {
 - `AdvisorProposal` (`advisor_proposal`): `run`, `position`, `kind`, `reason`, `via`, `departure_at`, `arrival_at`, `distance_meters`, `duration`, `delay`, `shared_ratio`, `meets_deadline`.
 - `advisor_proposal_point`: `proposal`, `position`, `latitude`, `longitude`, `road_hint`, `waypoint_id` (`ON DELETE SET NULL`). Reproduziert die Strecke beim Wählen.
 - `advisor_proposal_conflict`: `proposal`, `incident_id` (`ON DELETE CASCADE`), `impact`, `delay`.
+- `V46`: Angebot von `STOPOVER`/`TARGET_STAY` in `advisor_proposal`, Spalten `stay_hotel_id`, `stay_offer_id`, `stay_hotel_name`, `stay_latitude`, `stay_longitude`, `stay_place`, `stay_distance_meters`, `stay_check_in`, `stay_check_out`, `stay_guests`, `stay_rooms`, `stay_price` (`NUMERIC(12, 2)` in der Währung des Angebots, Ausnahme wie `booking_reservation`, siehe [money.md](money.md)), `stay_currency`, `stay_refundable`, `stay_free_cancellation_until`, `stay_replaces_booking_id` (`ON DELETE SET NULL`).
 - Texte als `VARCHAR(n)`, Dauern über `DurationConverter`, siehe [architecture.md](architecture.md#persistence).
 
 ### Veraltete Vorschläge
@@ -214,7 +241,7 @@ public class Stopovers {
 ## Abhängigkeiten
 
 - `advisor → recommendations`, `→ incidents`, `→ trips`, `→ assistant`. Kein anderes Modul kennt `advisor`, kein Zyklus. Rückwärts nur über das Event `RouteTooLate` aus `incidents.logic`.
-- Vorerst kein `advisor → bookings`, das kommt mit dem Adapter für `StayOptions` und `LateArrivalNotices`.
+- `advisor → bookings` nur im Adapter `LiteApiStayOptions` (`AlternativeSearch.offers`, `criteriaFor`, `BookingLogic.list`). Später auch für `LateArrivalNotices`.
 - **`trips.logic`:** Eigentümer einer Route lesen, `RouteSnapshots.ownerOf(routeId)`. Der automatische Lauf kennt nur die `routeId`, `Suggestions` und `RouteSnapshots` verlangen `appUserId`.
 - `TripTools` lassen sich nicht wiederverwenden: Sie lesen den Nutzer aus dem `SecurityContext`, den ein Hintergrundlauf nicht hat. Die Tools von `advisor` rufen dieselbe Logik auf.
 
@@ -225,7 +252,7 @@ nfv.advisor.max-turns=8
 nfv.advisor.max-proposals=3
 nfv.advisor.run-timeout=15m
 nfv.advisor.auto-enabled=false
-nfv.advisor.stopover-enabled=false
+nfv.advisor.stopover-enabled=true
 # Orte für Übernachtungen, Werte sind Standard
 nfv.recommendations.stopover.latest-arrival=22:00
 nfv.recommendations.stopover.max-off-route-meters=5000
@@ -234,7 +261,7 @@ nfv.recommendations.stopover.default-areas=3
 nfv.recommendations.stopover.max-areas=5
 ```
 
-- `stopover-enabled`: Bietet dem Modell `find_overnight_areas` an. Standard `false`, bis `search_accommodations` da ist: Mit einem Ort allein kann das Modell nichts vorschlagen, das Tool kostet dann nur eine Runde.
+- `stopover-enabled`: Bietet dem Modell `find_overnight_areas` und `search_accommodations` an (das zweite nur mit LiteAPI-Key). Standard `true` seit `search_accommodations` da ist (2026-11-07). In den Test-Properties `false`, nur die Tests der Unterkunfts-Tools schalten es ein.
 - `auto-enabled`: Schaltet nur die Läufe durch `RouteTooLate`, die des Nutzers gehen immer. **Standard vorerst `false` (Lukas, 2026-11-07):** Eingeschaltet gehen Routen und Zeiten ohne Zutun des Nutzers an OpenAI. Einschalten erst nach dem Lauf gegen die echte API und mit dem Hinweis in App und Datenschutzerklärung. Solange gibt es trotz `TOO_LATE` keinen Lauf ohne Anfrage des Nutzers.
 - In den Test-Properties steht es ausdrücklich auf `false`, sonst würde jeder Test mit `TOO_LATE` einen Lauf im Hintergrund starten, auch nach einem Wechsel des Standards. Nur `RouteTooLateListenerTest` schaltet es ein.
 
@@ -254,6 +281,7 @@ nfv.recommendations.stopover.max-areas=5
 - API: `202`, fremde Route `404`, `DELAYED` startet nur durch den Nutzer, `NO_ACTIVE_CONSEQUENCE`, laufender Lauf wird wiederverwendet, `stale` nach geänderter Lage.
 - Umgesetzt in `AlternativeProposalsTest` (Tools, Kontext, Werte aus dem Backend, ohne Modell, abgebrochene Läufe, Neustart, API), `ConsequenceMatchingTest` (`RouteTooLate`), `AutomaticProposalsTest` (`auto_key`, `runForSystem`, gleichzeitige Events, veraltetes Event, ausgeschaltet) und `RouteTooLateListenerTest` (Commit, Rollback).
 - `find_overnight_areas`: `OvernightAreaFinderTest` (Lage, Hindernis, Grenze, Auswahl), `StopoversTest` (Wellington: Ort hinter der Sperrung, frühere Sperrung, Verzögerung, Abendgrenze, unterwegs, Umfahrung, Eingaben), `OvernightAreaToolTest` (Kennungen, Fehler an das Modell, Schalter), `OvernightToolOfferedTest` (Lauf: Sperrung ohne Frist und `TOO_LATE` ja, Verzögerung innerhalb der Frist nein).
+- `search_accommodations`: `AccommodationSearchToolTest` (Ort und Ziel-Stop, Standardwerte, gebuchte Unterkunft, Umfahrung, Probleme und Fehler an das Modell, Schalter), `LiteApiStayOptionsTest` (harte Prüfung ohne Assistent, gebuchte Unterkunft, Fehler übersetzt), `StayProposalsTest` (Lauf mit `TARGET_STAY`, gespeichert und in der API).
 
 ## Offen
 
@@ -262,6 +290,7 @@ nfv.recommendations.stopover.max-areas=5
 - **Frontend:** Anzeige der Vorschläge im `IncidentSheet`, Hinweis `stale`, Knopf für den Lauf bei `DELAYED`.
 - **Mehrere Replicas:** Der Schutz vor doppelten Läufen hält über den Unique-Constraint, das Zurücksetzen beim Start müsste dann auf Läufe der eigenen Instanz oder ein Zeitlimit umgestellt werden.
 - **Aufräumen:** wie lange alte Läufe aufgehoben werden.
-- **Übernachtung unterwegs:** Standard für `latest_arrival` (feste Uhrzeit, Check-in des Hotels oder Wahl des Nutzers). Werte für `max-off-route-meters` und `min-spacing-meters` an echten Routen prüfen. **Ohne `evaluate_stopover` (Lukas, 2026-11-07, das Tool entfällt) offen:** Wie aus einem Angebot von `search_accommodations` ein Vorschlag mit `kind` `STOPOVER` wird; ohne eigene Prüfung fehlen dem Modell die genaue Ankunft am Hotel und die Weiterfahrt am nächsten Tag.
+- **Übernachtung unterwegs:** Standard für `latest_arrival` (feste Uhrzeit, Check-in des Hotels oder Wahl des Nutzers). Werte für `max-off-route-meters` und `min-spacing-meters` an echten Routen prüfen. **Ohne `evaluate_stopover` (Lukas, 2026-11-07, das Tool entfällt):** Ein `STOPOVER` übernimmt vorerst den Weg und die ungefähre Ankunft des Orts (2026-11-07). Offen bleibt die genaue Ankunft am Hotel und die Weiterfahrt am nächsten Tag.
+- **Unterkunft ohne gebuchte Unterkunft buchen:** `STOPOVER` und `TARGET_STAY` ohne `replacesBookingId` brauchen eine Reservierung ohne `bookingId` und danach den neuen Stop, siehe [Übernachtung übernehmen](#übernachtung-übernehmen). Bis dahin zeigt das Frontend sie nur an.
 - **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).

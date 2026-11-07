@@ -1,10 +1,12 @@
 package com.nfv.advisor.api;
 
 import com.nfv.advisor.dto.ProposalDto;
+import com.nfv.advisor.dto.ProposalStayDto;
 import com.nfv.advisor.dto.ProposalRequestDto;
 import com.nfv.advisor.dto.ProposalRunDto;
 import com.nfv.advisor.dto.ProposalRunStartedDto;
 import com.nfv.advisor.dto.RouteProposalRunDto;
+import com.nfv.advisor.entities.ProposalStay;
 import com.nfv.advisor.logic.AlternativeProposals;
 import com.nfv.advisor.logic.ProposalRun;
 import com.nfv.recommendations.dto.ChoicePointDto;
@@ -71,7 +73,14 @@ public class AlternativeProposalController {
                 p.points().stream().map(q -> new ChoicePointDto(q.latitude(), q.longitude(), q.roadHint(),
                         q.waypointId())).toList(),
                 p.conflicts().stream().map(c -> new ConflictDto(c.incidentId(), c.impact(), seconds(c.delay())))
-                        .toList());
+                        .toList(),
+                p.stay() == null ? null : toDto(p.stay()));
+    }
+
+    private static ProposalStayDto toDto(ProposalStay s) {
+        return new ProposalStayDto(s.hotelId(), s.offerId(), s.hotelName(), s.latitude(), s.longitude(), s.place(),
+                s.distanceMeters(), s.checkIn(), s.checkOut(), s.guests(), s.rooms(), s.price(), s.currency(),
+                s.refundable(), s.freeCancellationUntil(), s.replacesBookingId());
     }
 
     private static @Nullable Long seconds(@Nullable Duration duration) {

@@ -21,22 +21,39 @@ public final class RunContext {
     private final boolean underway;
     private final @Nullable OffsetDateTime deadline;
     private final boolean overnightRelevant;
+    private final @Nullable Target target;
     private final Map<String, ProposalDraft> options = new LinkedHashMap<>();
     private final Map<String, Area> areas = new LinkedHashMap<>();
     private int next = 1;
     private int nextArea = 1;
 
-    /** A place found for a stay, input for later tools. Not an option, {@code submit_proposals} cannot name it. */
-    record Area(String name, double latitude, double longitude, @Nullable String routeOptionId) {
+    /**
+     * A place found for a stay, input for later tools. Not an option, {@code submit_proposals} cannot name it.
+     *
+     * @param arrivalAt approximate, see {@code find_overnight_areas}
+     */
+    record Area(String name, double latitude, double longitude, OffsetDateTime arrivalAt,
+                @Nullable String routeOptionId) {
+    }
+
+    /**
+     * The stop the route leads to, for a stay there.
+     *
+     * @param travelers of the trip, null if not given
+     */
+    record Target(long tripId, long stopId, String name, @Nullable Double latitude, @Nullable Double longitude,
+                  @Nullable OffsetDateTime arrivalAt, @Nullable OffsetDateTime departureAt,
+                  @Nullable Integer travelers) {
     }
 
     RunContext(long appUserId, long consequenceId, boolean underway, @Nullable OffsetDateTime deadline,
-               boolean overnightRelevant, ProposalDraft keepRoute) {
+               boolean overnightRelevant, ProposalDraft keepRoute, @Nullable Target target) {
         this.appUserId = appUserId;
         this.consequenceId = consequenceId;
         this.underway = underway;
         this.deadline = deadline;
         this.overnightRelevant = overnightRelevant;
+        this.target = target;
         options.put(KEEP_ROUTE, keepRoute);
     }
 
@@ -62,6 +79,16 @@ public final class RunContext {
         return overnightRelevant;
     }
 
+    /** Null in tests that do not need it. */
+    @Nullable Target target() {
+        return target;
+    }
+
+    /** The planned route, always registered. */
+    ProposalDraft keepRoute() {
+        return options.get(KEEP_ROUTE);
+    }
+
     /** @return the id for the model */
     String registerArea(Area area) {
         String id = "area_" + nextArea++;
@@ -75,7 +102,13 @@ public final class RunContext {
 
     /** @return the id for the model */
     String register(ProposalDraft draft) {
-        String id = (draft.kind() == ProposalKind.REROUTE ? "route_" : "departure_") + next++;
+        String prefix = switch (draft.kind()) {
+            case REROUTE -> "route_";
+            case SHIFT_DEPARTURE -> "departure_";
+            case STOPOVER, TARGET_STAY -> "stay_";
+            case KEEP_ROUTE -> throw new IllegalArgumentException("keep_route is registered at the start");
+        };
+        String id = prefix + next++;
         options.put(id, draft);
         return id;
     }

@@ -2874,7 +2874,7 @@
       },
       "ProposalDto" : {
         "type" : "object",
-        "description" : "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose.",
+        "description" : "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose. STOPOVER: a night at the hotel in stay, on the way given by waypoints (empty: the planned route), arrivalAt is approximate at the place. TARGET_STAY: another accommodation at the target stop, the route stays.",
         "properties" : {
           "arrivalAt" : {
             "type" : [ "string", "null" ],
@@ -2906,7 +2906,7 @@
           },
           "kind" : {
             "type" : "string",
-            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE" ]
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY" ]
           },
           "meetsDeadline" : {
             "type" : [ "boolean", "null" ],
@@ -2925,6 +2925,10 @@
             "type" : [ "number", "null" ],
             "format" : "double",
             "description" : "Part of the distance shared with the planned route"
+          },
+          "stay" : {
+            "$ref" : "#/components/schemas/ProposalStayDto",
+            "description" : "STOPOVER and TARGET_STAY only"
           },
           "via" : {
             "type" : [ "string", "null" ],
@@ -3014,6 +3018,76 @@
           "runId" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }
+      },
+      "ProposalStayDto" : {
+        "type" : "null",
+        "description" : "Offer of a hotel as the agent found it. Booking checks it again. With replacesBookingId it is booked like an alternative: POST /accommodation-bookings/{replacesBookingId}/alternative-reservations with hotelId, offerId, checkIn, checkOut, guests, rooms, currency and price as maxPrice. A stay without booking to replace cannot be booked yet.",
+        "properties" : {
+          "checkIn" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "checkOut" : {
+            "type" : "string",
+            "format" : "date"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "distanceMeters" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "From place, straight line"
+          },
+          "freeCancellationUntil" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Local at the hotel"
+          },
+          "guests" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "hotelId" : {
+            "type" : "string"
+          },
+          "hotelName" : {
+            "type" : "string"
+          },
+          "latitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : "number",
+            "format" : "double"
+          },
+          "offerId" : {
+            "type" : "string"
+          },
+          "place" : {
+            "type" : "string",
+            "description" : "Area or target stop the search looked around"
+          },
+          "price" : {
+            "type" : "string",
+            "format" : "decimal",
+            "description" : "Total for the stay incl. fee",
+            "example" : "189.00"
+          },
+          "refundable" : {
+            "type" : "boolean"
+          },
+          "replacesBookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "TARGET_STAY: the accommodation booked at the target stop that this one replaces"
+          },
+          "rooms" : {
+            "type" : "integer",
+            "format" : "int32"
           }
         }
       },

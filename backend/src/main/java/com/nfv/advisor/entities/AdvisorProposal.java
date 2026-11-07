@@ -5,6 +5,7 @@ import jakarta.annotation.Nullable;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -53,6 +54,9 @@ public class AdvisorProposal extends AbstractEntity {
     @ElementCollection
     @CollectionTable(name = "advisor_proposal_conflict", joinColumns = @JoinColumn(name = "proposal_id"))
     private List<ProposalConflict> conflicts = new ArrayList<>();
+    /** {@code STOPOVER} and {@code TARGET_STAY} only. */
+    @Embedded
+    private @Nullable ProposalStay stay;
 
     protected AdvisorProposal() {
     }
@@ -61,7 +65,7 @@ public class AdvisorProposal extends AbstractEntity {
                            @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
                            @Nullable Double distanceMeters, @Nullable Duration duration, @Nullable Duration delay,
                            @Nullable Double sharedRatio, @Nullable Boolean meetsDeadline, List<ProposalPoint> points,
-                           List<ProposalConflict> conflicts) {
+                           List<ProposalConflict> conflicts, @Nullable ProposalStay stay) {
         this.position = position;
         this.kind = kind;
         this.reason = reason == null || reason.length() <= MAX_REASON ? reason : reason.substring(0, MAX_REASON);
@@ -75,6 +79,7 @@ public class AdvisorProposal extends AbstractEntity {
         this.meetsDeadline = meetsDeadline;
         this.points.addAll(points);
         this.conflicts.addAll(conflicts);
+        this.stay = stay;
     }
 
     void belongsTo(AdvisorRun run) {

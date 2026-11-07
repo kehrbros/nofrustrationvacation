@@ -80,7 +80,7 @@ class OvernightAreaTool implements AdvisorTool {
         ArrayNode areas = answer.putArray("areas");
         result.areas().forEach(area -> areas.addObject()
                 .put("area_id", run.registerArea(new RunContext.Area(area.name(), area.latitude(), area.longitude(),
-                        optionId)))
+                        area.arrivalAt(), optionId)))
                 .put("name", area.name())
                 .put("kind", area.kind().name())
                 .put("arrival_at", area.arrivalAt().toString())

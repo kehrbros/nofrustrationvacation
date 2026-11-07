@@ -4,6 +4,7 @@ import com.nfv.advisor.entities.AdvisorProposal;
 import com.nfv.advisor.entities.AdvisorRun;
 import com.nfv.advisor.entities.ProposalGoal;
 import com.nfv.advisor.entities.ProposalKind;
+import com.nfv.advisor.entities.ProposalStay;
 import com.nfv.advisor.entities.RunStatus;
 import com.nfv.advisor.entities.RunTrigger;
 import com.nfv.incidents.entities.Impact;
@@ -26,7 +27,7 @@ public record ProposalRun(long runId, long routeId, RunTrigger trigger, Proposal
                            @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
                            @Nullable Double distanceMeters, @Nullable Duration duration, @Nullable Duration delay,
                            @Nullable Double sharedRatio, @Nullable Boolean meetsDeadline, List<Point> points,
-                           List<Conflict> conflicts) {
+                           List<Conflict> conflicts, @Nullable ProposalStay stay) {
     }
 
     public record Point(double latitude, double longitude, @Nullable String roadHint, @Nullable Long waypointId) {
@@ -48,6 +49,7 @@ public record ProposalRun(long runId, long routeId, RunTrigger trigger, Proposal
                 p.getPoints().stream().map(q -> new Point(q.getLatitude(), q.getLongitude(), q.getRoadHint(),
                         q.getWaypointId())).toList(),
                 p.getConflicts().stream().map(c -> new Conflict(c.getIncidentId(), c.getImpact(), c.getDelay()))
-                        .toList());
+                        .toList(),
+                p.getStay());
     }
 }

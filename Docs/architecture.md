@@ -85,6 +85,7 @@ flowchart LR
     advisor --> incidents
     advisor --> trips
     advisor --> assistant
+    advisor --> bookings
     incidents -.->|RouteTooLate| advisor
     network -.->|NetworkRefreshed| trips
 ```

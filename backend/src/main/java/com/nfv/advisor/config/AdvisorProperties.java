@@ -13,8 +13,8 @@ import java.time.Duration;
  * @param runTimeout   an unfinished run older than this counts as abandoned
  * @param autoEnabled  {@code RouteTooLate} starts runs, those of the user work either way. Off until the loop was
  *                     tested against the real API and the privacy notice exists
- * @param stopoverEnabled the model is offered {@code find_overnight_areas}. Off until {@code search_accommodations}
- *                     exists: the model cannot do anything with a place on its own
+ * @param stopoverEnabled the model is offered {@code find_overnight_areas} and {@code search_accommodations} (the
+ *                     latter only with LiteAPI configured)
  */
 @ConfigurationProperties("nfv.advisor")
 public record AdvisorProperties(
@@ -22,5 +22,5 @@ public record AdvisorProperties(
         @DefaultValue("3") int maxProposals,
         @DefaultValue("15m") Duration runTimeout,
         @DefaultValue("false") boolean autoEnabled,
-        @DefaultValue("false") boolean stopoverEnabled) {
+        @DefaultValue("true") boolean stopoverEnabled) {
 }

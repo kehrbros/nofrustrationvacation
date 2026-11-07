@@ -113,6 +113,31 @@ public class AlternativeSearch {
     /** Offers that meet all criteria, best first: ranked by the assistant if available, else by price. */
     public SearchResult search(long appUserId, long bookingId, AlternativeCriteria criteria) {
         BookingView view = bookingLogic.accommodation(appUserId, bookingId);
+        Offers found = find(appUserId, criteria, properties.maxCandidates());
+        List<AlternativeCandidate> ranked = ranking.rank(appUserId, view.booking(), view.accommodation(),
+                found.candidates());
+        boolean byAssistant = ranked.stream().anyMatch(candidate -> candidate.reason() != null);
+        return new SearchResult(ranked, byAssistant && !ranked.isEmpty() ? ranked.getFirst().hotelId() : null,
+                byAssistant, found.checked());
+    }
+
+    /**
+     * Offers that meet all criteria, cheapest first, without a booking and without the assistant: for the agent, whose
+     * tool must not call the model again, see Docs/advisor.md#search_accommodations. Same hard check and limit.
+     *
+     * @param maxResults at most this many, never more than {@code max-candidates}
+     * @throws InvalidBookingInputException criteria out of range
+     * @throws SearchRateLimitedException   searches of the user used up
+     * @throws LiteApiUnavailableException  LiteAPI not configured or failing
+     */
+    public List<AlternativeCandidate> offers(long appUserId, AlternativeCriteria criteria, int maxResults) {
+        return find(appUserId, criteria, Math.min(maxResults, properties.maxCandidates())).candidates();
+    }
+
+    private record Offers(List<AlternativeCandidate> candidates, int checked) {
+    }
+
+    private Offers find(long appUserId, AlternativeCriteria criteria, int limit) {
         validate(criteria);
         limiter.acquire(appUserId);
         List<LiteApi.HotelOffer> offers = liteApi.rates(new LiteApi.RateQuery(criteria.latitude(), criteria.longitude(),
@@ -131,12 +156,9 @@ public class AlternativeSearch {
         List<AlternativeCandidate> candidates = cheapest.values().stream()
                 .sorted(Comparator.comparing(AlternativeCandidate::price)
                         .thenComparingInt(AlternativeCandidate::distanceMeters))
-                .limit(properties.maxCandidates())
+                .limit(limit)
                 .toList();
-        List<AlternativeCandidate> ranked = ranking.rank(appUserId, view.booking(), view.accommodation(), candidates);
-        boolean byAssistant = ranked.stream().anyMatch(candidate -> candidate.reason() != null);
-        return new SearchResult(ranked, byAssistant && !ranked.isEmpty() ? ranked.getFirst().hotelId() : null,
-                byAssistant, offers.size());
+        return new Offers(candidates, offers.size());
     }
 
     /** The hard check: the candidate with our price, or null if any criterion is not met. */

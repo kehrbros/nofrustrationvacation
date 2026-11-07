@@ -4,6 +4,7 @@ import com.nfv.advisor.entities.AdvisorProposal;
 import com.nfv.advisor.entities.ProposalConflict;
 import com.nfv.advisor.entities.ProposalKind;
 import com.nfv.advisor.entities.ProposalPoint;
+import com.nfv.advisor.entities.ProposalStay;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.logic.RouteConsequence;
 import com.nfv.network.logic.RoutedSegment;
@@ -24,11 +25,13 @@ import java.util.Objects;
  * An option as calculated by the backend, before the model adds its reason.
  *
  * @param path driven segments for tools that look along the option, neither stored nor shown to the model
+ * @param stay the offer, {@code STOPOVER} and {@code TARGET_STAY} only
  */
 record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDateTime departureAt,
                      @Nullable OffsetDateTime arrivalAt, @Nullable Double distanceMeters, @Nullable Duration duration,
                      @Nullable Duration delay, @Nullable Double sharedRatio, @Nullable Boolean meetsDeadline,
-                     List<ProposalPoint> points, List<ProposalConflict> conflicts, List<RoutedSegment> path) {
+                     List<ProposalPoint> points, List<ProposalConflict> conflicts, List<RoutedSegment> path,
+                     @Nullable ProposalStay stay) {
 
     static ProposalDraft of(SuggestedOption option, @Nullable OffsetDateTime deadline) {
         return new ProposalDraft(option.kind() == OptionKind.DEPARTURE_SHIFT ? ProposalKind.SHIFT_DEPARTURE
@@ -39,7 +42,7 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
                         p.waypointId())).toList(),
                 option.conflicts().stream().map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay()))
                         .toList(),
-                option.path());
+                option.path(), null);
     }
 
     /**
@@ -57,12 +60,27 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
         Boolean meets = schedule.deadline() == null ? null : arrival != null && !arrival.isAfter(schedule.deadline());
         return new ProposalDraft(ProposalKind.KEEP_ROUTE, null, schedule.departure(), arrival, null, null, delay, null,
                 meets, List.of(), counting.stream()
-                .map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay())).toList(), List.of());
+                .map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay())).toList(), List.of(), null);
+    }
+
+    /**
+     * A night along {@code route} (keep_route or a route_ option): drive it as far as the area, so its points, departure
+     * and incidents stay. Arrival is the approximate one at the area, the way to the hotel is not routed.
+     */
+    static ProposalDraft stopover(ProposalDraft route, OffsetDateTime arrivalAtArea, ProposalStay stay) {
+        return new ProposalDraft(ProposalKind.STOPOVER, route.via, route.departureAt, arrivalAtArea, null, null, null,
+                route.sharedRatio, null, route.points, route.conflicts, List.of(), stay);
+    }
+
+    /** Another accommodation at the target stop: the planned route stays, with its numbers. */
+    static ProposalDraft targetStay(ProposalDraft keepRoute, ProposalStay stay) {
+        return new ProposalDraft(ProposalKind.TARGET_STAY, null, keepRoute.departureAt, keepRoute.arrivalAt, null,
+                null, keepRoute.delay, null, keepRoute.meetsDeadline, List.of(), keepRoute.conflicts, List.of(), stay);
     }
 
     AdvisorProposal toProposal(int position, @Nullable String reason) {
         return new AdvisorProposal(position, kind, reason, via, departureAt, arrivalAt, distanceMeters, duration, delay,
-                sharedRatio, meetsDeadline, points, conflicts);
+                sharedRatio, meetsDeadline, points, conflicts, stay);
     }
 
     /** The option as the model sees it. No geometry, it would only cost tokens. */
@@ -78,6 +96,20 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
         node.put("delay_minutes", delay == null ? null : delay.toMinutes());
         node.put("shared_with_planned_route", sharedRatio == null ? null : Math.round(sharedRatio * 100) / 100.0);
         node.put("meets_deadline", meetsDeadline);
+        if (stay != null) {
+            ObjectNode hotel = node.putObject("stay");
+            hotel.put("hotel", stay.hotelName());
+            hotel.put("place", stay.place());
+            hotel.put("distance_km", Math.round(stay.distanceMeters() / 100.0) / 10.0);
+            hotel.put("check_in", stay.checkIn().toString());
+            hotel.put("check_out", stay.checkOut().toString());
+            hotel.put("price", stay.price());
+            hotel.put("currency", stay.currency());
+            hotel.put("refundable", stay.refundable());
+            hotel.put("free_cancellation_until",
+                    stay.freeCancellationUntil() == null ? null : stay.freeCancellationUntil().toString());
+            hotel.put("replaces_booked_stay", stay.replacesBookingId() != null);
+        }
         ArrayNode passed = node.putArray("incidents_passed");
         conflicts.forEach(conflict -> {
             ObjectNode item = passed.addObject().put("incident_id", conflict.getIncidentId())
