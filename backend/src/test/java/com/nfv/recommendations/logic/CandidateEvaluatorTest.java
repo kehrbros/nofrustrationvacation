@@ -45,6 +45,27 @@ class CandidateEvaluatorTest {
         assertThat(outcome.conflicts()).isEmpty();
     }
 
+    @Test
+    void passagesAreMovedByTheDelaysBeforeThemAndMarkTheClosure() {
+        List<CandidateEvaluator.Step> steps = List.of(new CandidateEvaluator.Step(1, 1000, Duration.ofMinutes(10)),
+                new CandidateEvaluator.Step(2, 2000, Duration.ofMinutes(20)),
+                new CandidateEvaluator.Step(3, 3000, Duration.ofMinutes(30)));
+        ActiveIncident delay = incident(Impact.DELAYED, Duration.ofMinutes(5), null, VehicleScope.ALL);
+        ActiveIncident closure = new ActiveIncident(8, Impact.BLOCKED, null, null, DEPARTURE.minusHours(1),
+                DEPARTURE.plusHours(5), Set.of(2L), List.of(), VehicleScope.ALL);
+
+        CandidateEvaluator.Outcome outcome = CandidateEvaluator.evaluate(steps, DEPARTURE, RouteOptions.none(),
+                List.of(delay, closure));
+
+        assertThat(outcome.passages()).extracting(CandidateEvaluator.Passage::blocked)
+                .containsExactly(false, true, false);
+        assertThat(outcome.passages().get(0).end()).isEqualTo(DEPARTURE.plusMinutes(10));
+        assertThat(outcome.passages().get(1).start()).isEqualTo(DEPARTURE.plusMinutes(15));
+        assertThat(outcome.passages().get(2).start()).isEqualTo(DEPARTURE.plusMinutes(35));
+        assertThat(outcome.passages().get(2).metersBefore()).isEqualTo(3000);
+        assertThat(outcome.blocked()).isTrue();
+    }
+
     private static CandidateEvaluator.Outcome evaluate(ActiveIncident incident) {
         return CandidateEvaluator.evaluate(STEPS, DEPARTURE, RouteOptions.none(), List.of(incident));
     }

@@ -20,15 +20,23 @@ public final class RunContext {
     private final long consequenceId;
     private final boolean underway;
     private final @Nullable OffsetDateTime deadline;
+    private final boolean overnightRelevant;
     private final Map<String, ProposalDraft> options = new LinkedHashMap<>();
+    private final Map<String, Area> areas = new LinkedHashMap<>();
     private int next = 1;
+    private int nextArea = 1;
+
+    /** A place found for a stay, input for later tools. Not an option, {@code submit_proposals} cannot name it. */
+    record Area(String name, double latitude, double longitude, @Nullable String routeOptionId) {
+    }
 
     RunContext(long appUserId, long consequenceId, boolean underway, @Nullable OffsetDateTime deadline,
-               ProposalDraft keepRoute) {
+               boolean overnightRelevant, ProposalDraft keepRoute) {
         this.appUserId = appUserId;
         this.consequenceId = consequenceId;
         this.underway = underway;
         this.deadline = deadline;
+        this.overnightRelevant = overnightRelevant;
         options.put(KEEP_ROUTE, keepRoute);
     }
 
@@ -47,6 +55,22 @@ public final class RunContext {
 
     public @Nullable OffsetDateTime deadline() {
         return deadline;
+    }
+
+    /** The route is too late or cannot be passed, also without a deadline: a stay along the way can be the answer. */
+    public boolean overnightRelevant() {
+        return overnightRelevant;
+    }
+
+    /** @return the id for the model */
+    String registerArea(Area area) {
+        String id = "area_" + nextArea++;
+        areas.put(id, area);
+        return id;
+    }
+
+    Optional<Area> area(String id) {
+        return Optional.ofNullable(areas.get(id));
     }
 
     /** @return the id for the model */

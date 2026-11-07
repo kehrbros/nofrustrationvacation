@@ -29,12 +29,26 @@ final class CandidateEvaluator {
     }
 
     /**
+     * When one step is driven.
+     *
+     * @param start        moved by the delays before this step
+     * @param end          without the delay of this step, which only moves the following ones
+     * @param metersBefore distance driven before this step
+     * @param blocked      passes a closure here
+     */
+    record Passage(OffsetDateTime start, OffsetDateTime end, double metersBefore, double meters, long segmentId,
+                   boolean blocked) {
+    }
+
+    /**
      * @param delay     sum of the delays on the way, already in {@code arrival}
      * @param blocked   passes a closure (blocked segment or incident with impact {@code BLOCKED}) during its validity
      * @param conflicts incidents passed during their validity, each once
+     * @param passages  one per step, in order
      */
     record Outcome(OffsetDateTime departure, OffsetDateTime arrival, double distanceMeters, Duration duration,
-                   Duration delay, boolean blocked, List<SuggestedOption.Conflict> conflicts) {
+                   Duration delay, boolean blocked, List<SuggestedOption.Conflict> conflicts,
+                   List<Passage> passages) {
         Set<Long> incidentIds() {
             Set<Long> ids = new HashSet<>();
             conflicts.forEach(conflict -> ids.add(conflict.incidentId()));
@@ -59,12 +73,11 @@ final class CandidateEvaluator {
         boolean blocked = false;
         Set<Long> delayedSeen = new HashSet<>();
         Map<Long, SuggestedOption.Conflict> conflicts = new LinkedHashMap<>();
+        List<Passage> passages = new ArrayList<>(steps.size());
         for (Step step : steps) {
             OffsetDateTime end = passage.plus(step.duration());
             Duration extra = Duration.ZERO;
-            if (constraints.blockedSegmentIds().contains(step.segmentId())) {
-                blocked = true;
-            }
+            boolean closed = constraints.blockedSegmentIds().contains(step.segmentId());
             Duration scenarioDelay = constraints.delayedSegments().get(step.segmentId());
             if (scenarioDelay != null && delayedSeen.add(step.segmentId())) {
                 extra = extra.plus(scenarioDelay);
@@ -77,17 +90,20 @@ final class CandidateEvaluator {
                 conflicts.put(incident.id(), new SuggestedOption.Conflict(incident.id(), incident.impact(),
                         incident.delay()));
                 if (incident.impact() == Impact.BLOCKED) {
-                    blocked = true;
+                    closed = true;
                 } else if (incident.delay() != null) {
                     extra = extra.plus(incident.delay());
                 }
             }
+            passages.add(new Passage(passage, end, distance, step.distanceMeters(), step.segmentId(), closed));
+            blocked = blocked || closed;
             delay = delay.plus(extra);
             duration = duration.plus(step.duration());
             distance += step.distanceMeters();
             passage = end.plus(extra);
         }
-        return new Outcome(departure, passage, distance, duration, delay, blocked, List.copyOf(conflicts.values()));
+        return new Outcome(departure, passage, distance, duration, delay, blocked, List.copyOf(conflicts.values()),
+                List.copyOf(passages));
     }
 
     /** Part of the distance on segments of the other way, {@code null} without the other way. */
