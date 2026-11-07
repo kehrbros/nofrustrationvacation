@@ -92,7 +92,7 @@ public class RegionImport {
         return graphs.status(region);
     }
 
-    /** Graph imported before V44: only the places are missing, the graph in use stays whatever happens here. */
+    /** Graph imported before V45: only the places are missing, the graph in use stays whatever happens here. */
     private void fillMissingPlaces(String region, NetworkProperties.Region config, long versionId) {
         if (placeWriter.hasPlaces(region)) {
             return;

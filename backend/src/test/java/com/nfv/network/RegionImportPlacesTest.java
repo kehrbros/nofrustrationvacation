@@ -94,7 +94,7 @@ class RegionImportPlacesTest {
     @Test
     void loadingAGraphWithoutPlacesAddsOnlyThePlaces() {
         long imported = regionImport.importRegion(REGION).extractVersionId();
-        // as before V44: the graph is there, the places are not
+        // as before V45: the graph is there, the places are not
         removePlaces();
 
         RegionStatus status = regionImport.loadOrImport(REGION);

@@ -1,6 +1,6 @@
 # Vorschläge durch den Agenten (`advisor`)
 
-- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V43`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
+- **Status:** beschlossen 2026-11-06 (Lukas). Läufe auf Anfrage des Nutzers und automatische Läufe (`RouteTooLate`) umgesetzt (`V44`, Agent, Tools, API), getestet mit geskriptetem Modell, noch nie gegen die echte API. Automatische Läufe sind vorerst ausgeschaltet, siehe [Konfiguration](#konfiguration). Das Frontend fehlt noch.
 - **Ziel:** Trifft ein Incident eine Route, schlägt ein Agent vor, was der Nutzer tun kann. Bei `TOO_LATE` automatisch, bei `DELAYED` nur auf Anfrage des Nutzers.
 - **Grundsatz:** Das Modell wählt, vergleicht und begründet. Strecken, Zeiten und Konflikte berechnet das Backend. Das Modell ändert nichts an der Reise, das bestätigt immer der Nutzer.
 - **Abgrenzung:** `recommendations` berechnet Strecken deterministisch und ohne Modell ([recommendations.md](recommendations.md)). `advisor` nutzt diese Berechnung, entscheidet, was vorgeschlagen wird, und speichert das Ergebnis.
@@ -173,7 +173,7 @@ public class Stopovers {
 
 ## Datenmodell
 
-- Eigene Tabellen, Migration `V43`, abgeleitet und nicht historisiert. `@ManyToOne` nur innerhalb des Moduls, `route_id` als Id mit Fremdschlüssel. Wird die Route gelöscht, löscht die Datenbank die Läufe mit (`ON DELETE CASCADE`).
+- Eigene Tabellen, Migration `V44`, abgeleitet und nicht historisiert. `@ManyToOne` nur innerhalb des Moduls, `route_id` als Id mit Fremdschlüssel. Wird die Route gelöscht, löscht die Datenbank die Läufe mit (`ON DELETE CASCADE`).
 - `AdvisorRun` (`advisor_run`):
   - `route_id`, `consequence_id` (vom Nutzer gewählt, sonst die schlimmste der Route, `ON DELETE SET NULL`)
   - `trigger` (`AUTO`, `USER`, Spalte `run_trigger`), `goal` (optional)
@@ -243,7 +243,7 @@ nfv.recommendations.stopover.max-areas=5
 1. Doku.
 2. `recommendations`: `forConsequence`, nur betroffene Abschnitte, `DEPARTURE_SHIFT`, bereits unterwegs, ohne Modell testbar.
 3. `assistant`: `ToolConversation`, gegen eine gemockte API getestet (`ToolConversationTest`). Vor dem ersten Betrieb einmal gegen die echte API prüfen, besonders das Wiederholen des verschlüsselten Reasonings.
-4. `advisor`: Migration `V43`, Agent, Tools, API, Schnittstellen `StayOptions` und `LateArrivalNotices`. Erste Läufe gegen die echte API.
+4. `advisor`: Migration `V44`, Agent, Tools, API, Schnittstellen `StayOptions` und `LateArrivalNotices`. Erste Läufe gegen die echte API.
 5. `incidents`: `RouteTooLate` in `assessRoute`, Listener und `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, Schalter `nfv.advisor.auto-enabled` (umgesetzt, Standard vorerst `false`). Erst damit und eingeschaltet laufen automatische Läufe.
 
 ## Tests

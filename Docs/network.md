@@ -40,12 +40,12 @@
 
 ## Orte
 
-- **Tabelle `place`** (`V44`): `region`, `extract_version_id`, `name`, `kind` (`CITY`, `TOWN`, `VILLAGE`), `geometry(Point, 4326)` mit GIST-Index. Niemand verweist darauf, kein stabiler Schlüssel nötig.
+- **Tabelle `place`** (`V45`): `region`, `extract_version_id`, `name`, `kind` (`CITY`, `TOWN`, `VILLAGE`), `geometry(Point, 4326)` mit GIST-Index. Niemand verweist darauf, kein stabiler Schlüssel nötig.
 - **Lesen (`PlaceReader`):** eigener Durchlauf über den Extrakt mit `OSMInputFile`, GraphHopper behält keine Knoten. OSM-Knoten mit `place=city|town|village` und Name, Wege und Relationen werden übersprungen.
   - **Geprüft 2026-11-07 am NZ-Extrakt:** 637 Orte (20 `city`, 186 `town`, 431 `village`), rund 13 s. Nur Knoten reicht: Von 45 Orten, die als Weg oder Relation eingetragen sind, hat nur einer keinen Knoten gleichen Namens (The Sands / Te Tumu).
 - **Schreiben (`PlaceWriter.replace`):** ersetzt alle Orte der Region in einer Transaktion, Abfragen sehen also nie zwei Versionen und brauchen keinen Filter nach Version.
 - **Import:** nach den Segmenten, vor `version.ready`. Fehler lässt den Import scheitern, Graph und Orte der alten Version bleiben.
-- **Start (`loadOrImport`, nach `V44`):** Hat die Region keine Orte (`hasPlaces`), liest der Start nur die Orte nach, kein neuer Import. Ein Fehler dabei wird geloggt, der Graph bleibt in Gebrauch, es gibt keine Orte bis zum nächsten Import oder Start. Eine Region ganz ohne Orte liest sie bei jedem Start erneut.
+- **Start (`loadOrImport`, nach `V45`):** Hat die Region keine Orte (`hasPlaces`), liest der Start nur die Orte nach, kein neuer Import. Ein Fehler dabei wird geloggt, der Graph bleibt in Gebrauch, es gibt keine Orte bis zum nächsten Import oder Start. Eine Region ganz ohne Orte liest sie bei jedem Start erneut.
 - **Abfrage:** `Places.near(segmentIds, maxDistanceMeters)` → `PlaceNearRoute`: Ort, Position des nächsten Segments im Weg (`pathIndex`), Lage darauf (`segmentFraction`, `ST_LineLocatePoint` je Segment), Abstand (`offRouteMeters`).
   - Segment statt Linie über den ganzen Weg: `ST_LineLocatePoint` misst auf `geometry(4326)` in Grad, auf einer langen Linie verzerrt das den Anteil. Auf einem Segment fällt das nicht ins Gewicht.
   - Jeder Ort einmal, am nächsten Segment. Fährt der Weg zweimal daran vorbei (hin und zurück), zählt die erste Durchfahrt; Abstände werden dafür in ganzen Metern verglichen.
