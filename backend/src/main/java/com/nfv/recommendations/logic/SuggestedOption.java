@@ -2,6 +2,7 @@ package com.nfv.recommendations.logic;
 
 import com.nfv.incidents.entities.Impact;
 import com.nfv.network.logic.GeoPoint;
+import com.nfv.network.logic.RoutedSegment;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
@@ -21,11 +22,13 @@ import java.util.Set;
  * @param geometry    line for the map
  * @param points      via points that become the waypoints of the route when the option is chosen
  * @param conflicts   incidents still passed on this way
+ * @param path        driven segments in order, for {@link Stopovers}; not part of the API
  */
 public record SuggestedOption(int rank, OptionKind kind, Set<OptionLabel> labels, @Nullable String via,
                               OffsetDateTime departureAt, OffsetDateTime arrivalAt, double distanceMeters,
                               Duration duration, Duration waiting, Duration delay, @Nullable Double sharedRatio,
-                              List<GeoPoint> geometry, List<Point> points, List<Conflict> conflicts) {
+                              List<GeoPoint> geometry, List<Point> points, List<Conflict> conflicts,
+                              List<RoutedSegment> path) {
 
     /** @param waypointId existing waypoint of the user that this point keeps ({@code FOLLOW}) */
     public record Point(double latitude, double longitude, @Nullable String roadHint, @Nullable Long waypointId) {

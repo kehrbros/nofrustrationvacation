@@ -99,7 +99,8 @@ flowchart LR
 ## Datenmodell
 
 - **Keine eigenen Tabellen:** `V29__recommendations.sql` hatte `suggestion_set`, `route_option` und Untertabellen angelegt, `V38__drop_suggestion_sets.sql` löscht sie wieder. Vorschläge sind Records in `recommendations.logic` (`SuggestionResult`, `SuggestedOption` mit `Point` und `Conflict`), die Geometrie als `List<GeoPoint>` (kein JTS in `recommendations`).
-- `SuggestedOption`: `rank` (1 = beste), `kind`, `labels`, `via`, `departureAt`, `arrivalAt`, `distanceMeters`, `duration`, `waiting`, `delay`, `sharedRatio`, `geometry`, `points`, `conflicts`.
+- `SuggestedOption`: `rank` (1 = beste), `kind`, `labels`, `via`, `departureAt`, `arrivalAt`, `distanceMeters`, `duration`, `waiting`, `delay`, `sharedRatio`, `geometry`, `points`, `conflicts`, `path`.
+  - `path`: gefahrene Segmente in Reihenfolge, für `Stopovers`. Nicht in der API.
   - `points`: Via-Punkte (Koordinate, `roadHint`, optional `waypointId`), die beim Wählen Waypoints werden. Bei `FOLLOW` steht an den bestehenden Waypoints des Nutzers ihre Id, sie bleiben beim Wählen erhalten.
 - Bleibt aus V29: `waypoint.origin` (`USER`, `SUGGESTION`, `VARCHAR(16)`, Standard `USER`, auch in `waypoint_aud`). Das Frontend zeigt erzeugte Waypoints anders, „zurück zur schnellsten“ entfernt nur `SUGGESTION`-Waypoints.
 - Was dadurch entfällt: Wiederverwenden gleicher Vorschläge (`basisHash`), Status `STALE`/`APPLIED`/`EXPIRED`, Aufräum-Job, Auswertung, welche Optionen angeboten und gewählt wurden. Die Wahl selbst steht in der Envers-Historie der Waypoints.
@@ -131,7 +132,7 @@ flowchart LR
 
 ## Schnittstellen
 
-- `recommendations.logic` nach außen: `Suggestions.forPlanning(appUserId, routeId, count, includeWaypoints, departure?)` → `SuggestionResult` (`waypointMode`, `departureAt`, `options`, `reference`, ggf. Problem wie `MISSING_DEPARTURE`), `RouteChoice.choose(appUserId, routeId, points)` → `Chosen(tripId, routeId, PlanResult)`, `Suggestions.forConsequence(appUserId, consequenceId, kinds, count, departure?)` → `SuggestionResult`, genutzt vom Modul `advisor`, `RouteChoice.chooseDeparture(appUserId, routeId, departureAt)`.
+- `recommendations.logic` nach außen: `Suggestions.forPlanning(appUserId, routeId, count, includeWaypoints, departure?)` → `SuggestionResult` (`waypointMode`, `departureAt`, `options`, `reference`, ggf. Problem wie `MISSING_DEPARTURE`), `RouteChoice.choose(appUserId, routeId, points)` → `Chosen(tripId, routeId, PlanResult)`, `Suggestions.forConsequence(appUserId, consequenceId, kinds, count, departure?)` → `SuggestionResult`, genutzt vom Modul `advisor`, `RouteChoice.chooseDeparture(appUserId, routeId, departureAt)`, `Stopovers.onPlannedRoute` und `onOption` (Orte für Übernachtungen unterwegs, genutzt von `advisor`, siehe [advisor.md](advisor.md#find_overnight_areas)).
 - **`network`** (Erweiterung von `RouteOptions`, ersetzt den Satz „derzeit nur `blockedSegmentIds`“ in [network.md](network.md#schnittstellen-networklogic)):
   - `RouteOptions(blockedSegmentIds, delayedSegments: Map<Long, Duration>)`.
   - `BlockedEdgesWeighting` wird `ScenarioWeighting`: gesperrt → unendlich, Verzögerung → Gewicht + Sekunden (≥ 0). Gewichte steigen nur, die LM-Schätzung bleibt gültig. Gilt für normales Routing und `alternative_route` gleich.
@@ -174,7 +175,7 @@ flowchart LR
 - `SuggestionApiTest`: Antwort ohne Ids, Ersatz-Abfahrt, `choice` ersetzt Waypoints (`SUGGESTION`) bzw. behält die des Nutzers, ungültige Punkte `400`, Wahl um eine Sperrung entfernt die Consequence, `route-lines`.
 - Frontend: `routeOptionText.test.ts` (Titel, Dauer, Distanz, Ersatz-Abfahrt).
 - `SuggestionsForConsequenceTest`: Sperrung umfahren, und nach der Wahl führt auch die neue Planung darum herum; Verzögerung zählt einmal; Waypoints bleiben, nur der betroffene Abschnitt ändert sich; `WAYPOINT_UNREACHABLE`; neue Abfahrt vor und nach einem Zeitfenster, ohne Ende keine spätere; bereits unterwegs; vorbei; `HEAVY_ONLY`; Eingaben; fremde Consequence.
-- `DepartureShiftGeneratorTest` (Zeiten, Grenzen), `CandidateEvaluatorTest` (Annahme der Quelle, `HEAVY_ONLY`).
+- `DepartureShiftGeneratorTest` (Zeiten, Grenzen), `CandidateEvaluatorTest` (Annahme der Quelle, `HEAVY_ONLY`, Durchfahrten).
 
 ## Offen
 

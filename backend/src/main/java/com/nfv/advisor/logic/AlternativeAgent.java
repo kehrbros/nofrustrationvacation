@@ -11,6 +11,7 @@ import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.assistant.logic.ConversationTool;
 import com.nfv.assistant.logic.ToolConversation;
+import com.nfv.incidents.entities.Category;
 import com.nfv.incidents.entities.MatchKind;
 import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.incidents.logic.RouteConsequence;
@@ -140,7 +141,10 @@ class AlternativeAgent {
         OffsetDateTime now = OffsetDateTime.now(clock);
         boolean underway = schedule.departure() != null && !schedule.departure().isAfter(now);
         ProposalDraft keepRoute = ProposalDraft.keepRoute(schedule, counting);
-        RunContext run = new RunContext(appUserId, consequenceId, underway, schedule.deadline(), keepRoute);
+        boolean overnightRelevant = counting.stream().anyMatch(c -> c.category() != null
+                && (c.category() == Category.TOO_LATE || c.delay() == null));
+        RunContext run = new RunContext(appUserId, consequenceId, underway, schedule.deadline(), overnightRelevant,
+                keepRoute);
         try {
             return ask(start, run, input(start, route, schedule, counting, keepRoute, underway, now, appUserId));
         } catch (AssistantUnavailableException | AssistantRateLimitedException e) {

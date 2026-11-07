@@ -83,19 +83,25 @@ class SuggestionEngine {
                     Duration.ZERO, outcome.delay(), ranked.evaluated().sharedRatio(), line(candidate.geometry()),
                     candidate.kind() == OptionKind.DEPARTURE_SHIFT ? viaPointExtractor.waypoints(scenario)
                             : viaPointExtractor.extract(scenario, candidate, viaBase, segments),
-                    outcome.conflicts()));
+                    outcome.conflicts(), candidate.segments()));
         }
         return new Result(options, reference);
     }
 
-    /** Planned route from the departure of the scenario, distances from the segment lengths. */
+    /** Planned route from the departure of the scenario. */
     @Nullable
     private static CandidateEvaluator.Outcome reference(Scenario scenario, Map<Long, SegmentInfo> segments,
                                                         List<ActiveIncident> incidents) {
         if (scenario.reference().isEmpty()) {
             return null;
         }
-        List<CandidateEvaluator.Step> steps = scenario.reference().stream()
+        return CandidateEvaluator.evaluate(steps(scenario.reference(), segments), scenario.departure(),
+                scenario.evaluationConstraints(), incidents);
+    }
+
+    /** The planned sections as steps, distances from the segment lengths. */
+    static List<CandidateEvaluator.Step> steps(List<PlannedSection> sections, Map<Long, SegmentInfo> segments) {
+        return sections.stream()
                 .map(section -> {
                     SegmentInfo info = segments.get(section.segmentId());
                     double length = info == null ? 0 : info.lengthMeters();
@@ -104,7 +110,6 @@ class SuggestionEngine {
                             Duration.between(section.expectedPassageStart(), section.expectedPassageEnd()));
                 })
                 .toList();
-        return CandidateEvaluator.evaluate(steps, scenario.departure(), scenario.evaluationConstraints(), incidents);
     }
 
     /** Line for the map, a single point twice so it stays a line. */

@@ -10,7 +10,7 @@ import java.util.List;
 /**
  * Accommodations when a route cannot be driven in time, see
  * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Places on the route and the onward drive belong
- * to {@code recommendations} ({@code Stopovers}, planned). Not implemented yet, so no tool uses it.
+ * to {@code recommendations} ({@code Stopovers}). Not implemented yet, so no tool uses it.
  */
 public interface StayOptions {
     List<StayOffer> search(long appUserId, StaySearch search);

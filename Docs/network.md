@@ -18,7 +18,7 @@
   - Kanten der Länge 0 (GraphHopper teilt an Sperren wie Pollern) haben kein Segment und werden in Routen übersprungen.
   - Gilt nur für eine Graph-Version (Schlüssel `extract_version_id`, `edge_key`): eine Aktualisierung schreibt ihr Mapping neben das alte, nach dem Umschalten wird das alte gelöscht. Keine Entity, nur JDBC.
 - Staging nur für Segmente, als temporäre Tabelle im Import, nicht im Schema.
-- **Geplant: `place`** (Orte für Übernachtungen unterwegs, Schnittstelle `Places.along`), siehe [advisor.md](advisor.md#find_overnight_areas). Noch nicht umgesetzt.
+- **`place`:** Orte für Übernachtungen unterwegs, siehe [Orte](#orte). Keine Entity, nur JDBC.
 - Fuß- und Radwege, Treppen usw. werden nicht importiert (`import.osm.ignored_highways`): Straßen werden nur an Kreuzungen für Autos geteilt, das macht Segmente stabiler. Fußgängerzonen (`pedestrian`) bleiben, manche sind für Autos frei.
 
 ## Import und Aktualisierung
@@ -38,6 +38,19 @@
 - Rhythmus: geplant wöchentlich (`refresh-cron`). Im Spike blieben in Wellington-Zentrum nach 6 Monaten 87,8 % der Segmente erhalten, fast alle Abgänge durch neue oder verschobene Kreuzungen. Die Neuplanung nach `NetworkRefreshed` ist daher Pflicht.
 - Erster Umsetzungsschritt: nur Erstimport, Aktualisierung folgt.
 
+## Orte
+
+- **Tabelle `place`** (`V44`): `region`, `extract_version_id`, `name`, `kind` (`CITY`, `TOWN`, `VILLAGE`), `geometry(Point, 4326)` mit GIST-Index. Niemand verweist darauf, kein stabiler Schlüssel nötig.
+- **Lesen (`PlaceReader`):** eigener Durchlauf über den Extrakt mit `OSMInputFile`, GraphHopper behält keine Knoten. OSM-Knoten mit `place=city|town|village` und Name, Wege und Relationen werden übersprungen.
+  - **Geprüft 2026-11-07 am NZ-Extrakt:** 637 Orte (20 `city`, 186 `town`, 431 `village`), rund 13 s. Nur Knoten reicht: Von 45 Orten, die als Weg oder Relation eingetragen sind, hat nur einer keinen Knoten gleichen Namens (The Sands / Te Tumu).
+- **Schreiben (`PlaceWriter.replace`):** ersetzt alle Orte der Region in einer Transaktion, Abfragen sehen also nie zwei Versionen und brauchen keinen Filter nach Version.
+- **Import:** nach den Segmenten, vor `version.ready`. Fehler lässt den Import scheitern, Graph und Orte der alten Version bleiben.
+- **Start (`loadOrImport`, nach `V44`):** Hat die Region keine Orte (`hasPlaces`), liest der Start nur die Orte nach, kein neuer Import. Ein Fehler dabei wird geloggt, der Graph bleibt in Gebrauch, es gibt keine Orte bis zum nächsten Import oder Start. Eine Region ganz ohne Orte liest sie bei jedem Start erneut.
+- **Abfrage:** `Places.near(segmentIds, maxDistanceMeters)` → `PlaceNearRoute`: Ort, Position des nächsten Segments im Weg (`pathIndex`), Lage darauf (`segmentFraction`, `ST_LineLocatePoint` je Segment), Abstand (`offRouteMeters`).
+  - Segment statt Linie über den ganzen Weg: `ST_LineLocatePoint` misst auf `geometry(4326)` in Grad, auf einer langen Linie verzerrt das den Anteil. Auf einem Segment fällt das nicht ins Gewicht.
+  - Jeder Ort einmal, am nächsten Segment. Fährt der Weg zweimal daran vorbei (hin und zurück), zählt die erste Durchfahrt; Abstände werden dafür in ganzen Metern verglichen.
+  - `ST_DWithin` zweimal wie in `SegmentMatching`: in Grad für den Index, auf `geography` zum Messen.
+
 ## Schnittstellen (`network.logic`)
 
 - Andere Module nutzen nur diese Interfaces und Records, nie Entities, Repositories oder GraphHopper-Typen. Geometrie als eigene Records (`GeoPoint`, `GeoLine`, `GeoArea`).
@@ -52,6 +65,8 @@
   - Fehler: `NoRouteException` (Punkt außerhalb aller Regionen, über 500 m von einer Straße, keine Verbindung), `RoutingUnavailableException` (noch kein Graph). `RoutePlanning` macht daraus `NO_ROUTE` bzw. `ROUTING_UNAVAILABLE` an der Route, siehe [domain.md](domain.md#trips).
 - `SegmentQueries.segments(ids)` → `SegmentInfo`: `ref`, Name, Länge, Mittelpunkt (`ST_LineInterpolatePoint`), Gegenrichtung (`reverseId`: gleicher Weg, Start und Ende vertauscht, `null` bei Einbahnstraßen). Genutzt von `recommendations` (Via-Punkte, „über SH 2“, Wenden am Via-Punkt). Später Geometrie und ausgemustert für API und Benachrichtigungen.
 - `SegmentQueries.line(List<SectionPart>)` → `GeoLine`: Linie über Teilstücke von Segmenten (`ST_LineSubstring` nach `fromFraction`/`toFraction`, in Reihenfolge, doppelte Punkte an den Übergängen entfernt). Genutzt von `trips.RouteLines` für die Karte.
+- `SegmentQueries.zone(segmentId)` → `ZoneId` der Region, in der das Segment liegt (`Stopovers`: Abendgrenze).
+- `Places.near(segmentIds, maxDistanceMeters)`: Orte entlang eines Wegs, siehe [Orte](#orte).
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
 - `NetworkRefreshed` (Spring-Event): Region, neue `ExtractVersion`, ausgemusterte Segment-Ids.
@@ -85,6 +100,8 @@
   nfv.network.regions.nz.data-access=MMAP
   nfv.network.regions.nz.driving-side=LEFT
   nfv.network.regions.nz.ferries=true
+  # Pflicht, Ortszeit der Region
+  nfv.network.regions.nz.zone=Pacific/Auckland
   # Geplant
   nfv.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
   nfv.network.regions.nz.refresh-cron=0 0 3 * * SUN
@@ -120,6 +137,7 @@
   ```
 
 - Testregion `wellington` in `src/test/resources/config/application.properties`, kein Import beim Start. `RegionImportTest` importiert ausdrücklich: rund 1,5 s, 13.096 Segmente.
+- Orte: Der Testextrakt enthält keine (die Abfrage oben holt nur Straßen). `PlaceReaderTest` liest die handgeschriebene `osm/places.osm`, `RegionImportPlacesTest` importiert eine Kopie von Wellington mit zwei ergänzten Orten, `PlacesTest` und `StopoversTest` legen Orte per SQL an.
 - `SegmentMatchingTest`: NZTA-Ereignisse der Stichprobe auf dem Extrakt (Terrace Tunnel als Punkt mit `ref`, Urban Motorway als Linie über den Extrakt hinaus, beide Fahrbahnen), siehe [traffic-feed.md](traffic-feed.md#tests).
 
 ## Spike-Ergebnisse (Oktober 2026, Wellington)

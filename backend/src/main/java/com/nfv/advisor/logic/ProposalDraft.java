@@ -6,6 +6,7 @@ import com.nfv.advisor.entities.ProposalKind;
 import com.nfv.advisor.entities.ProposalPoint;
 import com.nfv.incidents.entities.Impact;
 import com.nfv.incidents.logic.RouteConsequence;
+import com.nfv.network.logic.RoutedSegment;
 import com.nfv.recommendations.logic.OptionKind;
 import com.nfv.recommendations.logic.SuggestedOption;
 import com.nfv.trips.logic.RouteSchedule;
@@ -19,11 +20,15 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 
-/** An option as calculated by the backend, before the model adds its reason. */
+/**
+ * An option as calculated by the backend, before the model adds its reason.
+ *
+ * @param path driven segments for tools that look along the option, neither stored nor shown to the model
+ */
 record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDateTime departureAt,
                      @Nullable OffsetDateTime arrivalAt, @Nullable Double distanceMeters, @Nullable Duration duration,
                      @Nullable Duration delay, @Nullable Double sharedRatio, @Nullable Boolean meetsDeadline,
-                     List<ProposalPoint> points, List<ProposalConflict> conflicts) {
+                     List<ProposalPoint> points, List<ProposalConflict> conflicts, List<RoutedSegment> path) {
 
     static ProposalDraft of(SuggestedOption option, @Nullable OffsetDateTime deadline) {
         return new ProposalDraft(option.kind() == OptionKind.DEPARTURE_SHIFT ? ProposalKind.SHIFT_DEPARTURE
@@ -33,7 +38,8 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
                 option.points().stream().map(p -> new ProposalPoint(p.latitude(), p.longitude(), p.roadHint(),
                         p.waypointId())).toList(),
                 option.conflicts().stream().map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay()))
-                        .toList());
+                        .toList(),
+                option.path());
     }
 
     /**
@@ -51,7 +57,7 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
         Boolean meets = schedule.deadline() == null ? null : arrival != null && !arrival.isAfter(schedule.deadline());
         return new ProposalDraft(ProposalKind.KEEP_ROUTE, null, schedule.departure(), arrival, null, null, delay, null,
                 meets, List.of(), counting.stream()
-                .map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay())).toList());
+                .map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay())).toList(), List.of());
     }
 
     AdvisorProposal toProposal(int position, @Nullable String reason) {
