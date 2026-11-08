@@ -67,6 +67,7 @@
 - `SegmentQueries.line(List<SectionPart>)` → `GeoLine`: Linie über Teilstücke von Segmenten (`ST_LineSubstring` nach `fromFraction`/`toFraction`, in Reihenfolge, doppelte Punkte an den Übergängen entfernt). Genutzt von `trips.RouteLines` für die Karte.
 - `SegmentQueries.zone(segmentId)` → `ZoneId` der Region, in der das Segment liegt (`Stopovers`: Abendgrenze).
 - `Places.near(segmentIds, maxDistanceMeters)`: Orte entlang eines Wegs, siehe [Orte](#orte).
+- `Regions.covers(latitude, longitude)`: liegt der Punkt im Rechteck `bounds` einer Region (Konfiguration, unabhängig davon, ob der Graph geladen ist). Genutzt von `trips` für Stops und Waypoints, siehe [domain.md](domain.md#trips). Rechteck statt Abstand zum Netz, damit Stops auch vor dem ersten Import gehen; Meer im Rechteck ist hinnehmbar, die Ortssuche liefert dort nichts.
 - `RegionImport`: Import oder Aktualisierung einer Region starten, Status abfragen.
 - `ExtractSource`: Herkunft des Extrakts.
 - `NetworkRefreshed` (Spring-Event): Region, neue `ExtractVersion`, ausgemusterte Segment-Ids.
@@ -101,6 +102,12 @@
   nfv.network.regions.nz.ferries=true
   # Pflicht, Ortszeit der Region
   nfv.network.regions.nz.zone=Pacific/Auckland
+  # Pflicht, Gebiet für Stops und Waypoints (Nord-, Süd- und Stewart Island; Chatham-Inseln liegen jenseits von 180°)
+  # Frontend: gleiche Werte als Photon-bbox in frontend/src/map/geocoding.ts
+  nfv.network.regions.nz.bounds.min-latitude=-47.6
+  nfv.network.regions.nz.bounds.min-longitude=166.0
+  nfv.network.regions.nz.bounds.max-latitude=-34.0
+  nfv.network.regions.nz.bounds.max-longitude=179.0
   # Geplant
   nfv.network.regions.nz.download-url=https://download.geofabrik.de/australia-oceania/new-zealand-latest.osm.pbf
   nfv.network.regions.nz.refresh-cron=0 0 3 * * SUN

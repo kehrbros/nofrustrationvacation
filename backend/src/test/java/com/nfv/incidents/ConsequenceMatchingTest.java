@@ -63,6 +63,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 class ConsequenceMatchingTest {
     private static final OffsetDateTime DEPARTURE = OffsetDateTime.now(ZoneOffset.UTC).plusDays(2).withNano(0);
     private static final GeometryFactory GEOMETRY = new GeometryFactory(new PrecisionModel(), 4326);
+    /** Target stop: changing a stop needs coordinates in New Zealand; the same ones keep the sections. */
+    private static final double[] TARGET = {-41.2865, 174.7762};
 
     @Autowired
     private IncidentLogic incidentLogic;
@@ -444,7 +446,8 @@ class ConsequenceMatchingTest {
             Trip trip = tripRepository.save(new Trip(userId, "Urlaub", DEPARTURE, DEPARTURE.plusDays(7), DEPARTURE.minusDays(2)));
             tripId = trip.getId();
             Stop start = stopRepository.save(new Stop(trip, 0, "Heilbronn", null, null, null, DEPARTURE));
-            Stop end = stopRepository.save(new Stop(trip, 1, "Kupferzell", null, null, DEPARTURE.plusHours(1), null));
+            Stop end = stopRepository.save(new Stop(trip, 1, "Kupferzell", TARGET[0], TARGET[1], DEPARTURE.plusHours(1),
+                    null));
             targetStopId = end.getId();
             return routeRepository.save(new Route(trip, start, end)).getId();
         });
@@ -452,7 +455,7 @@ class ConsequenceMatchingTest {
 
     private void arriveAt(OffsetDateTime arrival) {
         inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId,
-                new NewStop("Kupferzell", null, null, arrival, null)));
+                new NewStop("Kupferzell", TARGET[0], TARGET[1], arrival, null)));
     }
 
     /** One section of 15 minutes starting at {@code passage}. */

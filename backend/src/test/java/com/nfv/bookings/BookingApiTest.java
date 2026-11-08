@@ -79,9 +79,14 @@ class BookingApiTest {
                 .contentType(MediaType.APPLICATION_JSON).content(TRIP)).andExpect(status().isCreated()));
         // adding a stop answers with the trip detail, the new stop is the only one
         String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(stopJson("Rom")))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
+    }
+
+    /** Stops need coordinates in New Zealand, the accommodations of these tests are elsewhere on purpose. */
+    private static String stopJson(String name) {
+        return "{\"name\":\"" + name + "\",\"latitude\":-41.2865,\"longitude\":174.7762}";
     }
 
     @Test
@@ -315,10 +320,10 @@ class BookingApiTest {
                 .andExpect(jsonPath("$.code").value("ASSISTANT_UNAVAILABLE"));
     }
 
-    /** Appends a stop without coordinates, returns its id. */
+    /** Appends a stop, returns its id. */
     private long addStop(String name) throws Exception {
         String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"" + name + "\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(stopJson(name)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         List<Number> ids = JsonPath.read(trip, "$.stops[*].id");
         return ids.getLast().longValue();

@@ -83,7 +83,7 @@ class LiteApiStayOptionsTest {
         tripId = id(mockMvc.perform(post("/api/v1/trips").with(user).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(TRIP)).andExpect(status().isCreated()));
         String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\",\"latitude\":-41.2865,\"longitude\":174.7762}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
         bookingId = id(mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())

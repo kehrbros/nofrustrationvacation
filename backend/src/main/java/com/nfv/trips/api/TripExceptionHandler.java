@@ -3,6 +3,7 @@ package com.nfv.trips.api;
 import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.trips.logic.InvalidTripInputException;
+import com.nfv.trips.logic.LocationOutsideRegionsException;
 import com.nfv.trips.logic.StopInUseException;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
@@ -37,7 +38,8 @@ public class TripExceptionHandler {
 
     @ExceptionHandler(InvalidTripInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidTripInputException exception) {
-        return problem(HttpStatus.BAD_REQUEST, "INVALID_TRIP_INPUT", exception.getMessage());
+        String code = exception instanceof LocationOutsideRegionsException ? "LOCATION_OUTSIDE_REGIONS" : "INVALID_TRIP_INPUT";
+        return problem(HttpStatus.BAD_REQUEST, code, exception.getMessage());
     }
 
     @ExceptionHandler(StopInUseException.class)

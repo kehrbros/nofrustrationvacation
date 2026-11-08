@@ -64,6 +64,8 @@ class AlternativeApiTest {
     private static final String CRITERIA = "{\"latitude\":41.9028,\"longitude\":12.4964,\"radiusMeters\":5000,"
             + "\"checkIn\":\"2027-07-12\",\"checkOut\":\"2027-07-15\",\"guests\":2,\"rooms\":1,\"maxPrice\":\"412.50\","
             + "\"currency\":\"EUR\"}";
+    private static final double[] WELLINGTON = {-41.2865, 174.7762};
+    private static final double[] PORIRUA = {-41.1339, 174.8406};
 
     @Autowired
     private MockMvc mockMvc;
@@ -89,8 +91,9 @@ class AlternativeApiTest {
         user = login("alternatives-" + UUID.randomUUID());
         tripId = id(mockMvc.perform(post("/api/v1/trips").with(user).with(csrf())
                 .contentType(MediaType.APPLICATION_JSON).content(TRIP)).andExpect(status().isCreated()));
+        // stops only in New Zealand; the Roman hotels stay, the stop does not follow them (outside the regions)
         String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(stop("Rom", WELLINGTON)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
         bookingId = id(mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())
@@ -224,7 +227,7 @@ class AlternativeApiTest {
         when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
                 .thenReturn(new PayPalCheckout.CheckoutOrder("O-9", "https://paypal.test/O-9"));
         long otherStop = ((Number) JsonPath.read(mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user)
-                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Florenz\"}"))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(stop("Florenz", PORIRUA)))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.stops[1].id"))
                 .longValue();
 
@@ -259,21 +262,21 @@ class AlternativeApiTest {
     @Test
     void hotelInAnotherPlaceMovesTheStopAndPlansItsRoutesAgain() throws Exception {
 
-        // trip Florenz -> Rom, the booking in Rom gets replaced by a hotel in Tivoli, about 26 km away
-        String florenz = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Florenz\",\"latitude\":43.7696,"
-                                + "\"longitude\":11.2558,\"departureAt\":\"2027-07-12T09:00:00+02:00\",\"position\":0}"))
+        // trip Wellington -> Porirua, the booking in Porirua gets replaced by a hotel in Paraparaumu, about 28 km away
+        String wellington = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Wellington\",\"latitude\":"
+                                + WELLINGTON[0] + ",\"longitude\":" + WELLINGTON[1]
+                                + ",\"departureAt\":\"2027-07-12T09:00:00+12:00\",\"position\":0}"))
                 .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        long romId = ((Number) JsonPath.read(florenz, "$.stops[1].id")).longValue();
-        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, romId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rom\",\"latitude\":41.9028,\"longitude\":12.4964}"))
+        long poriruaId = ((Number) JsonPath.read(wellington, "$.stops[1].id")).longValue();
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, poriruaId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(stop("Porirua", PORIRUA)))
                 .andExpect(status().isOk());
         long routeId = ((Number) JsonPath.read(mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
                 .andReturn().getResponse().getContentAsString(), "$.routes[0].id")).longValue();
         prebookAndHotel("150.00");
-        when(liteApi.hotel("sole")).thenReturn(new LiteApi.HotelDetails("sole", "Hotel Sole", "Via Tiburtina 5",
-                "Tivoli", "IT", 41.9631, 12.7980, "+39 0774 123", null, null, LocalTime.of(14, 0),
+        when(liteApi.hotel("sole")).thenReturn(new LiteApi.HotelDetails("sole", "Hotel Sole", "Kapiti Road 5",
+                "Paraparaumu", "NZ", -40.9147, 175.0058, "+64 4 123", null, null, LocalTime.of(14, 0),
                 LocalTime.of(22, 0), LocalTime.of(11, 0)));
         when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
                 .thenReturn(new PayPalCheckout.CheckoutOrder("O-1", "https://www.sandbox.paypal.com/checkoutnow?token=O-1"));
@@ -286,7 +289,7 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.otherPlace").value(true))
                 .andExpect(jsonPath("$.distanceMeters").value(org.hamcrest.Matchers.greaterThan(20_000)))
                 .andExpect(jsonPath("$.routeId").value(routeId))
-                .andExpect(jsonPath("$.checkInUntil").value("2027-07-12T22:00:00+02:00"));
+                .andExpect(jsonPath("$.checkInUntil").value("2027-07-12T22:00:00+12:00"));
 
         mockPaymentAndBooking(reservationId, "O-1");
         mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
@@ -294,10 +297,10 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.status").value("BOOKED"))
                 .andExpect(jsonPath("$.replannedRouteIds", contains((int) routeId)));
         mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
-                .andExpect(jsonPath("$.stops[1].name").value("Tivoli"))
-                .andExpect(jsonPath("$.stops[1].latitude").value(41.9631))
-                .andExpect(jsonPath("$.stops[1].longitude").value(12.7980))
-                .andExpect(jsonPath("$.stops[0].name").value("Florenz"));
+                .andExpect(jsonPath("$.stops[1].name").value("Paraparaumu"))
+                .andExpect(jsonPath("$.stops[1].latitude").value(-40.9147))
+                .andExpect(jsonPath("$.stops[1].longitude").value(175.0058))
+                .andExpect(jsonPath("$.stops[0].name").value("Wellington"));
     }
 
     @Test
@@ -305,10 +308,12 @@ class AlternativeApiTest {
         long stopId = ((Number) JsonPath.read(mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
                 .andReturn().getResponse().getContentAsString(), "$.stops[0].id")).longValue();
         mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, stopId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"Rom Zentrum\",\"latitude\":41.9028,\"longitude\":12.4964}"))
+                        .contentType(MediaType.APPLICATION_JSON).content(stop("Wellington Zentrum", WELLINGTON)))
                 .andExpect(status().isOk());
         prebookAndHotel("150.00");
+        when(liteApi.hotel("sole")).thenReturn(new LiteApi.HotelDetails("sole", "Hotel Sole", "Lambton Quay 5",
+                "Wellington", "NZ", -41.2880, 174.7770, "+64 4 123", null, null, LocalTime.of(14, 0), null,
+                LocalTime.of(11, 0)));
         when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
                 .thenReturn(new PayPalCheckout.CheckoutOrder("O-1", "https://www.sandbox.paypal.com/checkoutnow?token=O-1"));
         long reservationId = id(mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations",
@@ -323,8 +328,8 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.status").value("BOOKED"))
                 .andExpect(jsonPath("$.replannedRouteIds", hasSize(0)));
         mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
-                .andExpect(jsonPath("$.stops[0].name").value("Rom Zentrum"))
-                .andExpect(jsonPath("$.stops[0].latitude").value(41.9028));
+                .andExpect(jsonPath("$.stops[0].name").value("Wellington Zentrum"))
+                .andExpect(jsonPath("$.stops[0].latitude").value(WELLINGTON[0]));
     }
 
     @Test
@@ -516,6 +521,10 @@ class AlternativeApiTest {
                 true, LocalDateTime.of(2027, 7, 11, 12, 0)));
         when(liteApi.hotel("sole")).thenReturn(new LiteApi.HotelDetails("sole", "Hotel Sole", "Via Nazionale 5", "Rom",
                 "IT", 41.9010, 12.4950, "+39 06 123", null, null, LocalTime.of(14, 0), null, LocalTime.of(11, 0)));
+    }
+
+    private static String stop(String name, double[] point) {
+        return "{\"name\":\"" + name + "\",\"latitude\":" + point[0] + ",\"longitude\":" + point[1] + "}";
     }
 
     private static String reservation() {

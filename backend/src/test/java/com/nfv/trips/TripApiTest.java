@@ -66,6 +66,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class TripApiTest {
     private static final OffsetDateTime NOW = OffsetDateTime.now(ZoneOffset.UTC).withNano(0);
+    // places in New Zealand outside the Wellington test extract: routing between them finds no route
+    private static final String AUCKLAND = "\"latitude\":-36.85,\"longitude\":174.76";
+    private static final String HAMILTON = "\"latitude\":-37.79,\"longitude\":175.28";
+    private static final String TAURANGA = "\"latitude\":-37.69,\"longitude\":176.17";
+    private static final String ROTORUA = "\"latitude\":-38.14,\"longitude\":176.25";
 
     @Autowired
     private MockMvc mockMvc;
@@ -166,39 +171,70 @@ class TripApiTest {
     void stopsAreAppendedAndConnectedByRoutes() throws Exception {
         long tripId = createTrip(user, "Toskana", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
 
-        long munich = addStop(tripId, "{\"name\":\"München\",\"latitude\":48.14,\"longitude\":11.58,"
-                + "\"departureAt\":\"2027-07-12T08:00:00+02:00\"}");
-        long verona = addStop(tripId, "{\"name\":\"Verona\",\"latitude\":45.44,\"longitude\":10.99,"
-                + "\"arrivalAt\":\"2027-07-12T14:30:00+02:00\"}");
+        long auckland = addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND
+                + ",\"departureAt\":\"2027-07-12T08:00:00+02:00\"}");
+        long hamilton = addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON
+                + ",\"arrivalAt\":\"2027-07-12T14:30:00+02:00\"}");
 
         mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
-                .andExpect(jsonPath("$.stops[*].name", contains("München", "Verona")))
+                .andExpect(jsonPath("$.stops[*].name", contains("Auckland", "Hamilton")))
                 .andExpect(jsonPath("$.stops[0].departureAt").value("2027-07-12T08:00:00+02:00"))
                 .andExpect(jsonPath("$.stops[1].arrivalAt").value("2027-07-12T14:30:00+02:00"))
                 .andExpect(jsonPath("$.routes", hasSize(1)))
-                .andExpect(jsonPath("$.routes[0].fromStopId").value(munich))
-                .andExpect(jsonPath("$.routes[0].toStopId").value(verona));
+                .andExpect(jsonPath("$.routes[0].fromStopId").value(auckland))
+                .andExpect(jsonPath("$.routes[0].toStopId").value(hamilton));
 
         mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\",\"latitude\":41.9}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rotorua\",\"latitude\":-38.14}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /** Stops and waypoints only within a region of the road network (New Zealand), stops only with coordinates. */
+    @Test
+    void stopsOutsideTheRegionsOrWithoutCoordinatesAreRejected() throws Exception {
+        long tripId = createTrip(user, "Europa", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
+        long auckland = addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND + "}");
+        addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON + "}");
+
+        mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Berlin\",\"latitude\":52.52,\"longitude\":13.40}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("LOCATION_OUTSIDE_REGIONS"));
+        mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rotorua\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"));
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, auckland).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"Sydney\",\"latitude\":-33.87,\"longitude\":151.21}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("LOCATION_OUTSIDE_REGIONS"));
+        long routeId = routes(tripId).values().iterator().next();
+        mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
+                        .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"latitude\":47.0,\"longitude\":11.5,\"name\":\"Brenner\"}]"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("LOCATION_OUTSIDE_REGIONS"));
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.stops[*].name", contains("Auckland", "Hamilton")));
     }
 
     /** Inserting, moving and removing stops keeps routes of unchanged neighbours and creates the missing ones. */
     @Test
     void stopsAreInsertedMovedAndRemovedWithRoutes() throws Exception {
         long tripId = createTrip(user, "Toskana", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
-        long a = addStop(tripId, "{\"name\":\"A\"}");
-        long b = addStop(tripId, "{\"name\":\"B\"}");
-        long c = addStop(tripId, "{\"name\":\"C\"}");
+        long a = addStop(tripId, "{\"name\":\"A\"," + AUCKLAND + "}");
+        long b = addStop(tripId, "{\"name\":\"B\"," + HAMILTON + "}");
+        long c = addStop(tripId, "{\"name\":\"C\"," + TAURANGA + "}");
         long bc = routes(tripId).get(List.of(b, c));
 
-        long d = addStop(tripId, "{\"name\":\"D\",\"position\":1}");
+        long d = addStop(tripId, "{\"name\":\"D\"," + ROTORUA + ",\"position\":1}");
         mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
                 .andExpect(jsonPath("$.stops[*].name", contains("A", "D", "B", "C")))
                 .andExpect(jsonPath("$.stops[*].position", contains(0, 1, 2, 3)))
                 .andExpect(jsonPath("$.routes[*].planOutcome", contains(
-                        "MISSING_COORDINATES", "MISSING_COORDINATES", "MISSING_COORDINATES")));
+                        "MISSING_DEPARTURE", "MISSING_DEPARTURE", "MISSING_DEPARTURE")));
         assertThat(routes(tripId)).containsOnlyKeys(List.of(a, d), List.of(d, b), List.of(b, c))
                 .containsEntry(List.of(b, c), bc);
         long ad = routes(tripId).get(List.of(a, d));
@@ -220,7 +256,7 @@ class TripApiTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"position\":3}"))
                 .andExpect(status().isBadRequest());
         mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"E\",\"position\":5}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"E\"," + ROTORUA + ",\"position\":5}"))
                 .andExpect(status().isBadRequest());
     }
 
@@ -229,23 +265,22 @@ class TripApiTest {
     void changedCoordinatesDiscardTheSections() throws Exception {
         OffsetDateTime departure = NOW.plusDays(2);
         long tripId = createTrip(user, "Toskana", iso(departure), iso(departure.plusDays(5)));
-        addStop(tripId, "{\"name\":\"Innsbruck\",\"latitude\":47.26,\"longitude\":11.39,\"departureAt\":\""
-                + iso(departure) + "\"}");
-        long verona = addStop(tripId, "{\"name\":\"Verona\",\"latitude\":45.44,\"longitude\":10.99}");
+        addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND + ",\"departureAt\":\"" + iso(departure) + "\"}");
+        long hamilton = addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON + "}");
         long routeId = routes(tripId).values().iterator().next();
         long segmentId = segment(departure.minusDays(1));
         routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, departure, departure.plusHours(1))));
 
-        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, verona).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Verona\",\"latitude\":45.44,"
-                                + "\"longitude\":10.99,\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, hamilton).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Hamilton\"," + HAMILTON
+                                + ",\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.routes[0].planOutcome").value("PLANNED"));
         assertThat(routeSectionRepository.findByRouteIdOrderByPosition(routeId)).hasSize(1);
 
-        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, verona).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Verona\",\"latitude\":45.40,"
-                                + "\"longitude\":10.95,\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, hamilton).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Hamilton\",\"latitude\":-37.75,"
+                                + "\"longitude\":175.24,\"arrivalAt\":\"" + iso(departure.plusHours(4)) + "\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.routes[0].plannedAt").doesNotExist())
                 .andExpect(jsonPath("$.routes[0].planOutcome").value(anyOf(is("NO_ROUTE"), is("ROUTING_UNAVAILABLE"))));
@@ -255,33 +290,33 @@ class TripApiTest {
     @Test
     void waypointsAreReplacedInOrder() throws Exception {
         long tripId = createTrip(user, "Toskana", iso(NOW), iso(NOW.plusDays(3)));
-        addStop(tripId, "{\"name\":\"Innsbruck\"}");
-        addStop(tripId, "{\"name\":\"Verona\"}");
+        addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND + "}");
+        addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON + "}");
         long routeId = routes(tripId).values().iterator().next();
 
         String body = mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
                         .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"latitude\":47.0,\"longitude\":11.5,\"name\":\"Brenner\"},"
-                                + "{\"latitude\":46.5,\"longitude\":11.35,\"name\":\"Bozen\",\"roadHint\":\"A22\"}]"))
+                        .content("[{\"latitude\":-37.56,\"longitude\":175.16,\"name\":\"Huntly\"},"
+                                + "{\"latitude\":-37.67,\"longitude\":175.15,\"name\":\"Ngāruawāhia\",\"roadHint\":\"SH 1\"}]"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.waypoints[*].name", contains("Brenner", "Bozen")))
-                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_COORDINATES"))
+                .andExpect(jsonPath("$.waypoints[*].name", contains("Huntly", "Ngāruawāhia")))
+                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_DEPARTURE"))
                 .andReturn().getResponse().getContentAsString();
-        long brenner = ((Number) JsonPath.read(body, "$.waypoints[0].id")).longValue();
-        long bozen = ((Number) JsonPath.read(body, "$.waypoints[1].id")).longValue();
+        long huntly = ((Number) JsonPath.read(body, "$.waypoints[0].id")).longValue();
+        long ngaruawahia = ((Number) JsonPath.read(body, "$.waypoints[1].id")).longValue();
 
         mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
                         .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"id\":" + bozen + ",\"latitude\":46.5,\"longitude\":11.35,\"name\":\"Bolzano\"},"
-                                + "{\"latitude\":46.07,\"longitude\":11.12,\"name\":\"Trient\"}]"))
+                        .content("[{\"id\":" + ngaruawahia + ",\"latitude\":-37.67,\"longitude\":175.15,\"name\":\"Ngaruawahia\"},"
+                                + "{\"latitude\":-37.62,\"longitude\":175.19,\"name\":\"Taupiri\"}]"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.waypoints[*].name", contains("Bolzano", "Trient")))
-                .andExpect(jsonPath("$.waypoints[0].id").value(bozen))
+                .andExpect(jsonPath("$.waypoints[*].name", contains("Ngaruawahia", "Taupiri")))
+                .andExpect(jsonPath("$.waypoints[0].id").value(ngaruawahia))
                 .andExpect(jsonPath("$.waypoints[0].roadHint").doesNotExist());
 
         mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
                         .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"id\":" + brenner + ",\"latitude\":47.0,\"longitude\":11.5}]"))
+                        .content("[{\"id\":" + huntly + ",\"latitude\":-37.56,\"longitude\":175.16}]"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("WAYPOINT_NOT_FOUND"));
         mockMvc.perform(get("/api/v1/trips/{id}/routes/{routeId}", tripId, routeId).with(otherUser))
@@ -293,19 +328,19 @@ class TripApiTest {
                 .andExpect(jsonPath("$.code").value("ROUTE_NOT_FOUND"));
         mockMvc.perform(post("/api/v1/trips/{id}/routes/{routeId}/plan", tripId, routeId).with(user).with(csrf()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_COORDINATES"));
+                .andExpect(jsonPath("$.route.planOutcome").value("MISSING_DEPARTURE"));
     }
 
     @Test
     void tripIsUpdatedAndDeletedWithEverythingOnIt() throws Exception {
         OffsetDateTime departure = NOW.plusDays(2);
         long tripId = createTrip(user, "Toskana", iso(departure), iso(departure.plusDays(5)));
-        long innsbruck = addStop(tripId, "{\"name\":\"Innsbruck\",\"departureAt\":\"" + iso(departure) + "\"}");
-        addStop(tripId, "{\"name\":\"Verona\"}");
+        long auckland = addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND + ",\"departureAt\":\"" + iso(departure) + "\"}");
+        addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON + "}");
         long routeId = routes(tripId).values().iterator().next();
         mockMvc.perform(put("/api/v1/trips/{id}/routes/{routeId}/waypoints", tripId, routeId)
                         .with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
-                        .content("[{\"latitude\":47.0,\"longitude\":11.5}]"))
+                        .content("[{\"latitude\":-37.56,\"longitude\":175.16}]"))
                 .andExpect(status().isOk());
         routeLogic.replaceSections(routeId, List.of(new PlannedSection(segment(departure.minusDays(1)),
                 departure, departure.plusHours(1))));
@@ -316,8 +351,8 @@ class TripApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Italien"))
                 .andExpect(jsonPath("$.startAt").value("2027-08-01T00:00:00+02:00"));
-        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, innsbruck).with(otherUser).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Innsbruck\"}"))
+        mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, auckland).with(otherUser).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Auckland\"," + AUCKLAND + "}"))
                 .andExpect(status().isNotFound());
         mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(otherUser).with(csrf()))
                 .andExpect(status().isNotFound());
@@ -332,10 +367,10 @@ class TripApiTest {
     void stopsOfAnotherTripAreNotFound() throws Exception {
         long tripId = createTrip(user, "Toskana", iso(NOW), iso(NOW.plusDays(3)));
         long otherTrip = createTrip(user, "Anders", iso(NOW), iso(NOW.plusDays(3)));
-        long stop = addStop(otherTrip, "{\"name\":\"Rom\"}");
+        long stop = addStop(otherTrip, "{\"name\":\"Auckland\"," + AUCKLAND + "}");
 
         mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, stop).with(user).with(csrf())
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rom\"}"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Auckland\"," + AUCKLAND + "}"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("STOP_NOT_FOUND"));
         mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, stop).with(user).with(csrf()))
@@ -368,8 +403,8 @@ class TripApiTest {
     void incidentsOnTheRoutesAreListedPerTrip() throws Exception {
         OffsetDateTime departure = NOW.plusDays(2);
         long tripId = createTrip(user, "Toskana", iso(departure), iso(departure.plusDays(5)));
-        addStop(tripId, "{\"name\":\"Innsbruck\",\"departureAt\":\"" + iso(departure) + "\"}");
-        addStop(tripId, "{\"name\":\"Verona\"}");
+        addStop(tripId, "{\"name\":\"Auckland\"," + AUCKLAND + ",\"departureAt\":\"" + iso(departure) + "\"}");
+        addStop(tripId, "{\"name\":\"Hamilton\"," + HAMILTON + "}");
         String detail = mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
                 .andReturn().getResponse().getContentAsString();
         long routeId = ((Number) JsonPath.read(detail, "$.routes[0].id")).longValue();
@@ -386,7 +421,7 @@ class TripApiTest {
                 .andExpect(jsonPath("$[0].type").value("CLOSURE"))
                 .andExpect(jsonPath("$[0].impact").value("BLOCKED"))
                 .andExpect(jsonPath("$[0].description").value("Vollsperrung A22"))
-                // closed until 4 h after departure: wait 4 h, Verona has no arrival → DELAYED, never TOO_LATE
+                // closed until 4 h after departure: wait 4 h, Hamilton has no arrival → DELAYED, never TOO_LATE
                 .andExpect(jsonPath("$[0].category").value("DELAYED"))
                 .andExpect(jsonPath("$[0].match").value("DIRECT"))
                 .andExpect(jsonPath("$[0].assessedDelayMinutes").value(240))

@@ -68,7 +68,7 @@ class CoverImageGenerationTest {
     @Test
     void generatedImageIsStoredFromNameAndStops() throws Exception {
         mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
-                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Bergen\"}")).andExpect(status().isCreated());
+                .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Bergen\",\"latitude\":-41.2865,\"longitude\":174.7762}")).andExpect(status().isCreated());
         when(imageGeneration.generate(anyLong(), anyString()))
                 .thenReturn(new ImageGeneration.GeneratedImage("image/jpeg", new byte[]{1, 2, 3}));
 

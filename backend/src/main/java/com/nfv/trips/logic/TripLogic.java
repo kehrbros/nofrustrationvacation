@@ -1,5 +1,6 @@
 package com.nfv.trips.logic;
 
+import com.nfv.network.logic.Regions;
 import com.nfv.trips.data.RouteRepository;
 import com.nfv.trips.data.RouteSectionRepository;
 import com.nfv.trips.data.StopRepository;
@@ -54,6 +55,7 @@ public class TripLogic {
     private final WaypointRepository waypointRepository;
     private final TripCoverImageRepository coverImageRepository;
     private final RouteLogic routeLogic;
+    private final Regions regions;
     private final ApplicationEventPublisher events;
     private final Clock clock;
 
@@ -393,21 +395,19 @@ public class TripLogic {
     }
 
     /** Checks the stop, returns its stripped name. */
-    private static String validate(NewStop stop) {
+    private String validate(NewStop stop) {
         String name = requireName(stop.name());
-        if ((stop.latitude() == null) != (stop.longitude() == null)) {
-            throw new InvalidTripInputException("latitude and longitude only together");
+        if (stop.latitude() == null || stop.longitude() == null) {
+            throw new InvalidTripInputException("latitude and longitude are required");
         }
-        if (stop.latitude() != null) {
-            requireCoordinates(stop.latitude(), stop.longitude());
-        }
+        requireCoordinates(stop.latitude(), stop.longitude());
         if (stop.arrivalAt() != null && stop.departureAt() != null && stop.departureAt().isBefore(stop.arrivalAt())) {
             throw new InvalidTripInputException("departure before arrival");
         }
         return name;
     }
 
-    private static void validate(NewWaypoint waypoint) {
+    private void validate(NewWaypoint waypoint) {
         requireCoordinates(waypoint.latitude(), waypoint.longitude());
         if (waypoint.name() != null && waypoint.name().strip().length() > 255
                 || waypoint.roadHint() != null && waypoint.roadHint().strip().length() > 255) {
@@ -415,9 +415,13 @@ public class TripLogic {
         }
     }
 
-    private static void requireCoordinates(double latitude, double longitude) {
+    /** Valid coordinates within a region of the road network, see Docs/domain.md#trips. */
+    private void requireCoordinates(double latitude, double longitude) {
         if (Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
             throw new InvalidTripInputException("coordinates out of range");
+        }
+        if (!regions.covers(latitude, longitude)) {
+            throw new LocationOutsideRegionsException();
         }
     }
 

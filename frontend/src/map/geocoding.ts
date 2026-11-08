@@ -26,6 +26,12 @@ export interface SearchOptions {
 }
 
 const PHOTON_URL = import.meta.env.VITE_GEOCODING_URL ?? 'https://photon.komoot.io/api/';
+/**
+ * Only places in the regions of the road network (New Zealand), the backend rejects others, see Docs/network.md.
+ * Photon bbox: minLon,minLat,maxLon,maxLat, as nfv.network.regions.nz.bounds.
+ */
+const ALLOWED_COUNTRIES = ['NZ'];
+const SEARCH_BBOX = '166.0,-47.6,179.0,-34.0';
 
 interface PhotonFeature {
   geometry: { coordinates: [number, number] };
@@ -51,6 +57,7 @@ export async function searchPlaces(query: string, signal?: AbortSignal, options:
   url.searchParams.set('q', query);
   url.searchParams.set('limit', '5');
   url.searchParams.set('lang', 'de');
+  url.searchParams.set('bbox', SEARCH_BBOX);
   if (options.near) {
     url.searchParams.set('lat', options.near.latitude.toFixed(5));
     url.searchParams.set('lon', options.near.longitude.toFixed(5));
@@ -64,7 +71,8 @@ export async function searchPlaces(query: string, signal?: AbortSignal, options:
   }
   const body = (await response.json()) as { features?: PhotonFeature[] };
   return (body.features ?? [])
-    .filter((feature) => feature.properties.name)
+    .filter((feature) => feature.properties.name
+      && ALLOWED_COUNTRIES.includes(feature.properties.countrycode?.toUpperCase() ?? ''))
     .map((feature) => {
       const { name, street, housenumber, city, postcode, state, country, countrycode, osm_type: osmType, osm_id: osmId } =
         feature.properties;

@@ -12,7 +12,7 @@ import Sheet from '../components/Sheet';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { useTripContext } from '../trips/tripContext';
 import { localDateTimeIso } from '../trips/time';
-import { addStop } from '../trips/tripsApi';
+import { addStop, TripsApiError } from '../trips/tripsApi';
 
 /**
  * "Stop hinzufügen": place search, arrival and departure; the stop is appended to the trip. An accommodation booking
@@ -25,6 +25,7 @@ export default function StopSheet() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [place, setPlace] = useState<Place | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
+  const [noMatch, setNoMatch] = useState(false);
   const [arrival, setArrival] = useState('');
   const [departure, setDeparture] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export default function StopSheet() {
   useEffect(() => {
     if (place || query.trim().length < 3) {
       setPlaces([]);
+      setNoMatch(false);
       return;
     }
     const controller = new AbortController();
@@ -43,6 +45,7 @@ export default function StopSheet() {
       searchPlaces(query.trim(), controller.signal).then(
         (found) => {
           setPlaces(found);
+          setNoMatch(found.length === 0);
           setSearchFailed(false);
         },
         (failure: unknown) => {
@@ -60,11 +63,11 @@ export default function StopSheet() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const name = (place?.name ?? query).trim();
     const arrivalAt = localDateTimeIso(arrival);
     const departureAt = localDateTimeIso(departure);
-    if (!name) {
-      setError('Bitte einen Ort angeben.');
+    // stops need a position in New Zealand, only places from the suggestions have one
+    if (!place) {
+      setError('Bitte einen Ort aus den Vorschlägen wählen.');
       return;
     }
     if (arrivalAt && departureAt && new Date(departureAt) < new Date(arrivalAt)) {
@@ -75,9 +78,9 @@ export default function StopSheet() {
     setError(null);
     try {
       const updated = await addStop(trip.id, {
-        name,
-        latitude: place?.latitude ?? null,
-        longitude: place?.longitude ?? null,
+        name: place.name.trim(),
+        latitude: place.latitude,
+        longitude: place.longitude,
         arrivalAt,
         departureAt,
       });
@@ -103,8 +106,10 @@ export default function StopSheet() {
       } else {
         close();
       }
-    } catch {
-      setError('Der Stop konnte nicht gespeichert werden.');
+    } catch (failure) {
+      setError(failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS'
+        ? 'Stops sind nur in Neuseeland möglich.'
+        : 'Der Stop konnte nicht gespeichert werden.');
       setSaving(false);
     }
   };
@@ -136,7 +141,7 @@ export default function StopSheet() {
             }}
           />
           <span id="stop-place-hint" className="va-small va-muted">
-            {place ? `${place.detail || 'Ort gewählt'} · auf der Karte` : 'Mindestens 3 Zeichen, dann einen Vorschlag wählen.'}
+            {place ? `${place.detail || 'Ort gewählt'} · auf der Karte` : 'Mindestens 3 Zeichen, dann einen Ort in Neuseeland wählen.'}
           </span>
           {places.length > 0 && (
             <ul className="va-suggestions" aria-label="Vorschläge">
@@ -153,7 +158,8 @@ export default function StopSheet() {
               ))}
             </ul>
           )}
-          {searchFailed && <span className="va-small va-muted">Die Ortssuche ist gerade nicht erreichbar, der Stop wird ohne Kartenposition gespeichert.</span>}
+          {noMatch && !searchFailed && <span className="va-small va-muted">Kein Ort in Neuseeland gefunden.</span>}
+          {searchFailed && <span className="va-small va-muted">Die Ortssuche ist gerade nicht erreichbar, bitte später erneut versuchen.</span>}
         </div>
 
         <div className="va-field">

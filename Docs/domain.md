@@ -21,7 +21,9 @@
 
 ## Trips
 
-- `Trip` (gehört einem Nutzer) 1–* `Stop` (geordnet über `position`, optional Koordinaten, Ankunft, Abfahrt).
+- `Trip` (gehört einem Nutzer) 1–* `Stop` (geordnet über `position`, Koordinaten, optional Ankunft, Abfahrt).
+- **Nur innerhalb einer Region des Streckennetzes** (zunächst Neuseeland, `Regions.covers`, siehe [network.md](network.md#schnittstellen)): Stops brauchen beim Anlegen und Ändern Koordinaten, Stops und Waypoints außerhalb lehnt `TripLogic` ab (400 `LOCATION_OUTSIDE_REGIONS`, ohne Koordinaten 400 `INVALID_TRIP_INPUT`). Gilt für REST, MCP (`TripTools`) und das Nachziehen des Stops zur gebuchten Unterkunft (dann bleibt der Stop, die Buchung auch). Das Frontend schlägt nur Orte in Neuseeland vor.
+  - Spalten bleiben nullable: ältere Stops ohne Koordinaten bleiben bestehen, beim nächsten Ändern muss ein Ort gewählt werden.
 - `Trip` hat einen Reisezeitraum `startAt`–`endAt` (Zeitpunkte als `OffsetDateTime`, beide inklusive, Pflicht beim Anlegen, `endAt` ≥ `startAt`, auch als Check-Constraint). Gespeichert statt aus den Stops berechnet, damit eine Reise schon ohne Stops einen Zeitraum hat. `reschedule(…)` ändert ihn.
 - Das Frontend schickt die Zeitpunkte mit dem Offset der Zeitzone des Systems (Reise vom 12. bis 26. Juli: `2027-07-12T00:00:00+02:00` bis `2027-07-26T23:59:59+02:00`). Der Offset bleibt erhalten, siehe Zeiten in [architecture.md](architecture.md#persistence).
 - `Trip.travelers`: Zahl der Reisenden (optional, 1–99, Check-Constraint, `V31`), wird beim Anlegen einer Buchung als Gästezahl vorgeschlagen (ohne Wert: Gäste der letzten Buchung der Reise). `changeTravelers(…)` ändert sie.
