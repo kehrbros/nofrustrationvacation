@@ -663,7 +663,6 @@ a {
   border: 2px solid var(--ink);
   border-radius: 999px;
   padding: 6px 12px 6px 8px;
-  box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
   max-width: 220px;
 }
@@ -676,7 +675,6 @@ a {
 .va-map-incident-too-late {
   color: #ffffff;
   background: var(--ink);
-  box-shadow: 0 3px 0 var(--accent);
 }
 .va-map-incident-too-late svg path:first-child {
   fill: var(--accent);
@@ -922,7 +920,6 @@ a {
 }
 .va-choice-main {
   background: var(--accent-soft);
-  box-shadow: 0 4px 0 var(--ink);
 }
 .va-choice-main > .anticon {
   background: var(--accent);
