@@ -81,6 +81,10 @@ export interface TripIncident {
   timesUnconfirmed: boolean;
   /** Stretch of the route the incident covers, empty if unknown. */
   geometry: LinePoint[];
+  /** The incident has ended: shown with a green check until the traveller removes it. */
+  resolved: boolean;
+  /** When it was resolved, null if not resolved. */
+  resolvedAt: string | null;
 }
 
 /** Situation of one route with its incidents, against the arrival at its target stop. */

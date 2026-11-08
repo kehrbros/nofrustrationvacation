@@ -11,11 +11,11 @@
     "description" : "Link the PayPal account for payouts",
     "name" : "Payout account"
   }, {
-    "description" : "Pay out earnings via PayPal",
-    "name" : "Payouts"
-  }, {
     "description" : "Incidents affecting the trips of the authenticated user",
     "name" : "Incidents"
+  }, {
+    "description" : "Pay out earnings via PayPal",
+    "name" : "Payouts"
   }, {
     "description" : "Steps before a user can act in a role",
     "name" : "Onboarding"
@@ -1728,7 +1728,7 @@
     },
     "/api/v1/trips/{tripId}/incidents" : {
       "get" : {
-        "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage.",
+        "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage. Then resolved ones (resolved = true, incident ended), most recently resolved first, until removed.",
         "operationId" : "getTripIncidents",
         "parameters" : [ {
           "in" : "path",
@@ -1856,6 +1856,44 @@
         },
         "summary" : "Route with waypoints",
         "tags" : [ "Routes" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}" : {
+      "delete" : {
+        "description" : "Only once the incident has ended (resolved = true), 409 INCIDENT_NOT_RESOLVED before; 404 INCIDENT_NOT_FOUND if the route has no consequence of it.",
+        "operationId" : "dismissResolvedIncident",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "incidentId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Remove a resolved incident from the trip",
+        "tags" : [ "Incidents" ]
       }
     },
     "/api/v1/trips/{tripId}/routes/{routeId}/plan" : {
@@ -4184,7 +4222,7 @@
       },
       "TripIncidentDto" : {
         "type" : "object",
-        "description" : "Incident affecting a route of a trip, one entry per incident and route",
+        "description" : "Incident affecting a route of a trip, one entry per incident and route; resolved ones (incident ended) until removed",
         "properties" : {
           "assessedDelayMinutes" : {
             "type" : [ "integer", "null" ],
@@ -4246,6 +4284,15 @@
             "type" : [ "string", "null" ],
             "format" : "date-time",
             "description" : "Passage of the affected section, moved by earlier delays"
+          },
+          "resolved" : {
+            "type" : "boolean",
+            "description" : "The incident has ended: show as resolved until the traveller removes it"
+          },
+          "resolvedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "When it was resolved, null if not resolved"
           },
           "routeId" : {
             "type" : "integer",

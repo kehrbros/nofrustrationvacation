@@ -11,7 +11,7 @@ import jakarta.annotation.Nullable;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-@Schema(description = "Incident affecting a route of a trip, one entry per incident and route")
+@Schema(description = "Incident affecting a route of a trip, one entry per incident and route; resolved ones (incident ended) until removed")
 public record TripIncidentDto(
         long incidentId,
         long routeId,
@@ -43,5 +43,8 @@ public record TripIncidentDto(
         @Schema(description = "Closure whose times are only in the description and could not be read yet: "
                 + "show as \"check times\"") boolean timesUnconfirmed,
         @Schema(description = "Stretch of the route the incident covers, points in WGS84 in driving order, for the "
-                + "map; empty if unknown") List<RouteLineDto.LinePointDto> geometry) {
+                + "map; empty if unknown") List<RouteLineDto.LinePointDto> geometry,
+        @Schema(description = "The incident has ended: show as resolved until the traveller removes it")
+        boolean resolved,
+        @Schema(description = "When it was resolved, null if not resolved") @Nullable OffsetDateTime resolvedAt) {
 }

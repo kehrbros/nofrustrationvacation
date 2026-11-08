@@ -23,4 +23,5 @@ Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie dami
 - **Schema nur per Flyway**, Standard-SQL (`SMALLINT` statt `TINYINT`). Datenbank PostgreSQL mit PostGIS (auch in Tests), PostGIS nur für Geometrie, siehe [Docs/network.md](Docs/network.md). Bestehende Migrationen nie ändern, neue Version anlegen.
 - **Altbestand** (`accounting`, `onboarding`) nicht ändern, solange nicht entschieden ist, was davon bleibt. `paypal` bleibt und wird für Zahlungen von Buchungen angepasst, siehe [Docs/accommodation-alternatives.md](Docs/accommodation-alternatives.md#zahlung).
 - **UI-Texte immer zweisprachig:** jeder neue oder geänderte Text im Frontend (auch `aria-label`, Platzhalter, Fehlermeldungen) als Schlüssel in `frontend/src/i18n/de.ts` und `en.ts`, nie fest im Code; Zahlen, Preise und Daten über die Sprache formatieren. Details in [Docs/i18n.md](Docs/i18n.md).
+- **Keine Schatten unter Buttons:** Buttons und klickbare Chips (Plus-Button, Auswahl-Buttons, Karten-Chips) ohne `box-shadow`, Kontur nur über Rand.
 - **Doku** in `Docs/` auf Deutsch in Stichpunkten, mit dem Code aktuell halten.

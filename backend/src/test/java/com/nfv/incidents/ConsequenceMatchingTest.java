@@ -9,9 +9,12 @@ import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.entities.MatchKind;
 import com.nfv.incidents.entities.VehicleScope;
 import com.nfv.incidents.logic.IncidentDetails;
+import com.nfv.incidents.logic.ConsequenceMatcher;
 import com.nfv.incidents.logic.IncidentLogic;
+import com.nfv.incidents.logic.IncidentNotResolvedException;
 import com.nfv.incidents.logic.IncidentReporting;
 import com.nfv.incidents.logic.ReportedIncident;
+import com.nfv.incidents.logic.ResolvedIncidents;
 import com.nfv.incidents.logic.RouteTooLate;
 import com.nfv.incidents.logic.TimeWindow;
 import com.nfv.incidents.logic.TripIncidents;
@@ -29,6 +32,7 @@ import com.nfv.trips.entities.Trip;
 import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.PlannedSection;
 import com.nfv.trips.logic.RouteLogic;
+import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripLogic;
 import com.nfv.user.logic.AppUserProvisioning;
 import jakarta.persistence.EntityManager;
@@ -56,6 +60,7 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Incidents and routes are matched both ways via their segments and the passage time, see Docs/domain.md. */
 @SpringBootTest
@@ -97,6 +102,10 @@ class ConsequenceMatchingTest {
     private IncidentReporting incidentReporting;
     @Autowired
     private ApplicationEvents applicationEvents;
+    @Autowired
+    private ConsequenceMatcher consequenceMatcher;
+    @Autowired
+    private ResolvedIncidents resolvedIncidents;
 
     private long first;
     private long second;
@@ -365,7 +374,7 @@ class ConsequenceMatchingTest {
     }
 
     @Test
-    void scheduledIncidentEndedBeforeItsStartAffectsNothing() {
+    void scheduledIncidentEndedBeforeItsStartIsResolved() {
         plan(routeId, first);
         Incident scheduled = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Geplant",
                 DEPARTURE.plusMinutes(5), DEPARTURE.plusHours(3), null, Set.of(first)));
@@ -374,7 +383,89 @@ class ConsequenceMatchingTest {
         incidentReporting.report(new ReportedIncident(IncidentType.CLOSURE, null, DEPARTURE.plusMinutes(5), null, null,
                 null, null, null, null, "test", true, List.of(), null, false, false), scheduled.getId());
 
-        assertThat(consequenceRepository.findByIncidentId(scheduled.getId())).isEmpty();
+        assertThat(consequenceRepository.findByIncidentId(scheduled.getId())).singleElement()
+                .satisfies(c -> assertThat(c.getResolvedAt()).isNotNull());
+        assertThat(tripIncidents.active(userId, tripId)).isEmpty();
+    }
+
+    @Test
+    void endedIncidentStaysAsResolvedUntilDismissed() {
+        plan(routeId, first);
+        Incident incident = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung",
+                DEPARTURE.minusHours(1), null, null, Set.of(first)));
+        assertThat(tripIncidents.activeCountsByTrip(userId)).containsEntry(tripId, 1);
+
+        incidentReporting.report(new ReportedIncident(IncidentType.CLOSURE, null, DEPARTURE.minusHours(1), null, null,
+                null, null, null, null, "test", true, List.of(), null, false, false), incident.getId());
+
+        assertThat(consequenceRepository.findByIncidentId(incident.getId())).singleElement()
+                .satisfies(c -> assertThat(c.getResolvedAt()).isNotNull());
+        assertThat(tripIncidents.active(userId, tripId)).isEmpty();
+        assertThat(tripIncidents.activeCountsByTrip(userId)).doesNotContainKey(tripId);
+        assertThat(tripIncidents.shown(userId, tripId)).singleElement()
+                .satisfies(c -> assertThat(c.getIncident().getId()).isEqualTo(incident.getId()));
+
+        // assessed again (e.g. route changed): stays resolved, is not removed
+        inTransaction(() -> consequenceMatcher.matchRoute(routeId));
+        assertThat(tripIncidents.shown(userId, tripId)).hasSize(1);
+
+        inTransaction(() -> {
+            tripIncidents.dismiss(userId, tripId, routeId, incident.getId());
+            return null;
+        });
+        assertThat(consequenceRepository.findByIncidentId(incident.getId())).isEmpty();
+        inTransaction(() -> consequenceMatcher.matchRoute(routeId));
+        assertThat(tripIncidents.shown(userId, tripId)).as("does not come back").isEmpty();
+    }
+
+    @Test
+    void resolvedIncidentThatAppliesAgainIsActiveAgain() {
+        plan(routeId, first);
+        Incident incident = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung",
+                DEPARTURE.minusHours(1), null, null, Set.of(first)));
+        incidentReporting.report(new ReportedIncident(IncidentType.CLOSURE, null, DEPARTURE.minusHours(1), null, null,
+                null, null, null, null, "test", true, List.of(), null, false, false), incident.getId());
+
+        inTransaction(() -> incidentLogic.change(incident.getId(), "Sperrung", DEPARTURE.minusHours(1), null, null,
+                Set.of(first)));
+
+        assertThat(consequenceRepository.findByIncidentId(incident.getId())).singleElement()
+                .satisfies(c -> assertThat(c.getResolvedAt()).isNull());
+        assertThat(tripIncidents.active(userId, tripId)).hasSize(1);
+    }
+
+    @Test
+    void activeIncidentCannotBeDismissed() {
+        plan(routeId, first);
+        Incident incident = inTransaction(() -> incidentLogic.create(IncidentType.CLOSURE, "Sperrung",
+                DEPARTURE.minusHours(1), null, null, Set.of(first)));
+
+        assertThatThrownBy(() -> tripIncidents.dismiss(userId, tripId, routeId, incident.getId()))
+                .isInstanceOf(IncidentNotResolvedException.class);
+        assertThatThrownBy(() -> tripIncidents.dismiss(userId, tripId, routeId + 1_000_000, incident.getId()))
+                .isInstanceOf(TripItemNotFoundException.class);
+        assertThat(consequenceRepository.findByIncidentId(incident.getId())).hasSize(1);
+    }
+
+    @Test
+    void expiredIncidentIsMarkedResolvedByTheJob() {
+        plan(routeId, first);
+        Incident incident = inTransaction(() -> incidentLogic.create(IncidentType.CONGESTION, "Stau",
+                DEPARTURE.minusHours(1), DEPARTURE.plusHours(3), Duration.ofMinutes(20), Set.of(first)));
+        OffsetDateTime past = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1);
+        // the validity runs out without the source reporting anything, so nothing assesses the route
+        inTransaction(() -> entityManager.createQuery(
+                        "UPDATE Incident i SET i.validFrom = :start, i.validTo = :end WHERE i.id = :id")
+                .setParameter("start", past.minusHours(1)).setParameter("end", past)
+                .setParameter("id", incident.getId()).executeUpdate());
+        assertThat(tripIncidents.active(userId, tripId)).as("ended, even before the job ran").isEmpty();
+        assertThat(tripIncidents.shown(userId, tripId)).hasSize(1);
+
+        assertThat(resolvedIncidents.markResolved()).isPositive();
+
+        assertThat(consequenceRepository.findByIncidentId(incident.getId())).singleElement()
+                .satisfies(c -> assertThat(c.getResolvedAt()).isNotNull());
+        assertThat(resolvedIncidents.markResolved()).as("marked once").isZero();
     }
 
     @Test

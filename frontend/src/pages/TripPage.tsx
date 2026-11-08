@@ -66,7 +66,10 @@ export default function TripPage() {
       setPositionHint(t(`map.position.${position.status === 'denied' ? 'denied' : 'unavailable'}`));
     }
   };
-  const [trip, incidents, bookings, lines] = data ?? [undefined, [] as TripIncident[], [] as Booking[], [] as RouteLine[]];
+  const [trip, allIncidents, bookings, lines] = data ?? [undefined, [] as TripIncident[], [] as Booking[], [] as RouteLine[]];
+  // resolved ones (incident ended) only appear on the map with a green check, everything else uses the current ones
+  const incidents = useMemo(() => allIncidents.filter((incident) => !incident.resolved), [allIncidents]);
+  const resolvedIncidents = useMemo(() => allIncidents.filter((incident) => incident.resolved), [allIncidents]);
   const routeLines = useMemo(() => new Map(lines.map((line) => [line.routeId, line])), [lines]);
 
   const stopById = useMemo(() => new Map((trip?.stops ?? []).map((stop) => [stop.id, stop])), [trip]);
@@ -83,6 +86,10 @@ export default function TripPage() {
   const close = useCallback(() => navigate(`/reisen/${id}`), [navigate, id]);
   const openAlternatives = useCallback(
     (consequence: TripIncident) => navigate(`/reisen/${id}/alternativen/${consequence.routeId}/${consequence.incidentId}`),
+    [navigate, id],
+  );
+  const openResolved = useCallback(
+    (consequence: TripIncident) => navigate(`/reisen/${id}/hinweise/${consequence.routeId}/${consequence.incidentId}`),
     [navigate, id],
   );
   // a tap on the map above the expanded list folds it back in, like the toggle
@@ -133,6 +140,7 @@ export default function TripPage() {
     trip,
     incidents,
     incidentsByRoute,
+    resolvedIncidents,
     stopById,
     bookings,
     bookingsByStop,
@@ -186,8 +194,10 @@ export default function TripPage() {
             routeLines={routeLines}
             preview={routePreview}
             incidentsByRoute={incidentsByRoute}
+            resolvedIncidents={resolvedIncidents}
             onRouteClick={openRoute}
             onConsequenceClick={openAlternatives}
+            onResolvedClick={openResolved}
             bottomPadding={SHEET_COLLAPSED}
             onMapClick={collapse}
             position={position}

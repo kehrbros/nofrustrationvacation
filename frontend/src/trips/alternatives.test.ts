@@ -24,6 +24,8 @@ const consequence = (values: Partial<TripIncident>): TripIncident => ({
   deadline: null,
   timesUnconfirmed: false,
   geometry: [],
+  resolved: false,
+  resolvedAt: null,
   ...values,
 });
 

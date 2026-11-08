@@ -43,10 +43,15 @@ public class ActiveIncidents {
         return consequenceRepository.findById(consequenceId).map(this::view);
     }
 
-    /** All consequences of the route, also those {@link RouteConsequence#counts() that do not count}. */
+    /**
+     * All consequences of the route, also those {@link RouteConsequence#counts() that do not count}, except resolved
+     * ones (their incident has ended).
+     */
     @Transactional(readOnly = true)
     public List<RouteConsequence> consequencesOnRoute(long routeId) {
-        return consequenceRepository.findByRouteId(routeId).stream().map(this::view).toList();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        return consequenceRepository.findByRouteId(routeId).stream().filter(c -> !c.isResolved(now)).map(this::view)
+                .toList();
     }
 
     private RouteConsequence view(Consequence consequence) {

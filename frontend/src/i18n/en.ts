@@ -316,6 +316,12 @@ export const en: Messages<typeof de> = {
     asOf: 'As of',
     updated: 'updated {{ago}}',
     notAffected: 'This alert no longer affects your trip.',
+    resolved: 'Resolved',
+    resolvedDetail: 'This alert no longer applies, your route is clear again.',
+    resolvedDetailAgo: 'Resolved {{ago}}, your route is clear again.',
+    remove: 'Remove alert from the map',
+    keep: 'Keep on the map',
+    removeFailed: 'The alert could not be removed. Please try again.',
   },
   alternativesSheet: {
     yourTarget: 'your destination',
@@ -402,6 +408,7 @@ export const en: Messages<typeof de> = {
     label: 'Map with stops and routes',
     stop: 'Stop {{position}}: {{name}}',
     alternatives: 'View alternatives: {{title}}',
+    resolved: 'Resolved: {{title}}',
     showTrip: 'Show the whole route',
     position: {
       pawn: 'Your current position',

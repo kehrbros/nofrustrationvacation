@@ -120,7 +120,10 @@ public class IncidentReporting {
                             segments.size(), segments.stream().mapToDouble(SegmentInfo::lengthMeters).sum()))
                     .sorted(Comparator.comparingDouble(IncidentOverview.Road::lengthMeters).reversed())
                     .toList();
+            OffsetDateTime now = OffsetDateTime.now(clock);
+            // resolved ones (incident ended) no longer have an effect, they only wait for the traveller to remove them
             List<IncidentOverview.Effect> effects = consequenceRepository.findByIncidentId(incidentId).stream()
+                    .filter(c -> !c.isResolved(now))
                     .map(c -> new IncidentOverview.Effect(c.getRouteId(), c.getCategory(), c.getMatch(), c.impact(),
                             c.getAssessedDelay(), c.isDelayAssumed(), c.getPassageAt(), c.getExpectedArrival(),
                             c.getDeadline(), c.getWindowStart(), c.getWindowEnd()))
