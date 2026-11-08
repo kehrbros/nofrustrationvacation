@@ -57,7 +57,10 @@ export default function TripAlternativesSheet() {
             <span className="va-eyebrow">{routeName(route, stopById)}</span>
             <span className="va-strong">{text.headline}</span>
             {text.detail && <span className="va-small">{text.detail}</span>}
-            {summary && <RouteSituation summary={summary} incidentsOnRoute={incidents.filter((i) => i.routeId === route.id).length} />}
+            {summary && (
+              <RouteSituation summary={summary} targetName={target?.name ?? 'dein Ziel'}
+                incidentsOnRoute={incidents.filter((i) => i.routeId === route.id).length} />
+            )}
           </div>
 
           <section className="va-section" aria-labelledby="va-proposals-title">
@@ -72,17 +75,11 @@ export default function TripAlternativesSheet() {
                 targetStayTitle: targetStay?.title ?? null,
               }}
               onChanged={reload}
-              onPlanMyself={() => setManualOpen(true)}
+              manualOpen={manualOpen}
+              onToggleManual={setManualOpen}
             />
-          </section>
-
-          <section className="va-section" aria-labelledby="va-alternatives-title">
-            <button type="button" className="va-text-button va-eyebrow" id="va-alternatives-title"
-              aria-expanded={manualOpen} onClick={() => setManualOpen((value) => !value)}>
-              Selbst umplanen {manualOpen ? '↑' : '↓'}
-            </button>
             {manualOpen && (
-              <>
+              <div id="va-manual-planning" className="va-column va-gap">
                 <ul className="va-alternatives">
                   {alternatives.alternatives.map((alternative) => (
                     <li key={alternative.kind}>
@@ -93,10 +90,9 @@ export default function TripAlternativesSheet() {
                 <p className="va-small va-muted">
                   Löschst du dabei einen Stop, kommen seine Buchungen auf deine To-do-Liste, damit du sie stornieren kannst.
                 </p>
-              </>
+              </div>
             )}
           </section>
-
 
           <Link to={`${tripPath}/hinweise/${route.id}/${consequence.incidentId}`} className="va-text-button">
             Details zum Hinweis · aktualisiert {formatAgo(consequence.updatedAt)}
@@ -109,20 +105,44 @@ export default function TripAlternativesSheet() {
   );
 }
 
-/** Slack of the whole route when more than this incident is on it, or when it is tight. */
-function RouteSituation({ summary, incidentsOnRoute }: { summary: RouteIncidentSummary; incidentsOnRoute: number }) {
+/**
+ * The whole route: what the incidents on it cost together and what is left of the slack. If the plan already arrives
+ * after the arrival time of the target stop, that lateness is not the incidents' doing and is named as such.
+ */
+function RouteSituation({ summary, targetName, incidentsOnRoute }: {
+  summary: RouteIncidentSummary;
+  targetName: string;
+  incidentsOnRoute: number;
+}) {
   if (summary.unpassable || summary.slackMinutes === null) {
     return incidentsOnRoute > 1 ? <span className="va-small va-muted">{incidentsOnRoute} Hinweise auf dieser Route</span> : null;
+  }
+  const incidentsDelay = minutesBetween(summary.plannedArrival, summary.expectedArrival);
+  const together = incidentsOnRoute > 1 && incidentsDelay !== null
+    ? `Alle ${incidentsOnRoute} Hinweise zusammen: ${incidentsDelay > 0 ? `+${formatMinutes(incidentsDelay)}` : 'keine Verzögerung'}`
+    : null;
+  if (summary.plannedTooLate) {
+    const plannedLate = minutesBetween(summary.deadline, summary.plannedArrival);
+    return (
+      <>
+        {together && <span className="va-small va-muted">{together}</span>}
+        <span className="va-small va-muted">
+          Unabhängig davon kommst du laut Planung {plannedLate !== null ? `${formatMinutes(plannedLate)} ` : ''}nach
+          der Ankunftszeit in {targetName} an. Prüf die Abfahrt und die Ankunftszeit deiner Stops.
+        </span>
+      </>
+    );
   }
   const slack =
     summary.slackMinutes < 0
       ? `${formatMinutes(-summary.slackMinutes)} zu spät`
       : `${formatMinutes(summary.slackMinutes)} Puffer`;
-  return (
-    <span className="va-small va-muted">
-      {incidentsOnRoute > 1 ? `Alle ${incidentsOnRoute} Hinweise zusammen: ${slack}` : `Insgesamt: ${slack}`}
-    </span>
-  );
+  return <span className="va-small va-muted">{together ? `${together}, damit ${slack}` : `Insgesamt: ${slack}`}</span>;
+}
+
+/** Whole minutes from one point in time to another, null if one is missing. */
+function minutesBetween(fromIso: string | null, toIso: string | null): number | null {
+  return fromIso && toIso ? Math.round((new Date(toIso).getTime() - new Date(fromIso).getTime()) / 60_000) : null;
 }
 
 function AlternativeRow({ alternative, tripPath }: { alternative: TripAlternative; tripPath: string }) {
