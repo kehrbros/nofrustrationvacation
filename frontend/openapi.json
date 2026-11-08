@@ -11,11 +11,11 @@
     "description" : "Link the PayPal account for payouts",
     "name" : "Payout account"
   }, {
-    "description" : "Pay out earnings via PayPal",
-    "name" : "Payouts"
-  }, {
     "description" : "Incidents affecting the trips of the authenticated user",
     "name" : "Incidents"
+  }, {
+    "description" : "Pay out earnings via PayPal",
+    "name" : "Payouts"
   }, {
     "description" : "Steps before a user can act in a role",
     "name" : "Onboarding"
@@ -1816,6 +1816,44 @@
         "tags" : [ "Routes" ]
       }
     },
+    "/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}" : {
+      "delete" : {
+        "description" : "Only once the incident has ended (resolved = true), 409 INCIDENT_NOT_RESOLVED before; 404 INCIDENT_NOT_FOUND if the route has no consequence of it.",
+        "operationId" : "dismissResolvedIncident",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "routeId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "incidentId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        },
+        "summary" : "Remove a resolved incident from the trip",
+        "tags" : [ "Incidents" ]
+      }
+    },
     "/api/v1/trips/{tripId}/routes/{routeId}/plan" : {
       "post" : {
         "description" : "E.g. after ROUTING_UNAVAILABLE, see planOutcome.",
@@ -1940,44 +1978,6 @@
         },
         "summary" : "Add a stop",
         "tags" : [ "Trips" ]
-      }
-    },
-    "/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}" : {
-      "delete" : {
-        "tags" : [ "Incidents" ],
-        "summary" : "Remove a resolved incident from the trip",
-        "description" : "Only once the incident has ended (resolved = true), 409 INCIDENT_NOT_RESOLVED before; 404 INCIDENT_NOT_FOUND if the route has no consequence of it.",
-        "operationId" : "dismissResolvedIncident",
-        "parameters" : [ {
-          "name" : "tripId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        }, {
-          "name" : "routeId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        }, {
-          "name" : "incidentId",
-          "in" : "path",
-          "required" : true,
-          "schema" : {
-            "type" : "integer",
-            "format" : "int64"
-          }
-        } ],
-        "responses" : {
-          "204" : {
-            "description" : "No Content"
-          }
-        }
       }
     },
     "/api/v1/trips/{tripId}/stops/{stopId}" : {
@@ -4180,7 +4180,7 @@
       },
       "TripIncidentDto" : {
         "type" : "object",
-        "description" : "Incident affecting a route of a trip, one entry per incident and route",
+        "description" : "Incident affecting a route of a trip, one entry per incident and route; resolved ones (incident ended) until removed",
         "properties" : {
           "assessedDelayMinutes" : {
             "type" : [ "integer", "null" ],
