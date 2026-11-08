@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Booking } from '../bookings/model';
 import type { Route, Stop, TripIncident } from './model';
 
@@ -44,30 +45,29 @@ export function tripAlternatives(
   const alternatives: TripAlternative[] = [
     {
       kind: 'ROUTE',
-      title: blocked ? 'Umfahrung' : 'Andere Route',
-      detail: blocked
-        ? 'Wege um die Sperrung berechnen und mit deiner Route vergleichen.'
-        : 'Schnellere Wege berechnen und mit deiner Route vergleichen.',
+      title: blocked ? t('tripAlternatives.detour') : t('tripAlternatives.otherRoute'),
+      detail: blocked ? t('tripAlternatives.detourDetail') : t('tripAlternatives.otherRouteDetail'),
       to: `routen/${route.id}`,
     },
   ];
   const accommodation = targetAccommodation(bookings, target);
-  const targetName = target?.name ?? 'dem Ziel';
   alternatives.push(
     accommodation
       ? {
           kind: 'ACCOMMODATION',
-          title: 'Andere Unterkunft',
+          title: t('tripAlternatives.otherStay'),
           detail:
             consequence.category === 'TOO_LATE'
-              ? `Du erreichst ${accommodation.title} nicht rechtzeitig. Unterkunft suchen, die du noch erreichst.`
-              : `Falls ${accommodation.title} knapp wird: freie Unterkünfte in der Nähe suchen.`,
+              ? t('tripAlternatives.stayTooLate', { title: accommodation.title })
+              : t('tripAlternatives.stayTight', { title: accommodation.title }),
           to: `buchungen/${accommodation.id}/alternativen`,
         }
       : {
           kind: 'ACCOMMODATION',
-          title: 'Andere Unterkunft',
-          detail: `Für ${targetName} ist keine Unterkunft hinterlegt.`,
+          title: t('tripAlternatives.otherStay'),
+          detail: target
+            ? t('tripAlternatives.noStay', { target: target.name })
+            : t('tripAlternatives.noStayAtTarget'),
           to: null,
         },
   );

@@ -2,6 +2,7 @@ import { Spin } from 'antd';
 import { useEffect, type ReactNode } from 'react';
 import { useAuth } from 'react-oidc-context';
 
+import { t } from '../i18n';
 import SessionExpiredDialog from './SessionExpiredDialog';
 import { loginState, renewSession } from './session';
 
@@ -37,5 +38,5 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
       </>
     );
   }
-  return <Spin fullscreen tip="Weiterleitung zur Anmeldung …" />;
+  return <Spin fullscreen tip={t('auth.redirecting')} />;
 }

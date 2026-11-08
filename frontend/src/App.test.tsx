@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import App from './App';
+import { i18n } from './i18n';
 
 const authenticated: Partial<AuthContextProps> = {
   isLoading: false,
@@ -37,6 +38,19 @@ describe('App', () => {
     expect(html).toContain('Neue Reise');
     expect(html).toContain('Titelfoto');
     expect(html).toContain('Reise anlegen');
+  });
+
+  it('renders in English when chosen', async () => {
+    await i18n.changeLanguage('en');
+    try {
+      const html = renderApp(authenticated, '/reisen/neu');
+
+      expect(html).toContain('New trip');
+      expect(html).toContain('Cover photo');
+      expect(html).toContain('Create trip');
+    } finally {
+      await i18n.changeLanguage('de');
+    }
   });
 
   it('does not render pages for unauthenticated users', () => {

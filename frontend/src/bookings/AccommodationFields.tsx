@@ -1,6 +1,7 @@
 import { EnvironmentOutlined, HomeOutlined, LoadingOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { lookUpAccommodation, suggestAccommodations } from './bookingsApi';
 import { liteApiHotelId, type AccommodationForm, type FormField } from './form';
@@ -33,16 +34,9 @@ interface Lookup {
 
 const LOOKED_UP: FormField[] = ['phone', 'email', 'website', 'checkInFrom', 'checkInUntil', 'checkOutUntil', 'addressLine', 'countryCode'];
 
-const LABELS: Partial<Record<FormField, string>> = {
-  addressLine: 'Adresse',
-  countryCode: 'Land',
-  phone: 'Telefon',
-  email: 'E-Mail',
-  website: 'Website',
-  checkInFrom: 'Check-in ab',
-  checkInUntil: 'Check-in bis',
-  checkOutUntil: 'Check-out bis',
-};
+/** Short names of the looked up fields, for the note where they came from. */
+const lookedUpLabel = (name: FormField) =>
+  t(`accommodation.lookedUp.${name as 'addressLine' | 'countryCode' | 'phone' | 'email' | 'website' | 'checkInFrom' | 'checkInUntil' | 'checkOutUntil'}`);
 
 /**
  * Fields of an accommodation booking. Typing the name suggests accommodations (LiteAPI hotel data and the map, near
@@ -200,13 +194,13 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
           {(filled?.has(name) || researched) && (
             <span
               className="va-filled-mark"
-              title={researched ? 'Ergänzt aus öffentlichen Angaben' : 'Aus der Bestätigung übernommen'}
-              aria-label={researched ? 'ergänzt aus öffentlichen Angaben' : 'aus der Bestätigung übernommen'}
+              title={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
+              aria-label={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
             />
           )}
         </label>
         {input}
-        {check && <span className="va-small va-check-hint">Bitte prüfen</span>}
+        {check && <span className="va-small va-check-hint">{t('accommodation.check')}</span>}
         {hint && <span className="va-small va-muted">{hint}</span>}
       </div>
     );
@@ -228,16 +222,18 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
     />
   );
 
-  const fromLiteApi = [...origins].filter(([, origin]) => origin === 'liteapi').map(([name]) => LABELS[name]);
-  const fromAssistant = [...origins].filter(([, origin]) => origin === 'assistant').map(([name]) => LABELS[name]);
+  const fromLiteApi = [...origins].filter(([, origin]) => origin === 'liteapi').map(([name]) => lookedUpLabel(name));
+  const fromAssistant = [...origins].filter(([, origin]) => origin === 'assistant').map(([name]) => lookedUpLabel(name));
 
   return (
     <div className="va-form">
-      <h3 className="va-form-section">Unterkunft</h3>
+      <h3 className="va-form-section">{t('addBooking.accommodation')}</h3>
       <div className={`va-field ${uncertain?.has('name') ? 'va-field-check' : ''}`}>
         <label htmlFor="acc-name">
-          Name
-          {filled?.has('name') && <span className="va-filled-mark" title="Aus der Bestätigung übernommen" aria-label="aus der Bestätigung übernommen" />}
+          {t('accommodation.name')}
+          {filled?.has('name') && (
+            <span className="va-filled-mark" title={t('accommodation.fromConfirmation')} aria-label={t('accommodation.fromConfirmation')} />
+          )}
         </label>
         <input
           id="acc-name"
@@ -260,14 +256,14 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
           onKeyDown={(event) => event.key === 'Escape' && setSuggesting(false)}
           onBlur={() => window.setTimeout(() => setSuggesting(false), 200)}
         />
-        {uncertain?.has('name') && <span className="va-small va-check-hint">Bitte prüfen</span>}
+        {uncertain?.has('name') && <span className="va-small va-check-hint">{t('accommodation.check')}</span>}
         {(searching || !lookup) && (
           <span id="acc-name-hint" className="va-small va-muted">
-            {searching ? 'Suche Unterkünfte …' : 'Vorschlag wählen, dann ergänzen wir Adresse, Kontakt und Check-in-Zeiten.'}
+            {searching ? t('accommodation.searching') : t('accommodation.nameHint')}
           </span>
         )}
         {suggesting && suggestions.length > 0 && (
-          <ul className="va-suggestions" aria-label="Vorschläge">
+          <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
             {suggestions.map((choice) => (
               <li key={choice.key}>
                 <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => choose(choice)}>
@@ -290,44 +286,44 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
       </div>
       {field(
         'addressLine',
-        'Adresse',
+        t('booking.address'),
         text('addressLine', 'text', { autoComplete: 'off' }),
-        form.latitude == null ? 'Ohne gewählten Vorschlag ist die Unterkunft nicht auf der Karte, es gilt die Zeitzone dieses Geräts.' : undefined,
+        form.latitude == null ? t('accommodation.noPlace') : undefined,
       )}
 
-      <h3 className="va-form-section">Aufenthalt</h3>
+      <h3 className="va-form-section">{t('booking.stay')}</h3>
       <div className="va-field-row">
-        {field('checkInDate', 'Anreise', text('checkInDate', 'date', { required: true }))}
-        {field('checkOutDate', 'Abreise', text('checkOutDate', 'date', { required: true, min: form.checkInDate || undefined }))}
+        {field('checkInDate', t('booking.checkIn'), text('checkInDate', 'date', { required: true }))}
+        {field('checkOutDate', t('booking.checkOut'), text('checkOutDate', 'date', { required: true, min: form.checkInDate || undefined }))}
       </div>
 
-      <h3 className="va-form-section">Buchung</h3>
-      {field('provider', 'Gebucht über', text('provider', 'text', { placeholder: 'z. B. Booking.com', autoComplete: 'off' }))}
-      {field('reference', 'Buchungsnummer', text('reference', 'text', { autoComplete: 'off' }))}
-      {field('manageUrl', 'Link zur Buchung', text('manageUrl', 'url', { placeholder: 'https://…', inputMode: 'url' }))}
+      <h3 className="va-form-section">{t('accommodation.booking')}</h3>
+      {field('provider', t('accommodation.provider'), text('provider', 'text', { placeholder: t('accommodation.providerPlaceholder'), autoComplete: 'off' }))}
+      {field('reference', t('accommodation.reference'), text('reference', 'text', { autoComplete: 'off' }))}
+      {field('manageUrl', t('form.manageUrl'), text('manageUrl', 'url', { placeholder: 'https://…', inputMode: 'url' }))}
       <div className="va-field-row">
-        {field('guests', 'Gäste', text('guests', 'number', { min: 1, max: 99, inputMode: 'numeric' }))}
-        {field('rooms', 'Zimmer', text('rooms', 'number', { min: 1, max: 99, inputMode: 'numeric' }))}
+        {field('guests', t('form.guests'), text('guests', 'number', { min: 1, max: 99, inputMode: 'numeric' }))}
+        {field('rooms', t('form.rooms'), text('rooms', 'number', { min: 1, max: 99, inputMode: 'numeric' }))}
       </div>
 
       <details className="va-details" open={hasMore(form, filled, uncertain, origins)}>
-        <summary>Check-in-Zeiten, Kontakt, Preis und mehr</summary>
+        <summary>{t('accommodation.more')}</summary>
         <div className="va-form">
           <div className="va-field-row">
-            {field('checkInFrom', 'Check-in ab', text('checkInFrom', 'time'))}
-            {field('checkInUntil', 'Check-in bis', text('checkInUntil', 'time'))}
+            {field('checkInFrom', t('accommodation.lookedUp.checkInFrom'), text('checkInFrom', 'time'))}
+            {field('checkInUntil', t('accommodation.lookedUp.checkInUntil'), text('checkInUntil', 'time'))}
           </div>
-          {field('checkOutUntil', 'Check-out bis', text('checkOutUntil', 'time'))}
-          {field('phone', 'Telefon der Unterkunft', text('phone', 'tel'))}
-          {field('email', 'E-Mail der Unterkunft', text('email', 'email'))}
-          {field('website', 'Website', text('website', 'url', { placeholder: 'https://…', inputMode: 'url' }))}
+          {field('checkOutUntil', t('accommodation.lookedUp.checkOutUntil'), text('checkOutUntil', 'time'))}
+          {field('phone', t('accommodation.phone'), text('phone', 'tel'))}
+          {field('email', t('accommodation.email'), text('email', 'email'))}
+          {field('website', t('form.website'), text('website', 'url', { placeholder: 'https://…', inputMode: 'url' }))}
           <div className="va-field-row">
-            {field('price', 'Preis gesamt', text('price', 'text', { inputMode: 'decimal', placeholder: '0,00' }))}
-            {field('currency', 'Währung', text('currency', 'text', { maxLength: 3, autoCapitalize: 'characters' }))}
+            {field('price', t('accommodation.price'), text('price', 'text', { inputMode: 'decimal', placeholder: t('accommodation.pricePlaceholder') }))}
+            {field('currency', t('accommodation.currency'), text('currency', 'text', { maxLength: 3, autoCapitalize: 'characters' }))}
           </div>
-          {field('cancellationDeadline', 'Kostenlos stornierbar bis', text('cancellationDeadline', 'datetime-local'))}
+          {field('cancellationDeadline', t('accommodation.freeCancellation'), text('cancellationDeadline', 'datetime-local'))}
           <div className="va-field">
-            <label htmlFor="acc-notes">Notiz</label>
+            <label htmlFor="acc-notes">{t('booking.notes')}</label>
             <textarea id="acc-notes" rows={3} value={form.notes} onChange={(event) => set({ notes: event.target.value })} />
           </div>
         </div>
@@ -341,22 +337,22 @@ function LookupNote({ lookup, fromLiteApi, fromAssistant }: { lookup: Lookup; fr
   if (lookup.state === 'loading') {
     return (
       <span className="va-small va-muted" role="status">
-        <LoadingOutlined aria-hidden="true" /> Kontakt und Check-in-Zeiten werden gesucht …
+        <LoadingOutlined aria-hidden="true" /> {t('accommodation.lookingUp')}
       </span>
     );
   }
   if (lookup.state === 'failed') {
-    return <span className="va-small va-muted" role="status">Kontakt und Check-in-Zeiten konnten nicht gesucht werden.</span>;
+    return <span className="va-small va-muted" role="status">{t('accommodation.lookupFailed')}</span>;
   }
   if (!fromLiteApi.length && !fromAssistant.length) {
-    return <span className="va-small va-muted" role="status">Keine weiteren Angaben zur Unterkunft gefunden.</span>;
+    return <span className="va-small va-muted" role="status">{t('accommodation.nothingFound')}</span>;
   }
   return (
     <span className="va-small va-muted" role="status">
-      {fromLiteApi.length > 0 && <>Aus den Hoteldaten: {fromLiteApi.join(', ')}. </>}
+      {fromLiteApi.length > 0 && <>{t('accommodation.fromHotelData', { fields: fromLiteApi.join(', ') })} </>}
       {fromAssistant.length > 0 && (
         <>
-          Ergänzt aus öffentlichen Angaben: {fromAssistant.join(', ')}, bitte prüfen
+          {t('accommodation.fromWeb', { fields: fromAssistant.join(', ') })}
           {lookup.sources.length > 0 && (
             <>
               {' '}(
@@ -380,7 +376,7 @@ function hostOf(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
-    return 'Quelle';
+    return t('accommodation.source');
   }
 }
 

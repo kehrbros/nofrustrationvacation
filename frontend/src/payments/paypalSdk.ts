@@ -4,6 +4,8 @@
  * PWA stay as they are, and no return URL is needed. See Docs/paypal.md#paypal-button-im-sheet.
  */
 
+import { currentLanguage } from '../i18n';
+
 export interface PayPalButtonsActions {
   restart?: () => void;
 }
@@ -44,7 +46,8 @@ export function sdkUrl({ clientId, currency, intent }: SdkOptions): string {
     intent,
     components: 'buttons',
     commit: 'true',
-    locale: 'de_DE',
+    // language of the PayPal button and popup follows the app (Docs/i18n.md)
+    locale: currentLanguage() === 'de' ? 'de_DE' : 'en_GB',
   });
   return `https://www.paypal.com/sdk/js?${params.toString()}`;
 }

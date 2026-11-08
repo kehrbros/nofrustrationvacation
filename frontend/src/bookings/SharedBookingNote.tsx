@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
+import { t } from '../i18n';
 import { readShared, SHARE_PATH } from './shareTarget';
 
 /** Hint on the trip list when a shared confirmation is still waiting, e.g. after the login interrupted sharing. */
@@ -14,7 +15,7 @@ export default function SharedBookingNote() {
   }
   return (
     <p className="va-note">
-      <strong>Eine geteilte Buchung wartet.</strong> <Link to={SHARE_PATH}>Jetzt prüfen und speichern</Link>
+      <strong>{t('share.waiting')}</strong> <Link to={SHARE_PATH}>{t('share.checkNow')}</Link>
     </p>
   );
 }

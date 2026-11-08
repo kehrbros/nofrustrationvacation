@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { useAuth } from 'react-oidc-context';
 
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
+import LanguageSwitch from '../i18n/LanguageSwitch';
 import { InstallMenuItem } from '../pwa/InstallApp';
 
 /** Avatar in the page header, opens the profile menu (profile, settings, logout) as a bottom sheet. */
@@ -27,7 +29,7 @@ export default function ProfileButton() {
       <button
         type="button"
         className="va-avatar"
-        aria-label="Profil, Einstellungen und Abmelden"
+        aria-label={t('profile.open')}
         aria-haspopup="dialog"
         onClick={() => setOpen(true)}
       >
@@ -41,16 +43,17 @@ export default function ProfileButton() {
         eyebrow={profile?.email}
         footer={
           <button type="button" className="va-button va-button-outline va-block" onClick={() => void logout()}>
-            Abmelden
+            {t('profile.logout')}
           </button>
         }
       >
-        <nav aria-label="Profil" className="va-menu-list">
+        <nav aria-label={t('profile.menu')} className="va-menu-list">
           <InstallMenuItem />
-          {['Profil', 'Benachrichtigungen', 'Einstellungen', 'Verbundene KI-Assistenten'].map((label) => (
+          <LanguageSwitch />
+          {[t('profile.profile'), t('profile.notifications'), t('profile.settings'), t('profile.assistants')].map((label) => (
             <span key={label} className="va-menu-item" aria-disabled="true">
               <span>{label}</span>
-              <span className="va-muted">folgt</span>
+              <span className="va-muted">{t('profile.comingSoon')}</span>
               <RightOutlined aria-hidden="true" />
             </span>
           ))}

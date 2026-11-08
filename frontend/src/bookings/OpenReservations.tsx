@@ -2,6 +2,7 @@ import { LoadingOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
+import { t } from '../i18n';
 import type { Booking } from './model';
 import { fetchUnfinishedReservations, type Reservation } from './alternativesApi';
 
@@ -49,19 +50,19 @@ export default function OpenReservations({ tripId, bookings, onFinished }: {
   const pending = reservation.status === 'PAYMENT_PENDING';
   const attention = reservation.status === 'NEEDS_ATTENTION';
   const text = pending
-    ? `Zahlung für ${reservation.hotelName} offen`
+    ? t('reservation.pending', { hotel: reservation.hotelName })
     : attention
-      ? `${reservation.hotelName} ist gebucht, die Zahlung wird geprüft`
-      : `Umbuchung zu ${reservation.hotelName} läuft`;
+      ? t('reservation.attention', { hotel: reservation.hotelName })
+      : t('reservation.running', { hotel: reservation.hotelName });
   const content = (
     <>
       {attention ? <SafetyCertificateOutlined aria-hidden="true" /> : pending ? <SafetyCertificateOutlined aria-hidden="true" /> : <LoadingOutlined aria-hidden="true" />}
       <span className="va-column">
         <span className="va-strong">{text}</span>
         <span className="va-small">
-          {pending ? 'Bei PayPal ist noch nichts abgebucht. Tippen zum Fortsetzen.'
-            : attention ? 'Du musst nichts tun, der Betrag ist bei PayPal nur reserviert.'
-              : 'Abgebucht wird erst, wenn das Hotel bestätigt hat.'}
+          {pending ? t('reservation.pendingHint')
+            : attention ? t('reservation.attentionHint')
+              : t('reservation.runningHint')}
         </span>
       </span>
     </>

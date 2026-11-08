@@ -3,6 +3,8 @@ import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
+import Rich from '../i18n/Rich';
 import AccommodationFields from './AccommodationFields';
 import { isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
@@ -93,15 +95,15 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
         await clearShared().catch(() => undefined);
       }
     } catch {
-      setError('Die Buchung konnte nicht gespeichert werden.');
+      setError(t('addBooking.saveFailed'));
       setSaving(false);
     }
   };
 
   const titles: Record<Step, string> = {
-    choose: 'Buchung hinzufügen',
-    paste: 'Bestätigung einfügen',
-    review: initialForm ? 'Buchung bearbeiten' : 'Buchung prüfen',
+    choose: t('addBooking.title'),
+    paste: t('addBooking.paste'),
+    review: initialForm ? t('addBooking.edit') : t('addBooking.review'),
   };
   const back = step === 'choose' || initialForm ? undefined : () => setStep(step === 'review' && source !== 'MANUAL' ? 'paste' : 'choose');
 
@@ -118,40 +120,38 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
     >
       {back && (
         <button type="button" className="va-text-button va-back" onClick={back}>
-          ← Zurück
+          {t('common.back')}
         </button>
       )}
       {step === 'choose' && (
         <div className="va-form">
-          <div className="va-row va-gap va-wrap" role="group" aria-label="Art der Buchung">
-            <span className="va-chip va-chip-ink" aria-current="true">Unterkunft</span>
-            <span className="va-chip va-chip-off">Transport · folgt</span>
-            <span className="va-chip va-chip-off">Aktivität · folgt</span>
+          <div className="va-row va-gap va-wrap" role="group" aria-label={t('addBooking.kind')}>
+            <span className="va-chip va-chip-ink" aria-current="true">{t('addBooking.accommodation')}</span>
+            <span className="va-chip va-chip-off">{t('addBooking.transport')}</span>
+            <span className="va-chip va-chip-off">{t('addBooking.activity')}</span>
           </div>
           <div className="va-choices">
             <button type="button" className="va-choice va-choice-main" onClick={() => setStep('paste')}>
               <SnippetsOutlined aria-hidden="true" />
               <span className="va-column">
-                <span className="va-option-title">Bestätigung einfügen</span>
+                <span className="va-option-title">{t('addBooking.paste')}</span>
                 <span className="va-small va-muted">
-                  {shared
-                    ? 'An die App Geteiltes liegt bereit, bei Bedarf um Mail-Text, Screenshot oder PDF ergänzen.'
-                    : 'Mail-Text, Screenshot oder PDF. Wir lesen Unterkunft, Zeitraum und Buchungsnummer aus.'}
+                  {shared ? t('addBooking.pasteShared') : t('addBooking.pasteHint')}
                 </span>
               </span>
             </button>
             <button type="button" className="va-choice" onClick={manual}>
               <EditOutlined aria-hidden="true" />
               <span className="va-column">
-                <span className="va-option-title">Manuell eingeben</span>
-                <span className="va-small va-muted">Namen eintippen und Vorschlag wählen, den Rest ergänzen wir.</span>
+                <span className="va-option-title">{t('addBooking.manual')}</span>
+                <span className="va-small va-muted">{t('addBooking.manualHint')}</span>
               </span>
             </button>
             <div className="va-choice va-choice-off" aria-disabled="true">
               <AudioOutlined aria-hidden="true" />
               <span className="va-column">
-                <span className="va-option-title">Per Sprache suchen</span>
-                <span className="va-small va-muted">Namen sagen, wir finden die Unterkunft. Folgt.</span>
+                <span className="va-option-title">{t('addBooking.voice')}</span>
+                <span className="va-small va-muted">{t('addBooking.voiceHint')}</span>
               </span>
             </div>
           </div>
@@ -177,7 +177,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
         <>
           {source !== 'MANUAL' && (
             <p className="va-note">
-              Aus der Bestätigung übernommen. <strong>Gelb markierte Felder bitte prüfen.</strong>
+              <Rich text={t('addBooking.fromConfirmation')} />
             </p>
           )}
           <AccommodationFields
@@ -203,14 +203,14 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
           disabled={reading || available === false || (!combinedEmpty)}
           onClick={() => void read()}
         >
-          {reading ? 'Bestätigung wird gelesen …' : 'Auslesen'}
+          {reading ? t('addBooking.reading') : t('addBooking.read')}
         </button>
       );
     }
     if (step === 'review') {
       return (
         <button type="button" className="va-button va-button-accent va-block" disabled={saving} onClick={() => void submit()}>
-          {saving ? 'Wird gespeichert …' : (submitLabel ?? 'Buchung speichern')}
+          {saving ? t('common.saving') : (submitLabel ?? t('addBooking.save'))}
         </button>
       );
     }

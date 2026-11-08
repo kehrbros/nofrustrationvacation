@@ -1,5 +1,6 @@
 import { accessToken, renewSession } from '../auth/session';
 import { client } from '../generated/api/client.gen';
+import { currentLanguage } from '../i18n';
 
 /** Unsent copies of the requests, to repeat a request once with a renewed token. */
 const retries = new WeakMap<Request, Request>();
@@ -12,6 +13,8 @@ const retries = new WeakMap<Request, Request>();
 export function configureApiClient() {
   client.setConfig({ baseUrl: import.meta.env.VITE_API_BASE_URL ?? '' });
   client.interceptors.request.use(async (request) => {
+    // language of the UI, for texts the backend writes (Docs/i18n.md#backend)
+    request.headers.set('Accept-Language', currentLanguage());
     const token = await accessToken();
     if (token) {
       request.headers.set('Authorization', `Bearer ${token}`);

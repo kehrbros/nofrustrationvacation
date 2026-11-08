@@ -81,6 +81,8 @@ export default defineConfig({
     },
   },
   test: {
+    // German texts in tests, see src/i18n/testSetup.ts
+    setupFiles: ['src/i18n/testSetup.ts'],
     // fixed time zone for the date formatting tests (summer time +02:00, winter time +01:00)
     env: { TZ: 'Europe/Berlin' },
   },

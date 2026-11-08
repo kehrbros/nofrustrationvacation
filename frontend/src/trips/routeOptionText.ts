@@ -1,3 +1,4 @@
+import { formatNumber, t } from '../i18n';
 import type { RouteOption, Stop, TripDetail } from './model';
 import { toOffsetIso } from './time';
 
@@ -13,20 +14,20 @@ export function formatDuration(seconds: number): string {
 /** "128 km", "4,2 km" below 10 km */
 export function formatDistance(meters: number): string {
   const km = meters / 1000;
-  return km < 10 ? `${km.toLocaleString('de-DE', { maximumFractionDigits: 1 })} km` : `${Math.round(km)} km`;
+  return km < 10 ? `${formatNumber(km, { maximumFractionDigits: 1 })} km` : `${Math.round(km)} km`;
 }
 
 /** "Schnellste · über SH 1", "Kürzeste", "Alternative über SH 7", "Alternative 2" */
 export function optionTitle(option: RouteOption): string {
   const kind = option.labels.includes('FASTEST')
-    ? 'Schnellste'
+    ? t('routeOption.fastest')
     : option.labels.includes('SHORTEST')
-      ? 'Kürzeste'
+      ? t('routeOption.shortest')
       : null;
   if (kind) {
-    return option.via ? `${kind} · über ${option.via}` : kind;
+    return option.via ? t('routeOption.kindVia', { kind, via: option.via }) : kind;
   }
-  return option.via ? `Alternative über ${option.via}` : `Alternative ${option.rank}`;
+  return option.via ? t('routeOption.alternativeVia', { via: option.via }) : t('routeOption.alternative', { rank: option.rank });
 }
 
 /** Time lost against the fastest option, e.g. "+18 min"; null for the fastest itself or under a minute. */

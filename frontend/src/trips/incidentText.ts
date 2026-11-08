@@ -1,16 +1,9 @@
+import { t } from '../i18n';
 import type { Category, Impact, IncidentType, TripIncident } from './model';
 import { formatTime } from './time';
 
-const typeLabels: Record<IncidentType, string> = {
-  CLOSURE: 'Vollsperrung',
-  CONGESTION: 'Stau',
-  ROADWORKS: 'Baustelle',
-  ACCIDENT: 'Unfall',
-  OTHER: 'Hinweis',
-};
-
 export function incidentTypeLabel(type: IncidentType): string {
-  return typeLabels[type];
+  return t(`incident.type.${type}`);
 }
 
 const MAX_TITLE_LENGTH = 60;
@@ -23,17 +16,17 @@ export function descriptionIsTitle(incident: TripIncident): boolean {
 
 /** Short title for chips on the map and list entries: a short description, otherwise the kind of incident. */
 export function incidentTitle(incident: TripIncident): string {
-  return descriptionIsTitle(incident) ? incident.description!.trim() : typeLabels[incident.type];
+  return descriptionIsTitle(incident) ? incident.description!.trim() : incidentTypeLabel(incident.type);
 }
 
 export function impactLabel(impact: Impact): string {
-  return impact === 'BLOCKED' ? 'Gesperrt' : 'Verzögerung';
+  return impact === 'BLOCKED' ? t('incident.blocked') : t('incident.delay');
 }
 
 /** "45 Min.", "1 Std. 30 Min.", or a fallback when unknown. */
 export function formatDelay(incident: TripIncident): string {
   if (incident.delayMinutes == null) {
-    return incident.impact === 'BLOCKED' ? 'keine Angabe (gesperrt)' : 'keine Angabe';
+    return incident.impact === 'BLOCKED' ? t('incident.delayUnknownBlocked') : t('incident.delayUnknown');
   }
   return formatMinutes(incident.delayMinutes);
 }
@@ -43,20 +36,14 @@ export function formatMinutes(total: number): string {
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
   if (hours === 0) {
-    return `${minutes} Min.`;
+    return t('incident.minutes', { minutes });
   }
-  return minutes === 0 ? `${hours} Std.` : `${hours} Std. ${minutes} Min.`;
+  return minutes === 0 ? t('incident.hours', { hours }) : t('incident.hoursMinutes', { hours, minutes });
 }
-
-const categoryLabels: Record<Category, string> = {
-  TOO_LATE: 'Zu spät',
-  DELAYED: 'Verzögerung',
-  NO_IMPACT: 'Ohne Auswirkung',
-};
 
 /** Label of the effect on the arrival, e.g. for the chip in the alternatives dialog. */
 export function categoryLabel(category: Category | null): string {
-  return category ? categoryLabels[category] : 'Wird bewertet';
+  return category ? t(`incident.category.${category}`) : t('incident.categoryPending');
 }
 
 /** Not passable at all: assessed, but without own delay. */
@@ -70,29 +57,35 @@ export function isUnpassable(consequence: TripIncident): boolean {
  */
 export function consequenceText(consequence: TripIncident, targetName: string): { headline: string; detail: string | null } {
   const arrival = consequence.expectedArrival
-    ? `Ankunft in ${targetName} ca. ${formatTime(consequence.expectedArrival)}`
+    ? t('consequence.arrival', { target: targetName, time: formatTime(consequence.expectedArrival) })
     : null;
   const delay =
     consequence.assessedDelayMinutes != null
-      ? `${consequence.delayAssumed ? 'Etwa ' : ''}${formatMinutes(consequence.assessedDelayMinutes)}`
+      ? consequence.delayAssumed
+        ? t('consequence.aboutDelay', { delay: formatMinutes(consequence.assessedDelayMinutes) })
+        : formatMinutes(consequence.assessedDelayMinutes)
       : null;
   switch (consequence.category) {
     case 'TOO_LATE':
       if (isUnpassable(consequence)) {
-        return { headline: 'Hier kommst du nicht durch', detail: `${targetName} ist auf dieser Route nicht erreichbar.` };
+        return { headline: t('consequence.unpassable'), detail: t('consequence.unpassableDetail', { target: targetName }) };
       }
       return {
-        headline: 'Du kommst zu spät an',
-        detail: arrival && consequence.deadline ? `${arrival} statt ${formatTime(consequence.deadline)}` : arrival,
+        headline: t('consequence.tooLate'),
+        detail: arrival && consequence.deadline
+          ? t('consequence.insteadOf', { arrival, deadline: formatTime(consequence.deadline) })
+          : arrival,
       };
     case 'DELAYED':
-      return { headline: delay ? `${delay} später` : 'Du kommst später an', detail: arrival };
+      return { headline: delay ? t('consequence.later', { delay }) : t('consequence.laterUnknown'), detail: arrival };
     case 'NO_IMPACT':
-      return { headline: 'Keine spürbare Verzögerung', detail: 'Liegt auf deiner Route, bremst dich aber kaum.' };
+      return { headline: t('consequence.noImpact'), detail: t('consequence.noImpactDetail') };
     default:
       return {
-        headline: consequence.impact === 'BLOCKED' ? 'Die Route ist gesperrt' : `Verzögerung (${formatDelay(consequence)})`,
-        detail: 'Die Auswirkung auf deine Ankunft wird noch berechnet.',
+        headline: consequence.impact === 'BLOCKED'
+          ? t('consequence.blocked')
+          : t('consequence.pendingDelay', { delay: formatDelay(consequence) }),
+        detail: t('consequence.pendingDetail'),
       };
   }
 }

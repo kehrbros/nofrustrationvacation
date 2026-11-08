@@ -1,3 +1,4 @@
+import { formatMoney, t } from '../i18n';
 import { formatMinutes } from '../trips/incidentText';
 import { formatDistance } from '../trips/routeOptionText';
 import { formatDateTime, formatTime } from '../trips/time';
@@ -23,45 +24,38 @@ export interface ProposalSetting {
   targetStayTitle: string | null;
 }
 
-/** "189,00 €" */
-export function formatMoney(amount: string, currency: string): string {
-  try {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(Number(amount));
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}
+export { formatMoney };
 
-/** "30.11." from yyyy-mm-dd */
+/** "30.11." (German) or "30/11" (English) from yyyy-mm-dd */
 export function formatShortDate(day: string): string {
   const [, month, date] = day.split('-');
-  return `${date}.${month}.`;
+  return t('proposal.shortDate', { day: date, month });
 }
 
 function arrival(proposal: Proposal): string | null {
   if (!proposal.arrivalAt) {
     return null;
   }
-  const late = proposal.meetsDeadline === false ? ', zu spät' : '';
-  return `Ankunft ${formatDateTime(proposal.arrivalAt)}${late}`;
+  const time = formatDateTime(proposal.arrivalAt);
+  return proposal.meetsDeadline === false ? t('proposal.arrivalLate', { time }) : t('proposal.arrival', { time });
 }
 
 function delay(proposal: Proposal): string | null {
   const minutes = proposal.delaySeconds == null ? 0 : Math.round(proposal.delaySeconds / 60);
-  return minutes > 0 ? `${formatMinutes(minutes)} später` : null;
+  return minutes > 0 ? t('consequence.later', { delay: formatMinutes(minutes) }) : null;
 }
 
 function conflicts(proposal: Proposal): string | null {
   if (proposal.conflictCount === 0) {
     return null;
   }
-  return proposal.conflictCount === 1 ? 'noch 1 Hinweis unterwegs' : `noch ${proposal.conflictCount} Hinweise unterwegs`;
+  return t('proposal.conflicts', { count: proposal.conflictCount });
 }
 
 function stayFacts(stay: ProposalStay): string {
   return [
     formatMoney(stay.price, stay.currency),
-    stay.refundable ? 'kostenlos stornierbar' : 'nicht stornierbar',
+    stay.refundable ? t('proposal.refundable') : t('proposal.nonRefundable'),
   ].join(' · ');
 }
 
@@ -74,56 +68,60 @@ export function proposalTexts(proposal: Proposal, setting: ProposalSetting): Pro
   switch (proposal.kind) {
     case 'REROUTE':
       return {
-        title: proposal.via ? `Umfahrung über ${proposal.via}` : 'Andere Strecke',
+        title: proposal.via ? t('proposal.reroute.titleVia', { via: proposal.via }) : t('proposal.reroute.title'),
         detail: join([arrival(proposal), delay(proposal),
           proposal.distanceMeters != null && formatDistance(proposal.distanceMeters), conflicts(proposal)]),
-        effect: `Die Route nach ${setting.targetName} wird ${proposal.via ? `über ${proposal.via} ` : ''}neu geplant.`,
+        effect: proposal.via
+          ? t('proposal.reroute.effectVia', { target: setting.targetName, via: proposal.via })
+          : t('proposal.reroute.effect', { target: setting.targetName }),
       };
     case 'SHIFT_DEPARTURE':
       return {
-        title: proposal.departureAt ? `Um ${formatTime(proposal.departureAt)} losfahren` : 'Andere Abfahrt',
-        detail: join([proposal.departureAt && `Abfahrt ${formatDateTime(proposal.departureAt)}`, arrival(proposal),
-          conflicts(proposal)]),
+        title: proposal.departureAt
+          ? t('proposal.shift.titleAt', { time: formatTime(proposal.departureAt) })
+          : t('proposal.shift.title'),
+        detail: join([proposal.departureAt && t('proposal.shift.departure', { time: formatDateTime(proposal.departureAt) }),
+          arrival(proposal), conflicts(proposal)]),
         effect: proposal.departureAt
-          ? `Die Abfahrt in ${setting.fromName} wird auf ${formatDateTime(proposal.departureAt)} gesetzt.`
-          : 'Die Abfahrt wird geändert.',
+          ? t('proposal.shift.effectAt', { from: setting.fromName, time: formatDateTime(proposal.departureAt) })
+          : t('proposal.shift.effect'),
       };
     case 'STOPOVER':
       return {
-        title: stay ? `Übernachten in ${stay.place}` : 'Übernachten unterwegs',
+        title: stay ? t('proposal.stopover.titleIn', { place: stay.place }) : t('proposal.stopover.title'),
         detail: stay
-          ? join([stay.hotelName, stayFacts(stay), `weiter am ${formatShortDate(stay.checkOut)}`])
+          ? join([stay.hotelName, stayFacts(stay), t('proposal.stopover.onwards', { date: formatShortDate(stay.checkOut) })])
           : join([arrival(proposal)]),
         effect: [
-          `${stay?.place ?? 'Ein Stop'} kommt als neuer Stop vor ${setting.targetName}, die Route wird geteilt und neu geplant.`,
-          stay ? `Danach kannst du ${stay.hotelName} direkt hier buchen und mit PayPal bezahlen.` : null,
-          setting.targetStayTitle
-            ? `„${setting.targetStayTitle}“ erwartet dich dann einen Tag später, das kommt auf deine To-do-Liste.`
-            : null,
+          stay
+            ? t('proposal.stopover.effectPlace', { place: stay.place, target: setting.targetName })
+            : t('proposal.stopover.effect', { target: setting.targetName }),
+          stay ? t('proposal.stopover.effectBook', { hotel: stay.hotelName }) : null,
+          setting.targetStayTitle ? t('proposal.stopover.effectLater', { title: setting.targetStayTitle }) : null,
         ].filter(Boolean).join(' '),
       };
     case 'TARGET_STAY':
       return {
-        title: stay ? `Andere Unterkunft: ${stay.hotelName}` : 'Andere Unterkunft',
+        title: stay ? t('proposal.targetStay.titleHotel', { hotel: stay.hotelName }) : t('proposal.targetStay.title'),
         detail: stay
-          ? join([`${formatDistance(stay.distanceMeters)} von ${stay.place}`, stayFacts(stay),
-            `${formatShortDate(stay.checkIn)}–${formatShortDate(stay.checkOut)}`])
+          ? join([t('proposal.targetStay.distance', { distance: formatDistance(stay.distanceMeters), place: stay.place }),
+            stayFacts(stay), `${formatShortDate(stay.checkIn)}–${formatShortDate(stay.checkOut)}`])
           : '',
         effect: [
-          stay ? `Du buchst ${stay.hotelName} und bezahlst mit PayPal.` : 'Du buchst eine andere Unterkunft.',
+          stay ? t('proposal.targetStay.effectHotel', { hotel: stay.hotelName }) : t('proposal.targetStay.effect'),
           setting.targetStayTitle && stay?.replacesBookingId != null
-            ? `„${setting.targetStayTitle}“ kommt danach auf deine To-do-Liste, damit du sie stornieren kannst.`
+            ? t('proposal.targetStay.effectCancel', { title: setting.targetStayTitle })
             : null,
         ].filter(Boolean).join(' '),
       };
     case 'KEEP_ROUTE':
     default:
       return {
-        title: 'Route beibehalten',
+        title: t('proposal.keep.title'),
         detail: proposal.arrivalAt
           ? join([arrival(proposal), delay(proposal)])
-          : 'Warten, bis die Strecke wieder frei ist',
-        effect: 'An der Reise ändert sich nichts.',
+          : t('proposal.keep.wait'),
+        effect: t('proposal.keep.effect'),
       };
   }
 }

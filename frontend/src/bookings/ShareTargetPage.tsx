@@ -6,6 +6,8 @@ import { Link, useNavigate } from 'react-router';
 import type { TripDetail, TripSummary } from '../trips/model';
 import { localDateTimeIso, toDayInput } from '../trips/time';
 import { addStop, fetchTrip, fetchTrips } from '../trips/tripsApi';
+import { t } from '../i18n';
+import Rich from '../i18n/Rich';
 import AccommodationFields from './AccommodationFields';
 import { createAccommodationBooking, isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
@@ -102,10 +104,10 @@ export default function ShareTargetPage() {
     // the stop is suggested once per trip, not on every keystroke in the form
   }, [tripId]);
 
-  const newStopLabel = useMemo(() => form.name.trim() || 'Unterkunft', [form.name]);
+  const newStopLabel = useMemo(() => form.name.trim() || t('addBooking.accommodation'), [form.name]);
 
   const save = async () => {
-    const problem = validateForm(form) ?? (tripId == null ? 'Bitte eine Reise wählen.' : null);
+    const problem = validateForm(form) ?? (tripId == null ? t('shareTarget.chooseTrip') : null);
     if (problem || tripId == null) {
       setError(problem);
       return;
@@ -129,7 +131,7 @@ export default function ShareTargetPage() {
       await clearShared();
       navigate(`/reisen/${tripId}/buchungen/${booking.id}`, { replace: true });
     } catch {
-      setError('Die Buchung konnte nicht gespeichert werden.');
+      setError(t('addBooking.saveFailed'));
       setSaving(false);
     }
   };
@@ -142,10 +144,10 @@ export default function ShareTargetPage() {
   return (
     <div className="va-page">
       <header className="va-page-header va-page-header-start">
-        <button type="button" className="va-icon-button" aria-label="Verwerfen" onClick={() => void discard()}>
+        <button type="button" className="va-icon-button" aria-label={t('shareTarget.discard')} onClick={() => void discard()}>
           <ArrowLeftOutlined />
         </button>
-        <h1 className="va-page-title va-page-title-small">Geteilte Buchung</h1>
+        <h1 className="va-page-title va-page-title-small">{t('shareTarget.title')}</h1>
       </header>
 
       {phase === 'loading' && (
@@ -155,8 +157,8 @@ export default function ShareTargetPage() {
       )}
       {phase === 'nothing' && (
         <>
-          <p className="va-muted">Hier ist nichts angekommen. Teile eine Buchungsbestätigung (Mail, Link, Screenshot oder PDF) an NoFrustration.</p>
-          <Link to="/reisen">Zu Meine Reisen</Link>
+          <p className="va-muted">{t('shareTarget.nothing')}</p>
+          <Link to="/reisen">{t('shareTarget.toTrips')}</Link>
         </>
       )}
       {phase === 'paste' && (
@@ -179,30 +181,30 @@ export default function ShareTargetPage() {
             disabled={reading || available === false || (!text.trim() && !file && !shared)}
             onClick={() => void read()}
           >
-            {reading ? 'Bestätigung wird gelesen …' : 'Auslesen'}
+            {reading ? t('addBooking.reading') : t('addBooking.read')}
           </button>
         </>
       )}
       {phase === 'review' && (
         <>
           <button type="button" className="va-text-button va-back" onClick={() => setPhase('paste')}>
-            ← Zurück
+            {t('common.back')}
           </button>
           {source !== 'MANUAL' && (
             <p className="va-note">
-              Aus der Bestätigung übernommen. <strong>Gelb markierte Felder bitte prüfen.</strong>
+              <Rich text={t('addBooking.fromConfirmation')} />
             </p>
           )}
           <div className="va-form">
             <div className="va-field">
-              <label htmlFor="share-trip">Reise</label>
+              <label htmlFor="share-trip">{t('shareTarget.trip')}</label>
               {trips.length === 0 ? (
                 <span className="va-muted">
-                  Noch keine anstehende Reise. <Link to="/reisen/neu">Reise anlegen</Link>, danach erneut teilen.
+                  {t('shareTarget.noTripBefore')}<Link to="/reisen/neu">{t('newTrip.create')}</Link>{t('shareTarget.noTripAfter')}
                 </span>
               ) : (
                 <select id="share-trip" value={tripId ?? ''} onChange={(event) => setTripId(event.target.value ? Number(event.target.value) : null)}>
-                  <option value="">Reise wählen …</option>
+                  <option value="">{t('shareTarget.tripPlaceholder')}</option>
                   {trips.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
                   ))}
@@ -211,12 +213,12 @@ export default function ShareTargetPage() {
             </div>
             {trip && (
               <fieldset className="va-fieldset">
-                <legend>Stop</legend>
+                <legend>{t('shareTarget.stop')}</legend>
                 <label className={`va-option ${stopId === NEW_STOP ? 'va-option-selected' : ''}`}>
                   <input type="radio" name="share-stop" checked={stopId === NEW_STOP} onChange={() => setStopId(NEW_STOP)} />
                   <span>
-                    <span className="va-option-title">Neuer Stop: {newStopLabel}</span>
-                    <span className="va-small va-muted">Am Ende der Reise, Ankunft und Abfahrt aus der Buchung</span>
+                    <span className="va-option-title">{t('shareTarget.newStop', { name: newStopLabel })}</span>
+                    <span className="va-small va-muted">{t('shareTarget.newStopHint')}</span>
                   </span>
                 </label>
                 {trip.stops.map((stop) => (
@@ -224,7 +226,7 @@ export default function ShareTargetPage() {
                     <input type="radio" name="share-stop" checked={stopId === stop.id} onChange={() => setStopId(stop.id)} />
                     <span>
                       <span className="va-option-title">{stop.name}</span>
-                      <span className="va-small va-muted">Stop {stop.position + 1}</span>
+                      <span className="va-small va-muted">{t('shareTarget.stopNumber', { position: stop.position + 1 })}</span>
                     </span>
                   </label>
                 ))}
@@ -241,7 +243,7 @@ export default function ShareTargetPage() {
           />
           {error && <Alert type="error" showIcon message={error} />}
           <button type="button" className="va-button va-button-accent va-block" disabled={saving || tripId == null} onClick={() => void save()}>
-            {saving ? 'Wird gespeichert …' : 'Buchung speichern'}
+            {saving ? t('common.saving') : t('addBooking.save')}
           </button>
         </>
       )}

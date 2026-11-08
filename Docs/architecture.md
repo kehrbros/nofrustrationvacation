@@ -149,6 +149,7 @@ flowchart LR
 - Dialoge über der Karte sind Unterrouten mit eigener URL (`stops/neu`, `stops/:stopId/buchung`, `buchungen/:bookingId`, `hinweise/:routeId/:incidentId`, `routen/:routeId`), der Zurück-Button schließt sie.
 - Karte: MapLibre GL JS mit OpenFreeMap-Kacheln (`VITE_MAP_STYLE_URL` überschreibt den Stil). Routen werden bis zum Routing als gerade Linien zwischen den Stops gezeichnet. Quellenhinweis (OpenFreeMap, OpenMapTiles, OpenStreetMap) kommt aus den Kachel-Metadaten und steht immer ausgeklappt oben links, weil das Trip-Sheet die unteren Ecken verdeckt.
 - Ortssuche für Stops: Photon (OpenStreetMap, `VITE_GEOCODING_URL`), direkt aus dem Browser. Nur Orte in Neuseeland (`bbox` und `countrycode`, auch für die Unterkunftssuche), ein Stop braucht einen gewählten Vorschlag, siehe [domain.md](domain.md#trips).
+- **Sprachen:** Deutsch und Englisch per i18next (`src/i18n/`), alle UI-Texte als Schlüssel in `de.ts` und `en.ts`, Umschalter im Profilmenü, siehe [i18n.md](i18n.md).
 - Zeitpunkte gehen mit dem Offset der Zeitzone des Systems ans Backend und werden in dieser Zeitzone angezeigt (`src/trips/time.ts`).
 - **Installierbar (PWA):** `vite-plugin-pwa` erzeugt Manifest (`start_url` `/reisen`, `display` `standalone`, Icons in `public/`) und Service Worker (Workbox).
   - Der Service Worker cached die App-Hülle, Kartenkacheln (OpenFreeMap) und Schriften. API-Antworten werden nicht gecached. Pfade von Backend und IdP (`/api`, `/oauth2`, `/login`, …) bekommen nie die gecachte `index.html`.

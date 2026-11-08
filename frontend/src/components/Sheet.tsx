@@ -2,6 +2,8 @@ import { CloseOutlined } from '@ant-design/icons';
 import { Drawer } from 'antd';
 import type { ReactNode } from 'react';
 
+import { t } from '../i18n';
+
 interface SheetProps {
   open: boolean;
   onClose: () => void;
@@ -39,7 +41,7 @@ export default function Sheet({ open, onClose, eyebrow, title, icon, children, f
               {eyebrow && <span className="va-eyebrow">{eyebrow}</span>}
               <h2 className="va-sheet-title">{title}</h2>
             </div>
-            <button type="button" className="va-icon-button va-plain" aria-label="Schließen" onClick={onClose}>
+            <button type="button" className="va-icon-button va-plain" aria-label={t('common.close')} onClick={onClose}>
               <CloseOutlined />
             </button>
           </div>

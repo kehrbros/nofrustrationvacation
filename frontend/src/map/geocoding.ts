@@ -4,6 +4,8 @@
  * see Docs/architecture.md.
  */
 
+import { currentLanguage } from '../i18n';
+
 export interface Place {
   name: string;
   /** Region and country, e.g. "Toskana, Italien". */
@@ -56,7 +58,8 @@ export async function searchPlaces(query: string, signal?: AbortSignal, options:
   const url = new URL(PHOTON_URL, window.location.href);
   url.searchParams.set('q', query);
   url.searchParams.set('limit', '5');
-  url.searchParams.set('lang', 'de');
+  // Photon knows de and en (also fr, it), the same as the UI
+  url.searchParams.set('lang', currentLanguage());
   url.searchParams.set('bbox', SEARCH_BBOX);
   if (options.near) {
     url.searchParams.set('lat', options.near.latitude.toFixed(5));

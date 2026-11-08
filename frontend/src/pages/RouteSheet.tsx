@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
 import type { PlanOutcome, RouteOption, RouteSuggestions } from '../trips/model';
 import { formatDistance, formatDuration, optionTitle, slowerBy, substituteDeparture } from '../trips/routeOptionText';
@@ -92,8 +93,8 @@ export default function RouteSheet() {
 
   if (!route) {
     return (
-      <Sheet open onClose={close} title={isNew ? 'Route wird geladen …' : 'Route nicht gefunden'}>
-        {!isNew && <p className="va-muted">Diese Route gibt es in der Reise nicht mehr.</p>}
+      <Sheet open onClose={close} title={isNew ? t('route.loading') : t('route.notFound')}>
+        {!isNew && <p className="va-muted">{t('route.gone')}</p>}
       </Sheet>
     );
   }
@@ -118,7 +119,7 @@ export default function RouteSheet() {
         setSaving(false);
       }
     } catch {
-      setError('Die Strecke konnte nicht gespeichert werden.');
+      setError(t('route.saveFailed'));
       setSaving(false);
     }
   };
@@ -129,22 +130,22 @@ export default function RouteSheet() {
       onClose={close}
       mask={false}
       height="60vh"
-      eyebrow="Route"
+      eyebrow={t('route.eyebrow')}
       title={routeName(route, stopById)}
       footer={
         <div className="va-column va-gap">
           {notPlanned ? (
             <button type="button" className="va-button va-button-accent va-block" onClick={close}>
-              Schließen
+              {t('common.close')}
             </button>
           ) : (
             <button type="button" className="va-button va-button-accent va-block" disabled={!chosen || saving} onClick={save}>
-              {saving ? 'Wird gespeichert …' : options.length === 1 ? 'Strecke bestätigen' : 'Diese Strecke nehmen'}
+              {saving ? t('common.saving') : options.length === 1 ? t('route.confirm') : t('route.take')}
             </button>
           )}
           {isNew && !notPlanned && (
             <button type="button" className="va-text-button" onClick={close}>
-              Später
+              {t('route.later')}
             </button>
           )}
         </div>
@@ -152,8 +153,8 @@ export default function RouteSheet() {
     >
       <p className="va-muted">
         {from?.departureAt
-          ? `Abfahrt ${formatDateTime(from.departureAt)} (aus Stop ${from.name})`
-          : `Abfahrt offen, trage sie am Stop ${from?.name ?? ''} ein. Bis dahin zeigen wir Fahrzeit und Strecke.`}
+          ? t('route.departure', { time: formatDateTime(from.departureAt), name: from.name })
+          : t('route.departureOpen', { name: from?.name ?? '' })}
       </p>
 
       {incidents.length > 0 && (
@@ -173,15 +174,15 @@ export default function RouteSheet() {
       {hasWaypoints && (
         <label className="va-row va-gap">
           <input type="checkbox" checked={includeWaypoints} onChange={(event) => setIncludeWaypoints(event.target.checked)} />
-          <span>Zwischenziele berücksichtigen</span>
+          <span>{t('route.includeWaypoints')}</span>
         </label>
       )}
 
       <fieldset className="va-fieldset" aria-busy={loaded.state === 'loading'}>
-        <legend>Strecke wählen</legend>
+        <legend>{t('route.choose')}</legend>
         {loaded.state === 'loading' && (
           <>
-            <p className="va-muted">Suche Strecken …</p>
+            <p className="va-muted">{t('route.searching')}</p>
             {[0, 1, 2].map((index) => (
               <div key={index} className="va-option va-option-skeleton" aria-hidden="true" />
             ))}
@@ -191,10 +192,10 @@ export default function RouteSheet() {
           <Alert
             type="warning"
             showIcon
-            message={loaded.unavailable ? 'Streckensuche gerade nicht verfügbar.' : 'Die Strecken konnten nicht geladen werden.'}
+            message={loaded.unavailable ? t('route.unavailable') : t('route.loadFailed')}
             action={
               <button type="button" className="va-text-button" onClick={() => setAttempt((value) => value + 1)}>
-                Erneut versuchen
+                {t('common.retry')}
               </button>
             }
           />
@@ -202,7 +203,7 @@ export default function RouteSheet() {
         {loaded.state === 'ready' && (
           <ProblemText problem={loaded.result.problem} hasOptions={options.length > 0} stops={[from?.name, to?.name]} />
         )}
-        {options.length === 1 && <p className="va-muted">Für diese Strecke gibt es keine sinnvolle Alternative.</p>}
+        {options.length === 1 && <p className="va-muted">{t('route.noAlternative')}</p>}
         {options.map((option, index) => (
           <OptionCard
             key={option.rank}
@@ -217,13 +218,15 @@ export default function RouteSheet() {
         ))}
         {planned && options.length > 0 && !options.some((option) => option.labels.includes('CURRENT')) && (
           <p className="va-small va-muted">
-            Bisher geplant: {planned.via ? `über ${planned.via}, ` : ''}
-            {formatDuration(planned.durationSeconds)}, {formatDistance(planned.distanceMeters)}
+            {t('route.plannedSoFar', {
+              route: [planned.via && t('trip.via', { via: planned.via }), formatDuration(planned.durationSeconds),
+                formatDistance(planned.distanceMeters)].filter(Boolean).join(', '),
+            })}
           </p>
         )}
       </fieldset>
-      {hasWaypoints && !includeWaypoints && chosen && <p className="va-note">Deine Zwischenziele werden entfernt.</p>}
-      {notPlanned && <Alert type="info" showIcon message="Strecke gespeichert, aber noch nicht geplant" description={notPlannedText(notPlanned, from?.name)} />}
+      {hasWaypoints && !includeWaypoints && chosen && <p className="va-note">{t('route.waypointsRemoved')}</p>}
+      {notPlanned && <Alert type="info" showIcon message={t('route.notPlanned')} description={notPlannedText(notPlanned, from?.name)} />}
       {error && <Alert type="error" showIcon message={error} />}
     </Sheet>
   );
@@ -233,13 +236,13 @@ export default function RouteSheet() {
 function notPlannedText(outcome: PlanOutcome, fromName: string | undefined): string {
   switch (outcome) {
     case 'MISSING_DEPARTURE':
-      return `Trag am Stop ${fromName ?? ''} eine Abfahrt ein. Dann wird die Strecke über deine Wahl geplant und auf der Karte gezeigt.`;
+      return t('route.notPlannedReason.MISSING_DEPARTURE', { name: fromName ?? '' });
     case 'MISSING_COORDINATES':
-      return 'Beide Stops brauchen einen Ort auf der Karte.';
+      return t('route.notPlannedReason.MISSING_COORDINATES');
     case 'ROUTING_UNAVAILABLE':
-      return 'Die Streckensuche ist gerade nicht verfügbar. Versuch es später noch einmal.';
+      return t('route.notPlannedReason.ROUTING_UNAVAILABLE');
     default:
-      return 'Für diese Wahl wurde keine Straßenverbindung gefunden. Wähl eine andere Strecke.';
+      return t('route.notPlannedReason.other');
   }
 }
 
@@ -253,13 +256,13 @@ function ProblemText({
   stops: (string | undefined)[];
 }) {
   if (problem === 'MISSING_COORDINATES') {
-    return <p className="va-muted">Beide Stops brauchen einen Ort auf der Karte ({stops.filter(Boolean).join(', ')}).</p>;
+    return <p className="va-muted">{t('route.problem.MISSING_COORDINATES', { stops: stops.filter(Boolean).join(', ') })}</p>;
   }
   if (problem === 'MISSING_DEPARTURE') {
-    return <p className="va-muted">Für Vorschläge braucht der Start-Stop eine Ankunft oder Abfahrt.</p>;
+    return <p className="va-muted">{t('route.problem.MISSING_DEPARTURE')}</p>;
   }
   if (problem === 'NO_ROUTE' || !hasOptions) {
-    return <p className="va-muted">Keine Straßenverbindung gefunden, z. B. bei Fähren.</p>;
+    return <p className="va-muted">{t('route.problem.NO_ROUTE')}</p>;
   }
   return null;
 }
@@ -295,23 +298,23 @@ function OptionCard({
         <span className="va-row va-space-between">
           <span className="va-muted">
             {formatDistance(option.distanceMeters)}
-            {showArrival && ` · Ankunft ca. ${formatTime(option.arrivalAt)}`}
+            {showArrival && ` · ${t('route.arrival', { time: formatTime(option.arrivalAt) })}`}
           </span>
           {slower && <span className="va-small va-muted">{slower}</span>}
         </span>
         {(current || avoids) && (
           <span className="va-row va-gap">
-            {current && <span className="va-chip va-chip-soft">Aktuell geplant</span>}
-            {avoids && <span className="va-chip va-chip-soft">Umfährt Hinweis</span>}
+            {current && <span className="va-chip va-chip-soft">{t('route.current')}</span>}
+            {avoids && <span className="va-chip va-chip-soft">{t('route.avoids')}</span>}
           </span>
         )}
         {option.conflicts.map((conflict) => (
           <span key={conflict.incidentId} className="va-row va-gap va-small">
             <WarningOutlined aria-hidden="true" />
             <span>
-              {incidentTitles.get(conflict.incidentId) ?? 'Hinweis auf der Strecke'}
+              {incidentTitles.get(conflict.incidentId) ?? t('route.conflict')}
               {conflict.impact === 'BLOCKED'
-                ? ' · gesperrt'
+                ? ` · ${t('route.blocked')}`
                 : conflict.delaySeconds
                   ? ` · +${formatDuration(conflict.delaySeconds)}`
                   : ''}

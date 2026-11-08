@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import type { Booking } from '../bookings/model';
 import type { TripDetail } from './model';
 
@@ -8,25 +9,27 @@ export function stopDeletionText(trip: TripDetail, stopId: number, bookings: Boo
   const next = index >= 0 ? trip.stops[index + 1] : undefined;
   const parts: string[] = [];
   if (bookings.length === 1) {
-    parts.push(`Die Buchung „${bookings[0].title}“ wird mitgelöscht.`);
+    parts.push(t('deletion.stopBooking', { title: bookings[0].title }));
   } else if (bookings.length > 1) {
-    parts.push(`Die ${bookings.length} Buchungen am Stop werden mitgelöscht.`);
+    parts.push(t('deletion.stopBookings', { count: bookings.length }));
   }
   if (previous && next) {
-    parts.push(`Zwischen ${previous.name} und ${next.name} wird eine neue Route geplant.`);
-  } else if (previous ?? next) {
-    parts.push(`Die Route ${previous ? `von ${previous.name}` : `nach ${next!.name}`} entfällt.`);
+    parts.push(t('deletion.replanned', { from: previous.name, to: next.name }));
+  } else if (previous) {
+    parts.push(t('deletion.routeFromDropped', { name: previous.name }));
+  } else if (next) {
+    parts.push(t('deletion.routeToDropped', { name: next.name }));
   }
-  return parts.join(' ') || 'Der Stop wird aus der Reise entfernt.';
+  return parts.join(' ') || t('deletion.stopOnly');
 }
 
 /** What deleting the trip also deletes, for the confirmation. */
 export function tripDeletionText(trip: TripDetail, bookings: Booking[]): string {
   const items = [
-    trip.stops.length === 1 ? '1 Stop' : trip.stops.length > 1 && `${trip.stops.length} Stops`,
-    bookings.length === 1 ? '1 Buchung' : bookings.length > 1 && `${bookings.length} Buchungen`,
+    trip.stops.length > 0 && t('common.stops', { count: trip.stops.length }),
+    bookings.length > 0 && t('common.bookings', { count: bookings.length }),
   ].filter(Boolean);
   return items.length
-    ? `${items.join(' und ')} mit allen Routen werden mitgelöscht.`
-    : 'Die Reise wird gelöscht.';
+    ? t('deletion.tripCascade', { items: items.join(t('common.and')) })
+    : t('deletion.tripOnly');
 }

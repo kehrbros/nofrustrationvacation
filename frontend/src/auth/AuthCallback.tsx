@@ -2,6 +2,7 @@ import { Button, Result, Spin } from 'antd';
 import { useAuth } from 'react-oidc-context';
 import { Navigate } from 'react-router';
 
+import { t } from '../i18n';
 import { loginState, returnPath } from './session';
 
 /**
@@ -15,14 +16,14 @@ export default function AuthCallback() {
     return (
       <Result
         status="error"
-        title="Anmeldung fehlgeschlagen"
+        title={t('auth.failed')}
         subTitle={auth.error.message}
-        extra={<Button type="primary" onClick={() => void auth.signinRedirect({ state: loginState() })}>Erneut anmelden</Button>}
+        extra={<Button type="primary" onClick={() => void auth.signinRedirect({ state: loginState() })}>{t('auth.retry')}</Button>}
       />
     );
   }
   if (auth.isAuthenticated) {
     return <Navigate to={returnPath(auth.user?.state)} replace />;
   }
-  return <Spin fullscreen tip="Anmeldung wird abgeschlossen …" />;
+  return <Spin fullscreen tip={t('auth.completing')} />;
 }

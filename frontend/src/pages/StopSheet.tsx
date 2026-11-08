@@ -9,6 +9,7 @@ import { stopTimesFromForm, toInput, type AccommodationForm } from '../bookings/
 import type { BookingSource } from '../bookings/model';
 import { stayDefaults } from '../bookings/stayDefaults';
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { useTripContext } from '../trips/tripContext';
 import { localDateTimeIso } from '../trips/time';
@@ -67,11 +68,11 @@ export default function StopSheet() {
     const departureAt = localDateTimeIso(departure);
     // stops need a position in New Zealand, only places from the suggestions have one
     if (!place) {
-      setError('Bitte einen Ort aus den Vorschlägen wählen.');
+      setError(t('stop.choosePlace'));
       return;
     }
     if (arrivalAt && departureAt && new Date(departureAt) < new Date(arrivalAt)) {
-      setError('Die Abfahrt liegt vor der Ankunft.');
+      setError(t('stop.departureBeforeArrival'));
       return;
     }
     setSaving(true);
@@ -94,7 +95,7 @@ export default function StopSheet() {
           // the stop exists: show it, the booking can be added again from the stop list
           reload();
           setSaving(false);
-          setError('Der Stop ist gespeichert, die Buchung nicht. Füge sie in der Liste beim Stop erneut hinzu.');
+          setError(t('stop.bookingNotSaved'));
           return;
         }
       }
@@ -108,8 +109,8 @@ export default function StopSheet() {
       }
     } catch (failure) {
       setError(failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS'
-        ? 'Stops sind nur in Neuseeland möglich.'
-        : 'Der Stop konnte nicht gespeichert werden.');
+        ? t('stop.outsideRegions')
+        : t('stop.saveFailed'));
       setSaving(false);
     }
   };
@@ -118,17 +119,17 @@ export default function StopSheet() {
     <Sheet
       open
       onClose={close}
-      title="Stop hinzufügen"
+      title={t('trip.addStop')}
       height="90vh"
       footer={
         <button type="submit" form="stop-form" className="va-button va-button-accent va-block" disabled={saving}>
-          {saving ? 'Wird gespeichert …' : 'Stop speichern'}
+          {saving ? t('common.saving') : t('stop.save')}
         </button>
       }
     >
       <form id="stop-form" className="va-form" onSubmit={(event) => void submit(event)} noValidate>
         <div className="va-field">
-          <label htmlFor="stop-place">Ort</label>
+          <label htmlFor="stop-place">{t('stop.place')}</label>
           <input
             id="stop-place"
             type="search"
@@ -141,10 +142,10 @@ export default function StopSheet() {
             }}
           />
           <span id="stop-place-hint" className="va-small va-muted">
-            {place ? `${place.detail || 'Ort gewählt'} · auf der Karte` : 'Mindestens 3 Zeichen, dann einen Ort in Neuseeland wählen.'}
+            {place ? t('stop.placeChosen', { detail: place.detail || t('stop.placeSelected') }) : t('stop.placeHint')}
           </span>
           {places.length > 0 && (
-            <ul className="va-suggestions" aria-label="Vorschläge">
+            <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
               {places.map((candidate) => (
                 <li key={`${candidate.latitude},${candidate.longitude}`}>
                   <button type="button" onClick={() => setPlace(candidate)}>
@@ -158,24 +159,24 @@ export default function StopSheet() {
               ))}
             </ul>
           )}
-          {noMatch && !searchFailed && <span className="va-small va-muted">Kein Ort in Neuseeland gefunden.</span>}
-          {searchFailed && <span className="va-small va-muted">Die Ortssuche ist gerade nicht erreichbar, bitte später erneut versuchen.</span>}
+          {noMatch && !searchFailed && <span className="va-small va-muted">{t('stop.noPlace')}</span>}
+          {searchFailed && <span className="va-small va-muted">{t('stop.searchUnavailable')}</span>}
         </div>
 
         <div className="va-field">
-          <span className="va-label">Reihenfolge</span>
+          <span className="va-label">{t('stop.order')}</span>
           <span className="va-muted">
-            {previous ? `Am Ende der Reise, nach ${previous.name} (Stop ${trip.stops.length})` : 'Erster Stop der Reise'}
+            {previous ? t('stop.orderAfter', { name: previous.name, position: trip.stops.length }) : t('stop.orderFirst')}
           </span>
         </div>
 
         <div className="va-field-row">
           <div className="va-field">
-            <label htmlFor="stop-arrival">Ankunft</label>
+            <label htmlFor="stop-arrival">{t('stop.arrival')}</label>
             <input id="stop-arrival" type="datetime-local" value={arrival} onChange={(event) => setArrival(event.target.value)} />
           </div>
           <div className="va-field">
-            <label htmlFor="stop-departure">Abfahrt</label>
+            <label htmlFor="stop-departure">{t('stop.departure')}</label>
             <input id="stop-departure" type="datetime-local" value={departure} min={arrival || undefined} onChange={(event) => setDeparture(event.target.value)} />
           </div>
         </div>
@@ -186,24 +187,24 @@ export default function StopSheet() {
             <span className="va-column va-grow">
               <span className="va-strong">{booking.form.name}</span>
               <span className="va-small va-muted">
-                {booking.form.checkInDate} bis {booking.form.checkOutDate} · wird mit dem Stop gespeichert
+                {t('stop.draftBooking', { from: booking.form.checkInDate, to: booking.form.checkOutDate })}
               </span>
             </span>
-            <button type="button" className="va-icon-button va-plain" aria-label="Buchung entfernen" onClick={() => setBooking(null)}>
+            <button type="button" className="va-icon-button va-plain" aria-label={t('stop.removeBooking')} onClick={() => setBooking(null)}>
               <CloseOutlined />
             </button>
           </div>
         ) : (
           <button type="button" className="va-text-button va-add-booking" onClick={() => setAddingBooking(true)}>
-            + Buchung hinzufügen (Unterkunft)
+            {t('stop.addBooking')}
           </button>
         )}
         {error && <Alert type="error" showIcon message={error} />}
       </form>
       {addingBooking && (
         <AddBookingSheet
-          context="Neuer Stop"
-          submitLabel="Übernehmen"
+          context={t('stop.newStop')}
+          submitLabel={t('proposals.take.other')}
           defaults={stayDefaults(trip, { arrivalAt: localDateTimeIso(arrival), departureAt: localDateTimeIso(departure) }, bookings)}
           near={place ? { latitude: place.latitude, longitude: place.longitude } : null}
           onClose={() => setAddingBooking(false)}

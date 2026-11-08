@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
 import PayPalButton from '../payments/PayPalButton';
 import type { ProposalStay } from '../proposals/proposalsApi';
 import { useTripContext } from '../trips/tripContext';
@@ -133,7 +134,7 @@ export default function StayBookingSheet() {
     navigate('.', { replace: true });
     if (cancelled) {
       abortReservation(id).then(
-        () => setError('Die Zahlung wurde bei PayPal abgebrochen, es wurde nichts gebucht.'),
+        () => setError(t('payment.cancelledAtPayPal')),
         () => undefined,
       ).finally(() => setStep({ kind: 'gone' }));
       return;
@@ -146,39 +147,39 @@ export default function StayBookingSheet() {
 
   if (!stop) {
     return (
-      <Sheet open onClose={close} title="Stop nicht gefunden">
-        <p className="va-muted">Diesen Stop gibt es nicht mehr.</p>
+      <Sheet open onClose={close} title={t('stay.stopNotFound')}>
+        <p className="va-muted">{t('stay.stopGone')}</p>
       </Sheet>
     );
   }
 
-  const title = step.kind === 'booked' ? 'Gebucht' : step.kind === 'attention' ? 'Gebucht, Zahlung wird geprüft'
-    : stay?.hotelName ?? 'Unterkunft buchen';
+  const title = step.kind === 'booked' ? t('payment.booked') : step.kind === 'attention' ? t('payment.bookedChecking')
+    : stay?.hotelName ?? t('stay.book');
   return (
-    <Sheet open onClose={close} eyebrow={`Unterkunft in ${stop.name}`} title={title} height="90vh" footer={footer()}>
+    <Sheet open onClose={close} eyebrow={t('stay.eyebrow', { name: stop.name })} title={title} height="90vh" footer={footer()}>
       {status && !status.bookingAvailable && step.kind === 'holder' && (
-        <Alert type="info" showIcon message="Buchen ist gerade nicht möglich. Du kannst die Unterkunft auch selbst buchen." />
+        <Alert type="info" showIcon message={t('stay.unavailable')} />
       )}
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
       {notice && <Alert type="info" showIcon message={notice} closable onClose={() => setNotice(null)} />}
       {step.kind === 'holder' && stay && (
         <>
           <dl className="va-facts">
-            <dt>Aufenthalt</dt>
+            <dt>{t('booking.stay')}</dt>
             <dd>{date(stay.checkIn)} – {date(stay.checkOut)}</dd>
-            <dt>Belegung</dt>
-            <dd>{stay.guests} {stay.guests === 1 ? 'Gast' : 'Gäste'}, {stay.rooms} Zimmer</dd>
+            <dt>{t('booking.occupancy')}</dt>
+            <dd>{t('common.guests', { count: stay.guests })}, {t('common.rooms', { count: stay.rooms })}</dd>
           </dl>
           <HolderForm candidate={{ name: stay.hotelName, price: stay.price, currency: stay.currency }} holder={holder} onChange={setHolder} />
         </>
       )}
       {step.kind === 'reserving' && (
-        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Preis bei {stay?.hotelName} wird gesichert …</span></div>
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('payment.securingPrice', { hotel: stay?.hotelName ?? '' })}</span></div>
       )}
       {step.kind === 'pay' && <PaySummary reservation={step.reservation} holder={holder} />}
       {step.kind === 'booking' && <BookingProgress reservation={step.reservation} />}
       {step.kind === 'returned' && (
-        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Zahlung wird geprüft und gebucht …</span></div>
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('payment.checkingAndBooking')}</span></div>
       )}
       {step.kind === 'booked' && (
         <div className="va-form">
@@ -186,29 +187,28 @@ export default function StayBookingSheet() {
             <CheckCircleOutlined aria-hidden="true" />
             <span className="va-column">
               <span className="va-strong">{step.reservation.hotelName}</span>
-              <span className="va-small">{date(step.reservation.checkIn)} – {date(step.reservation.checkOut)} · {money(step.reservation.price, step.reservation.currency)} mit PayPal</span>
+              <span className="va-small">{date(step.reservation.checkIn)} – {date(step.reservation.checkOut)} · {t('payment.withPayPal', { amount: money(step.reservation.price, step.reservation.currency) })}</span>
             </span>
           </div>
           {step.reservation.booking?.latitude != null && step.reservation.booking.longitude != null && (
             <a className="va-button va-button-accent va-block" target="_blank" rel="noopener noreferrer"
               href={directionsUrl(step.reservation.booking.latitude, step.reservation.booking.longitude)}>
-              <EnvironmentOutlined aria-hidden="true" /> Route zur Unterkunft
+              <EnvironmentOutlined aria-hidden="true" /> {t('payment.directions')}
             </a>
           )}
           {step.reservation.replacesBookingId != null && (
-            <p className="va-small va-muted">Die bisherige Unterkunft steht auf deiner To-do-Liste, damit du sie stornieren kannst.</p>
+            <p className="va-small va-muted">{t('payment.previousOnTodo')}</p>
           )}
         </div>
       )}
       {step.kind === 'attention' && (
         <p className="va-muted">
-          {step.reservation.hotelName} ist gebucht. Die Zahlung bei PayPal ist noch nicht abgeschlossen, wir kümmern uns
-          darum. Du musst nichts tun.
+          {t('payment.attention', { hotel: step.reservation.hotelName })}
         </p>
       )}
       {step.kind === 'gone' && (
         <p className="va-muted">
-          Kein Angebot ausgewählt. Du kannst eine Unterkunft am Stop auch selbst eintragen.
+          {t('stay.noOffer')}
         </p>
       )}
     </Sheet>
@@ -221,10 +221,10 @@ export default function StayBookingSheet() {
           <div className="va-column va-gap">
             <button type="button" className="va-button va-block" disabled={!holderComplete(holder) || !status?.bookingAvailable}
               onClick={() => void reserve()}>
-              Weiter zur Zahlung
+              {t('payment.continue')}
             </button>
             <button type="button" className="va-text-button" onClick={() => navigate(`/reisen/${trip.id}/stops/${stop!.id}/buchung`)}>
-              Ich buche selbst
+              {t('stay.bookMyself')}
             </button>
           </div>
         );
@@ -237,12 +237,12 @@ export default function StayBookingSheet() {
               orderId={step.reservation.payPalOrderId}
               approveUrl={step.reservation.approveUrl}
               onApprove={() => book(step.reservation)}
-              onCancel={() => setNotice('Zahlung abgebrochen, es wurde nichts gebucht. Du kannst es noch einmal versuchen.')}
-              onError={() => setError('PayPal konnte die Zahlung nicht starten. Bitte versuche es noch einmal.')}
+              onCancel={() => setNotice(t('payment.cancelled'))}
+              onError={() => setError(t('payment.startFailed'))}
             />
             {!step.reservation.payPalOrderId && !step.reservation.approveUrl && (
               <button type="button" className="va-button va-block" onClick={() => book(step.reservation)}>
-                Erneut versuchen
+                {t('common.retry')}
               </button>
             )}
           </div>
@@ -251,12 +251,12 @@ export default function StayBookingSheet() {
         return (
           <button type="button" className="va-button va-block"
             onClick={() => navigate(`/reisen/${trip.id}/buchungen/${step.reservation.bookingId}`)}>
-            Buchung ansehen
+            {t('payment.viewBooking')}
           </button>
         );
       case 'attention':
       case 'gone':
-        return <button type="button" className="va-button va-block" onClick={close}>Zur Reise</button>;
+        return <button type="button" className="va-button va-block" onClick={close}>{t('payment.toTrip')}</button>;
       default:
         return undefined;
     }
