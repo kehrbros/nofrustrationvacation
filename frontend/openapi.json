@@ -1586,7 +1586,7 @@
     },
     "/api/v1/trips/{tripId}/cover-image" : {
       "get" : {
-        "description" : "Image bytes, 404 if the trip has none.",
+        "description" : "Image bytes, 404 if the trip has none. ETag per photo, 304 on If-None-Match.",
         "operationId" : "getCoverImage",
         "parameters" : [ {
           "in" : "path",
@@ -1681,6 +1681,48 @@
           }
         },
         "summary" : "Generate a title photo",
+        "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/cover-image/thumbnail" : {
+      "get" : {
+        "description" : "Reduced copy (JPEG, at most 768×512) for the trip list; the original if there is no thumbnail (e.g. WebP). 404 if the trip has no photo. ETag per photo, 304 on If-None-Match.",
+        "operationId" : "getCoverThumbnail",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "image/jpeg" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              },
+              "image/png" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              },
+              "image/webp" : {
+                "schema" : {
+                  "type" : "string",
+                  "format" : "byte"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Title photo for lists",
         "tags" : [ "Trips" ]
       }
     },

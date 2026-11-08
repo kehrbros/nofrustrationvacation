@@ -336,12 +336,14 @@ public class TripLogic {
             throw new InvalidTripInputException("title photo must have 1 byte to 5 MB");
         }
         OffsetDateTime now = OffsetDateTime.now(clock);
+        TripCoverImage.Thumbnail thumbnail = CoverThumbnails.create(contentType, content).orElse(null);
         Optional<TripCoverImage> existing = coverImageRepository.findByTripId(tripId);
         if (existing.isPresent()) {
-            existing.get().replace(CoverImageSource.UPLOADED, contentType, content, now);
+            existing.get().replace(CoverImageSource.UPLOADED, contentType, content, now, thumbnail);
             return existing.get();
         }
-        return coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.UPLOADED, contentType, content, now));
+        return coverImageRepository.save(
+                new TripCoverImage(tripId, CoverImageSource.UPLOADED, contentType, content, now, thumbnail));
     }
 
     /** Sets a generated title photo; keeps a photo the user has uploaded meanwhile. */
@@ -351,10 +353,28 @@ public class TripLogic {
         OffsetDateTime now = OffsetDateTime.now(clock);
         Optional<TripCoverImage> existing = coverImageRepository.findByTripId(tripId);
         if (existing.isEmpty()) {
-            coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, contentType, content, now));
+            coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, contentType, content, now,
+                    CoverThumbnails.create(contentType, content).orElse(null)));
         } else if (existing.get().getSource() == CoverImageSource.GENERATED) {
-            existing.get().replace(CoverImageSource.GENERATED, contentType, content, now);
+            existing.get().replace(CoverImageSource.GENERATED, contentType, content, now,
+                    CoverThumbnails.create(contentType, content).orElse(null));
         }
+    }
+
+    /**
+     * Computes the missing thumbnail of one stored title photo (photos from before thumbnails existed). Returns
+     * whether there is one now; false if the photo cannot be decoded, then lists show the original.
+     */
+    @Transactional
+    public boolean addMissingCoverThumbnail(long coverImageId) {
+        Optional<TripCoverImage> image = coverImageRepository.findById(coverImageId);
+        if (image.isEmpty() || image.get().thumbnail().isPresent()) {
+            return image.isPresent();
+        }
+        Optional<TripCoverImage.Thumbnail> thumbnail =
+                CoverThumbnails.create(image.get().getContentType(), image.get().getContent());
+        thumbnail.ifPresent(image.get()::setThumbnail);
+        return thumbnail.isPresent();
     }
 
     /**

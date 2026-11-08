@@ -13,14 +13,21 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
@@ -36,10 +43,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Title photo drawn by the image model: prompt from name and stops, uploads win, errors of the assistant. */
+/** Title photo drawn by the image model: prompt from name and stops, thumbnails, uploads win, errors of the assistant. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class CoverImageGenerationTest {
@@ -87,6 +95,49 @@ class CoverImageGenerationTest {
     }
 
     @Test
+    void thumbnailIsStoredWithTheGeneratedImage() throws Exception {
+        byte[] original = jpeg(1536, 1024);
+        when(imageGeneration.generate(anyLong(), anyString()))
+                .thenReturn(new ImageGeneration.GeneratedImage("image/jpeg", original));
+
+        mockMvc.perform(post("/api/v1/trips/{id}/cover-image/generation", tripId).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        MvcResult thumbnail = mockMvc.perform(get("/api/v1/trips/{id}/cover-image/thumbnail", tripId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/jpeg"))
+                .andExpect(header().exists(HttpHeaders.ETAG))
+                .andReturn();
+        BufferedImage decoded = ImageIO.read(new ByteArrayInputStream(thumbnail.getResponse().getContentAsByteArray()));
+        assertThat(decoded.getWidth()).isEqualTo(768);
+        assertThat(decoded.getHeight()).isEqualTo(512);
+        String etag = thumbnail.getResponse().getHeader(HttpHeaders.ETAG);
+        mockMvc.perform(get("/api/v1/trips/{id}/cover-image/thumbnail", tripId).with(user)
+                        .header(HttpHeaders.IF_NONE_MATCH, etag))
+                .andExpect(status().isNotModified());
+        mockMvc.perform(get("/api/v1/trips/{id}/cover-image", tripId).with(user))
+                .andExpect(content().bytes(original));
+    }
+
+    @Test
+    void thumbnailFallsBackToTheOriginal() throws Exception {
+        mockMvc.perform(multipart(HttpMethod.PUT, "/api/v1/trips/{id}/cover-image", tripId)
+                        .file(new MockMultipartFile("file", "photo.webp", "image/webp", new byte[]{9})).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/v1/trips/{id}/cover-image/thumbnail", tripId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("image/webp"))
+                .andExpect(content().bytes(new byte[]{9}));
+    }
+
+    @Test
+    void thumbnailOfTripWithoutImageIsNotFound() throws Exception {
+        mockMvc.perform(get("/api/v1/trips/{id}/cover-image/thumbnail", tripId).with(user))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void uploadedImageIsKept() throws Exception {
         mockMvc.perform(multipart(HttpMethod.PUT, "/api/v1/trips/{id}/cover-image", tripId)
                         .file(new MockMultipartFile("file", "photo.png", "image/png", new byte[]{9})).with(user).with(csrf()))
@@ -121,6 +172,12 @@ class CoverImageGenerationTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("TRIP_NOT_FOUND"));
         verify(imageGeneration, never()).generate(anyLong(), anyString());
+    }
+
+    static byte[] jpeg(int width, int height) throws IOException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        ImageIO.write(new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB), "jpeg", out);
+        return out.toByteArray();
     }
 
     private RequestPostProcessor login(String username) {
