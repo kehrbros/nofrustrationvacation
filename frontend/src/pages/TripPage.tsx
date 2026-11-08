@@ -1,6 +1,6 @@
-import { ArrowLeftOutlined, DeleteOutlined, HomeOutlined, PlusOutlined } from '@ant-design/icons';
+import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined } from '@ant-design/icons';
 import { Alert, Popconfirm, Spin } from 'antd';
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
 import { t } from '../i18n';
@@ -10,6 +10,8 @@ import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
 import OpenReservations from '../bookings/OpenReservations';
 import TodoList from '../bookings/TodoList';
+import type { MapFocus } from '../map/TripMap';
+import { useCurrentPosition } from '../map/useCurrentPosition';
 import ProposalsBanner from '../proposals/ProposalsBanner';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
@@ -44,6 +46,26 @@ export default function TripPage() {
   );
   const [expanded, setExpanded] = useState(false);
   const [routePreview, setRoutePreview] = useState<RoutePreview | null>(null);
+  const position = useCurrentPosition();
+  const [focus, setFocus] = useState<MapFocus | null>(null);
+  // why the position button cannot help, shown for a moment next to the buttons
+  const [positionHint, setPositionHint] = useState<string | null>(null);
+  useEffect(() => {
+    if (!positionHint) {
+      return;
+    }
+    const timer = setTimeout(() => setPositionHint(null), 4000);
+    return () => clearTimeout(timer);
+  }, [positionHint]);
+  const focusOn = (target: MapFocus['target']) => setFocus((last) => ({ target, key: (last?.key ?? 0) + 1 }));
+  const focusPosition = () => {
+    if (position.coordinates || position.status === 'searching') {
+      setPositionHint(position.coordinates ? null : t('map.position.searching'));
+      focusOn('position');
+    } else {
+      setPositionHint(t(`map.position.${position.status === 'denied' ? 'denied' : 'unavailable'}`));
+    }
+  };
   const [trip, allIncidents, bookings, lines] = data ?? [undefined, [] as TripIncident[], [] as Booking[], [] as RouteLine[]];
   // resolved ones (incident ended) only appear on the map with a green check, everything else uses the current ones
   const incidents = useMemo(() => allIncidents.filter((incident) => !incident.resolved), [allIncidents]);
@@ -178,15 +200,36 @@ export default function TripPage() {
             onResolvedClick={openResolved}
             bottomPadding={SHEET_COLLAPSED}
             onMapClick={collapse}
+            position={position}
+            focus={focus}
           />
         </Suspense>
       </div>
 
       {/* the dock keeps the add button right above the sheet, collapsed or expanded */}
       <div className="va-trip-dock">
-        <Link to="stops/neu" className="va-fab va-fab-dock" aria-label={t('trip.addStop')}>
-          <PlusOutlined />
-        </Link>
+        <div className="va-dock-actions">
+          {positionHint && (
+            <span className="va-dock-hint" role="status">
+              {positionHint}
+            </span>
+          )}
+          <button type="button" className="va-map-button" aria-label={t('map.showTrip')} title={t('map.showTrip')} onClick={() => focusOn('trip')}>
+            <NodeIndexOutlined />
+          </button>
+          <button
+            type="button"
+            className={`va-map-button ${position.coordinates ? '' : 'va-map-button-inactive'}`}
+            aria-label={t('map.position.locate')}
+            title={t('map.position.locate')}
+            onClick={focusPosition}
+          >
+            <AimOutlined />
+          </button>
+          <Link to="stops/neu" className="va-fab va-fab-dock" aria-label={t('trip.addStop')}>
+            <PlusOutlined />
+          </Link>
+        </div>
         <section aria-label={t('trip.sheet')} className={`va-trip-sheet ${expanded ? 'va-trip-sheet-expanded' : ''}`}>
           <button
             type="button"

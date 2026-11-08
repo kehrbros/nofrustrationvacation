@@ -5,12 +5,25 @@ import { useEffect, useRef } from 'react';
 import { t } from '../i18n';
 
 import { incidentTitle } from '../trips/incidentText';
+import { pawnElement } from './pawn';
+import type { CurrentPosition } from './position';
 import type { LinePoint, Route, RouteLine, Stop, TripIncident } from '../trips/model';
 import type { RoutePreview } from '../trips/tripContext';
 
 /** OpenStreetMap based vector tiles without API key, see Docs/architecture.md. */
 const MAP_STYLE = import.meta.env.VITE_MAP_STYLE_URL ?? 'https://tiles.openfreemap.org/styles/positron';
 const EUROPE: LngLatLike = [10.5, 48];
+/**
+ * Zoom when centring on the user's position: about 2 km across on a phone, enough to see the road you are on, the
+ * next junctions and the nearest place names, while the route line stays recognisable.
+ */
+const POSITION_ZOOM = 14;
+
+/** A request to move the map, by the buttons next to the add button; a new key repeats the same target. */
+export interface MapFocus {
+  target: 'trip' | 'position';
+  key: number;
+}
 
 export interface TripMapProps {
   stops: Stop[];
@@ -31,6 +44,10 @@ export interface TripMapProps {
   bottomPadding: number;
   /** Any tap on the map itself (not on a chip or a control), e.g. to collapse the expanded trip sheet. */
   onMapClick?: () => void;
+  /** The user's current position, marked with a green pawn while known. */
+  position?: CurrentPosition;
+  /** Latest request to show the whole trip or the position; a position request waits for the first fix. */
+  focus?: MapFocus | null;
 }
 
 type Located = Stop & { latitude: number; longitude: number };
@@ -46,6 +63,18 @@ const CHECK_BADGE =
   '<circle cx="12" cy="12" r="11" fill="#1f7a3d" stroke="#ffffff" stroke-width="2"/>' +
   '<path d="M7 12.5 L10.5 16 L17 9" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" ' +
   'stroke-linejoin="round"/></svg>';
+
+/** Shows all located stops above the sheet; a single stop is centred. */
+function fitStops(instance: maplibregl.Map, stops: Stop[], bottomPadding: number, duration: number) {
+  const points = stops.filter(located);
+  if (points.length === 1) {
+    instance.easeTo({ center: [points[0].longitude, points[0].latitude], zoom: 9, duration });
+  } else if (points.length > 1) {
+    const bounds = new maplibregl.LngLatBounds();
+    points.forEach((stop) => bounds.extend([stop.longitude, stop.latitude]));
+    instance.fitBounds(bounds, { padding: { top: 60, left: 60, right: 60, bottom: bottomPadding + 40 }, duration, maxZoom: 11 });
+  }
+}
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const coordinates = (line: LinePoint[]) => line.map((point) => [point.longitude, point.latitude]);
@@ -86,6 +115,8 @@ export default function TripMap({
   onResolvedClick,
   bottomPadding,
   onMapClick,
+  position,
+  focus,
 }: TripMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -93,6 +124,8 @@ export default function TripMap({
   const markers = useRef<maplibregl.Marker[]>([]);
   const fitted = useRef<LinePoint[][] | undefined>(undefined);
   const consequences = useRef(new Map<string, TripIncident>());
+  const pawn = useRef<maplibregl.Marker | null>(null);
+  const focused = useRef<number | null>(null);
   const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick });
   callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick };
 
@@ -217,6 +250,7 @@ export default function TripMap({
     map.current = instance;
     return () => {
       loaded.current = false;
+      pawn.current = null;
       instance.remove();
       map.current = null;
     };
@@ -343,14 +377,7 @@ export default function TripMap({
         );
       });
 
-      const points = stops.filter(located);
-      if (points.length === 1) {
-        instance.jumpTo({ center: [points[0].longitude, points[0].latitude], zoom: 9 });
-      } else if (points.length > 1) {
-        const bounds = new maplibregl.LngLatBounds();
-        points.forEach((stop) => bounds.extend([stop.longitude, stop.latitude]));
-        instance.fitBounds(bounds, { padding: { top: 60, left: 60, right: 60, bottom: bottomPadding + 40 }, duration: 0, maxZoom: 11 });
-      }
+      fitStops(instance, stops, bottomPadding, 0);
     };
     if (loaded.current) {
       draw();
@@ -406,6 +433,44 @@ export default function TripMap({
       instance.off('va:data', draw);
     };
   }, [previewRouteId, previewLines, previewSelected]);
+
+  // the pawn on the user's position, shown faded while the signal is lost and the position may be outdated
+  const here = position?.coordinates;
+  const stale = position?.status !== 'located';
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) {
+      return;
+    }
+    if (!here) {
+      pawn.current?.remove();
+      pawn.current = null;
+      return;
+    }
+    pawn.current ??= new maplibregl.Marker({ element: pawnElement(), anchor: 'bottom' });
+    pawn.current.setLngLat([here.longitude, here.latitude]).addTo(instance);
+    pawn.current.getElement().classList.toggle('va-map-pawn-stale', stale);
+  }, [here, stale]);
+
+  // each focus request once; one for the position waits until it is known
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || !focus || focused.current === focus.key) {
+      return;
+    }
+    if (focus.target === 'trip') {
+      focused.current = focus.key;
+      fitStops(instance, stops, bottomPadding, 500);
+    } else if (here) {
+      focused.current = focus.key;
+      // the pawn above the sheet, not behind it
+      instance.flyTo({
+        center: [here.longitude, here.latitude],
+        zoom: POSITION_ZOOM,
+        padding: { top: 0, left: 0, right: 0, bottom: bottomPadding },
+      });
+    }
+  }, [focus, here, stops, bottomPadding]);
 
   // MapLibre sets position: relative on its container, so the container fills an absolutely positioned frame
   return (
