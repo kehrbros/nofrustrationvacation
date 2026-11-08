@@ -90,6 +90,7 @@
 - `GET /trips/{id}/incidents`: je Hinweis zusätzlich `category`, `match`, `assessedDelayMinutes` (leer = nicht passierbar), `delayAssumed`, `passageAt`, `expectedArrival`, `deadline`, `windowStart`/`windowEnd`; sortiert nach der [Rangfolge](#rangfolge).
 - **Abweichung (umgesetzt):** Die Zusammenfassung je Route steht in einem eigenen Endpunkt `GET /trips/{id}/incidents/routes` (`routeId`, `worstCategory`, `plannedArrival`, `expectedArrival`, `deadline`, `slackMinutes` negativ = zu spät, `unpassable`, `plannedTooLate`), damit `GET /trips/{id}/incidents` eine Liste bleibt und das bestehende Frontend unverändert läuft. Nur geplante Routen oder Routen mit Hinweisen.
 - „Zeiten prüfen“ = `timesUnconfirmed` an `GET /trips/{id}/incidents`.
+- Erledigte Hinweise (Incident beendet) folgen am Ende der Liste mit `resolved`/`resolvedAt` und zählen nirgends, siehe [domain.md](domain.md#incidents).
 - Hinweise ohne eigene Felder: „Ankunftszeit fehlt“ = `deadline` leer; „Ankunft nicht erreichbar laut Planung“ = `plannedTooLate`; „knapp“ = `match` `MARGINAL` mit `windowStart` und `passageAt`.
 - Frontend (**noch offen**): Kategorie als Farbe und Text („Zu spät: 1 Std. 10 Min. nach Ankunft“, „Verzögerung 25 Min., Ankunft 17:40 noch erreichbar“, „Keine Auswirkung“), geschätzte Werte mit ✦. Der generierte Client (`frontend/src/generated`) ist noch nicht neu erzeugt; `frontend/openapi.json` schon (aus `mvn verify`).
 

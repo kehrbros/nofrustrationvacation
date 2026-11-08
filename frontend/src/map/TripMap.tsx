@@ -20,9 +20,13 @@ export interface TripMapProps {
   /** Suggestions of one route to choose from, drawn instead of its planned way. */
   preview: RoutePreview | null;
   incidentsByRoute: Map<number, TripIncident[]>;
+  /** Incidents that have ended: a small icon with a green check, no stretch. */
+  resolvedIncidents: TripIncident[];
   onRouteClick: (routeId: number) => void;
   /** A consequence was tapped, its chip or its stretch: opens the TripAlternatives. */
   onConsequenceClick: (consequence: TripIncident) => void;
+  /** A resolved incident was tapped: opens its details, where it can be removed. */
+  onResolvedClick: (consequence: TripIncident) => void;
   /** Space the bottom sheet covers, kept free when fitting the stops. */
   bottomPadding: number;
 }
@@ -34,6 +38,12 @@ const WARNING_ICON =
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" stroke="#111111" stroke-width="2.2" ' +
   'stroke-linejoin="round" aria-hidden="true"><path d="M12 3 L22 20 H2 Z"/><path d="M12 10 V14" fill="none"/>' +
   '<circle cx="12" cy="17" r="0.8" fill="#111111"/></svg>';
+
+const CHECK_BADGE =
+  '<svg class="va-map-incident-check" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">' +
+  '<circle cx="12" cy="12" r="11" fill="#1f7a3d" stroke="#ffffff" stroke-width="2"/>' +
+  '<path d="M7 12.5 L10.5 16 L17 9" fill="none" stroke="#ffffff" stroke-width="2.6" stroke-linecap="round" ' +
+  'stroke-linejoin="round"/></svg>';
 
 const EMPTY: GeoJSON.FeatureCollection = { type: 'FeatureCollection', features: [] };
 const coordinates = (line: LinePoint[]) => line.map((point) => [point.longitude, point.latitude]);
@@ -58,8 +68,8 @@ const chipClass = (consequence: TripIncident) =>
 
 /**
  * Map of a trip with MapLibre GL: numbered stops, routes on their planned way (dashed straight line until planned),
- * consequences as the stretch of the route their incident covers plus a chip; tapping either opens the
- * TripAlternatives. A route whose consequences have no stretch (yet) is highlighted as a whole. While a route sheet
+ * consequences as the stretch of the route their incident covers plus a round chip; tapping either opens the
+ * TripAlternatives. Resolved incidents (ended) only get a small icon with a green check, tapping it opens the hint. A route whose consequences have no stretch (yet) is highlighted as a whole. While a route sheet
  * is open, the suggestions of that route are drawn instead, the selected one on top.
  */
 export default function TripMap({
@@ -68,8 +78,10 @@ export default function TripMap({
   routeLines,
   preview,
   incidentsByRoute,
+  resolvedIncidents,
   onRouteClick,
   onConsequenceClick,
+  onResolvedClick,
   bottomPadding,
 }: TripMapProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -78,8 +90,8 @@ export default function TripMap({
   const markers = useRef<maplibregl.Marker[]>([]);
   const fitted = useRef<LinePoint[][] | undefined>(undefined);
   const consequences = useRef(new Map<string, TripIncident>());
-  const callbacks = useRef({ onRouteClick, onConsequenceClick, onPreviewSelect: preview?.onSelect });
-  callbacks.current = { onRouteClick, onConsequenceClick, onPreviewSelect: preview?.onSelect };
+  const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect });
+  callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect };
 
   useEffect(() => {
     if (!container.current) {
@@ -272,15 +284,43 @@ export default function TripMap({
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = chipClass(consequence);
-        chip.innerHTML = `${WARNING_ICON}<span></span>`;
-        chip.querySelector('span')!.textContent = incidentTitle(consequence);
+        // only the icon in a circle, the title is in the tooltip and for screen readers
+        chip.innerHTML = WARNING_ICON;
+        chip.title = incidentTitle(consequence);
         chip.setAttribute('aria-label', t('map.alternatives', { title: incidentTitle(consequence) }));
         chip.addEventListener('click', (event) => {
           event.stopPropagation();
           callbacks.current.onConsequenceClick(consequence);
         });
-        markers.current.push(new maplibregl.Marker({ element: chip, anchor: 'right', offset: [-12, 0] }).setLngLat(at).addTo(instance));
+        markers.current.push(new maplibregl.Marker({ element: chip, anchor: 'center' }).setLngLat(at).addTo(instance));
       };
+      // resolved: small icon with a green check where the stretch was (else in the middle of the route), no stretch
+      resolvedIncidents.forEach((consequence) => {
+        const route = routes.find((candidate) => candidate.id === consequence.routeId);
+        const planned = route ? routeLines.get(route.id)?.geometry ?? [] : [];
+        const from = route ? byId.get(route.fromStopId) : undefined;
+        const to = route ? byId.get(route.toStopId) : undefined;
+        const center =
+          consequence.geometry.length > 1 ? middleOf(consequence.geometry)
+            : planned.length > 1 ? middleOf(planned)
+              : located(from) && located(to)
+                ? { latitude: (from.latitude + to.latitude) / 2, longitude: (from.longitude + to.longitude) / 2 }
+                : null;
+        if (!center) {
+          return;
+        }
+        const icon = document.createElement('button');
+        icon.type = 'button';
+        icon.className = 'va-map-incident va-map-incident-resolved';
+        icon.innerHTML = `${WARNING_ICON}${CHECK_BADGE}`;
+        icon.title = t('map.resolved', { title: incidentTitle(consequence) });
+        icon.setAttribute('aria-label', t('map.resolved', { title: incidentTitle(consequence) }));
+        icon.addEventListener('click', (event) => {
+          event.stopPropagation();
+          callbacks.current.onResolvedClick(consequence);
+        });
+        markers.current.push(new maplibregl.Marker({ element: icon, anchor: 'center' }).setLngLat([center.longitude, center.latitude]).addTo(instance));
+      });
       // a chip at each stretch; consequences without one share a chip in the middle of their route
       stretches.forEach((consequence) => {
         const middle = middleOf(consequence.geometry);
@@ -316,7 +356,7 @@ export default function TripMap({
     return () => {
       instance.off('va:data', draw);
     };
-  }, [stops, routes, routeLines, incidentsByRoute, bottomPadding]);
+  }, [stops, routes, routeLines, incidentsByRoute, resolvedIncidents, bottomPadding]);
 
   // suggestions of one route: drawn instead of its planned way, the map zooms to them above the open sheet
   const previewRouteId = preview?.routeId ?? null;

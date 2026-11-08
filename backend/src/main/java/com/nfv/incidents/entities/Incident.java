@@ -141,6 +141,14 @@ public class Incident extends AbstractEntity {
         return IncidentOverlap.firstWindow(timeWindows(), start, end);
     }
 
+    /**
+     * Over at {@code now}, or called off before it started (ends at its start, as {@code IncidentReporting} does for
+     * an ended report before the start). Its consequences are then resolved.
+     */
+    public boolean hasEnded(OffsetDateTime now) {
+        return validTo != null && (!validTo.isAfter(now) || !validTo.isAfter(validFrom));
+    }
+
     public Impact impact() {
         return IncidentOverlap.impactOf(type);
     }

@@ -9,6 +9,7 @@ import {
   getTripIncidentCounts,
   getTripIncidents,
   listTrips,
+  dismissResolvedIncident,
   removeStop as removeStopRequest,
   uploadCoverImage as uploadCoverImageRequest,
 } from '../generated/api';
@@ -97,6 +98,8 @@ function toIncident(dto: TripIncidentDto): TripIncident {
     deadline: dto.deadline ?? null,
     timesUnconfirmed: dto.timesUnconfirmed ?? false,
     geometry: (dto.geometry ?? []).map((point) => ({ latitude: point.latitude!, longitude: point.longitude! })),
+    resolved: dto.resolved ?? false,
+    resolvedAt: dto.resolvedAt ?? null,
   };
 }
 
@@ -151,6 +154,11 @@ export async function addStop(tripId: number, stop: NewStop): Promise<TripDetail
 /** Deletes the stop with its bookings; its neighbours get a new route. 409 STOP_IN_USE while a payment runs. */
 export async function removeStop(tripId: number, stopId: number): Promise<TripDetail> {
   return toDetail(await unwrap(removeStopRequest({ path: { tripId, stopId } })));
+}
+
+/** Removes a resolved incident (its incident has ended) from the map of the trip. */
+export async function dismissIncident(tripId: number, routeId: number, incidentId: number): Promise<void> {
+  await unwrap(dismissResolvedIncident({ path: { tripId, routeId, incidentId } }));
 }
 
 /** Deletes the trip with stops, routes and bookings. */

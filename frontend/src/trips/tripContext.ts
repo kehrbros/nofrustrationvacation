@@ -6,8 +6,11 @@ import type { LinePoint, Route, RouteLine, Stop, TripDetail, TripIncident } from
 /** What the trip page hands to its dialogs (incident, route, new stop, bookings). */
 export interface TripContext {
   trip: TripDetail;
+  /** Current incidents of the trip, without resolved ones. */
   incidents: TripIncident[];
   incidentsByRoute: Map<number, TripIncident[]>;
+  /** Incidents that have ended, shown on the map with a green check until removed. */
+  resolvedIncidents: TripIncident[];
   stopById: Map<number, Stop>;
   /** Bookings at the stops of the trip, ascending by check-in. */
   bookings: Booking[];

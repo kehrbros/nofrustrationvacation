@@ -1686,7 +1686,7 @@
     },
     "/api/v1/trips/{tripId}/incidents" : {
       "get" : {
-        "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage.",
+        "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage. Then resolved ones (resolved = true, incident ended), most recently resolved first, until removed.",
         "operationId" : "getTripIncidents",
         "parameters" : [ {
           "in" : "path",
@@ -1940,6 +1940,44 @@
         },
         "summary" : "Add a stop",
         "tags" : [ "Trips" ]
+      }
+    },
+    "/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}" : {
+      "delete" : {
+        "tags" : [ "Incidents" ],
+        "summary" : "Remove a resolved incident from the trip",
+        "description" : "Only once the incident has ended (resolved = true), 409 INCIDENT_NOT_RESOLVED before; 404 INCIDENT_NOT_FOUND if the route has no consequence of it.",
+        "operationId" : "dismissResolvedIncident",
+        "parameters" : [ {
+          "name" : "tripId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "routeId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "name" : "incidentId",
+          "in" : "path",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "204" : {
+            "description" : "No Content"
+          }
+        }
       }
     },
     "/api/v1/trips/{tripId}/stops/{stopId}" : {
@@ -4204,6 +4242,15 @@
             "type" : [ "string", "null" ],
             "format" : "date-time",
             "description" : "Passage of the affected section, moved by earlier delays"
+          },
+          "resolved" : {
+            "type" : "boolean",
+            "description" : "The incident has ended: show as resolved until the traveller removes it"
+          },
+          "resolvedAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "When it was resolved, null if not resolved"
           },
           "routeId" : {
             "type" : "integer",

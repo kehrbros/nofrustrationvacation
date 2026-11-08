@@ -314,6 +314,12 @@ export const de = {
     asOf: 'Stand',
     updated: 'aktualisiert {{ago}}',
     notAffected: 'Dieser Hinweis betrifft deine Reise nicht mehr.',
+    resolved: 'Hat sich erledigt',
+    resolvedDetail: 'Dieser Hinweis gilt nicht mehr, deine Route ist wieder frei.',
+    resolvedDetailAgo: 'Erledigt {{ago}}, deine Route ist wieder frei.',
+    remove: 'Hinweis von der Karte entfernen',
+    keep: 'Auf der Karte lassen',
+    removeFailed: 'Der Hinweis konnte nicht entfernt werden. Bitte versuche es noch einmal.',
   },
   alternativesSheet: {
     yourTarget: 'dein Ziel',
@@ -400,6 +406,7 @@ export const de = {
     label: 'Karte mit Stops und Routen',
     stop: 'Stop {{position}}: {{name}}',
     alternatives: 'Alternativen ansehen: {{title}}',
+    resolved: 'Erledigt: {{title}}',
   },
   addBooking: {
     saveFailed: 'Die Buchung konnte nicht gespeichert werden.',
