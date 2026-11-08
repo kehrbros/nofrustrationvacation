@@ -121,12 +121,17 @@ public class AuthSecurityConfig {
      */
     @Bean
     @Order(2)
-    public SecurityFilterChain authPagesSecurityFilterChain(HttpSecurity http) {
+    public SecurityFilterChain authPagesSecurityFilterChain(HttpSecurity http,
+                                                            @Value("${nfv.frontend-url}") String frontendUrl) {
+        String app = frontendUrl + "/";
         http.securityMatcher("/login", "/logout", "/register", CONSENT_PAGE, "/account/**")
                 .authorizeHttpRequests(authorize -> authorize
                         .requestMatchers("/login", "/logout", "/register").permitAll()
                         .anyRequest().authenticated())
-                .formLogin(form -> form.loginPage("/login"))
+                // without a saved authorization request (login page opened directly) the login continues in the app
+                .formLogin(form -> form.loginPage("/login").defaultSuccessUrl(app))
+                // outdated forms (double submit, back button, expired session) lead back to the form or into the app
+                .exceptionHandling(exceptions -> exceptions.accessDeniedHandler(new StaleFormAccessDeniedHandler(app)))
                 .logout(Customizer.withDefaults());
         return http.build();
     }

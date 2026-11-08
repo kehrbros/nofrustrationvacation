@@ -23,6 +23,8 @@
 | `auth/config/CimdConfig`, `auth/cimd/*` | MCP-Clients per Client ID Metadata Document, Autorisierungen und Consents per JDBC, siehe [MCP-Clients (CIMD)](#mcp-clients-cimd) |
 | `auth/entities/AuthAccount` | Login-Account: `username` (unique), Passwort-Hash, `email`, Rollen (Default `user`; `tester` für `/api/v1/test/**`, siehe [traffic-feed.md](traffic-feed.md#testquelle-manual)) |
 | `auth/api`, `templates/auth` | `/login`, `/register`, `/oauth2/consent`, `/account/connections` (serverseitig gerendert, wie bei Keycloak; deutsch, im Noir-Look der App mit Wortmarke „NoFrustration.Vacation.“; gemeinsames Layout mit Inline-CSS in `templates/auth/layout.html`, daher keine statischen Ressourcen hinter der Security-Filterkette) |
+| `auth/config/StaleFormAccessDeniedHandler` | Login-/Registrierungsformular mit veraltetem CSRF-Token (siehe [Veraltete Formulare](#veraltete-formulare)) |
+| `templates/error.html`, `messages*.properties` | Fehlerseite für Browser statt Whitelabel-Seite, deutsch/englisch nach `Accept-Language` (sonst Englisch), Link „Zurück zur App“ auf `nfv.frontend-url`; JSON-Clients bekommen weiter den JSON-Fehler |
 | `db/migration/auth/V3__auth_account.sql` | `auth_account`, `auth_account_role` – ohne Fremdschlüssel zu Fachtabellen |
 | `db/migration/auth/V17__oauth2_authorization.sql` | `oauth2_authorization`, `oauth2_authorization_consent` (Schema von Spring Authorization Server, `VARCHAR` statt `BLOB`), `auth_cimd_client` (Cache der Metadata Documents) |
 | `user/security/ApiSecurityConfig` | Filterkette `/api/**`: stateless, JWT-Validierung über `issuer-uri`, Tokens für `/mcp` werden abgelehnt |
@@ -77,6 +79,19 @@ nfv.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools b
 1. Frontend → `GET /oauth2/authorize?response_type=code&client_id=nfv-frontend&code_challenge=…`.
 2. Login per Formular. Danach setzt der IdP die gespeicherte Anfrage fort und leitet mit `code` zurück zum Frontend.
 3. Frontend → `POST /oauth2/token` mit `code` + `code_verifier` → Access Token (JWT, `sub` = Username, `roles`, `email`) und ID Token.
+- Ohne gespeicherte Anfrage (Login-Seite direkt aufgerufen) geht es nach dem Login in die App (`nfv.frontend-url`), nicht auf `/` des Backends.
+
+### Veraltete Formulare
+
+- CSRF-Token des Login-Formulars liegt in der Session. Es ist veraltet, wenn
+  - das Formular doppelt abgeschickt wurde (Doppelklick, Enter + Klick): der erste Login ersetzt das Token, der Browser zeigt die Antwort des zweiten,
+  - die Seite nach dem Login per Zurück-Taste wiederhergestellt und erneut abgeschickt wurde,
+  - die Seite länger offen war als die Session lebt oder das Backend inzwischen neu gestartet wurde (Deploy).
+- Früher: 403 mit Whitelabel-Seite. Jetzt (`StaleFormAccessDeniedHandler`, nur `POST /login` und `POST /register`):
+  - schon angemeldet → Weiterleitung in die App, die holt sich ihre Tokens ohne neuen Login,
+  - nicht angemeldet → Formular erneut mit Hinweis (`/login?expired`, `/register?expired`).
+- Zusätzlich verhindert ein kleines Skript im Layout ein zweites Abschicken desselben Formulars (nach Wiederherstellen aus dem Back-Forward-Cache wieder frei).
+- Andere 403 der Seiten (z. B. Logout-Formular mit veraltetem Token) zeigen die Fehlerseite.
 
 ### Authentifizierter API-Request
 
