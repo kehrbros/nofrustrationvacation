@@ -108,7 +108,15 @@
 - **Bewertung (umgesetzt, `V35`):** jede Consequence bekommt eine Kategorie `TOO_LATE`, `DELAYED` oder `NO_IMPACT`, bewertet je Route gegen die Ankunft des Ziel-Stops (`Stop.arrivalAt` = Frist), mit aufaddierter Verzögerung. Dazu `match` (`DIRECT`, `BY_SHIFT`, `MARGINAL`), `assessedDelay` (leer = nicht passierbar), `delayAssumed`, `passageAt` (verschobene Durchfahrt), `expectedArrival`, `deadline`, `assessedAt`. Abgeleitet, nicht historisiert. `delay` bleibt die Angabe des Incidents. Details in [consequence-assessment.md](consequence-assessment.md).
 - `Incident.vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, aus der Anreicherung, historisiert): `HEAVY_ONLY` wirkt nicht auf Pkw (`NO_IMPACT`).
 - `Incident.timesUnconfirmed` (`V36`, historisiert): Sperrung mit Uhrzeiten nur im Text, noch nicht gelesen; Typ `OTHER`, Bewertung `DELAYED` ohne Verzögerung, Hinweis „Zeiten prüfen“, siehe [traffic-feed.md](traffic-feed.md#verarbeitung-trafficeventprocessor).
-- Consequences sind abgeleitet und werden nie von Nutzern bearbeitet. Werden Route oder Section gelöscht, löscht die Datenbank die Consequence mit (`ON DELETE CASCADE`).
+- Consequences sind abgeleitet und werden nie von Nutzern bearbeitet; der Nutzer kann nur eine erledigte von der Karte entfernen (siehe unten). Werden Route oder Section gelöscht, löscht die Datenbank die Consequence mit (`ON DELETE CASCADE`).
+- **Erledigte Hinweise (umgesetzt 2026-11-08, `V49`):** Endet ein Incident, wird seine Consequence nicht gelöscht, sondern als erledigt markiert (`Consequence.resolvedAt`):
+  - „Beendet“ = `Incident.hasEnded`: `validTo` erreicht, oder vor dem Beginn abgesagt (`validTo` = `validFrom`, so beendet `IncidentReporting` eine Meldung vor ihrem Start).
+  - Sofort bei der Bewertung (`ConsequenceAssessment`, z. B. Quelle meldet das Ende), sonst durch den Job `ResolvedIncidents` (`ResolvedIncidentsScheduler`, alle `nfv.incidents.resolved-check.interval` = 5 min, in Tests aus), wenn `validTo` ohne Meldung abläuft. Bis zum Lauf gilt eine Consequence mit beendetem Incident schon als erledigt (`isResolved`).
+  - Erledigte zählen nicht mehr: nicht in `TripIncidents.active`, Zähler je Trip, Zusammenfassung je Route, `ActiveIncidents.consequencesOnRoute` (Vorschläge, Agent) und `IncidentOverview.effects`.
+  - `GET /trips/{id}/incidents` liefert sie nach den aktuellen, zuletzt erledigte zuerst, mit `resolved` = true und `resolvedAt`; ohne Orte, die die Route schon passiert hat.
+  - Gilt der Incident wieder (z. B. erneut gemeldet), wird `resolvedAt` bei der nächsten Bewertung leer.
+  - Entfernen: `DELETE /trips/{tripId}/routes/{routeId}/incidents/{incidentId}` löscht die erledigte Consequence (`204`; nicht erledigt `409` `INCIDENT_NOT_RESOLVED`; unbekannt oder fremd `404`). Sie kommt nicht wieder, weil beendete Incidents nicht mehr bewertet werden; gilt der Incident wieder, entsteht eine neue.
+  - Frontend: auf der Karte kleines Icon mit grünem Haken statt Chip und Strecke, Tippen öffnet den Hinweis (`IncidentSheet`) grün hervorgehoben mit „Hinweis von der Karte entfernen“. Hinweischips aktueller Incidents sind nur noch das Icon im Kreis (Titel als Tooltip und `aria-label`).
 
 ## Zuordnungslogik (`ConsequenceMatcher`)
 
@@ -116,7 +124,7 @@
 2. **Route neu oder geändert** (`RouteChanged`) oder **Ankunft des Ziel-Stops geändert** (`StopArrivalChanged`), synchron in derselben Transaktion: die Route wird ganz bewertet.
 - **Bewertung** (`ConsequenceAssessment.assessRoute`, Regeln als reine Funktion `RouteAssessor`): Sections in Reihenfolge, aktive Incidents auf ihren Segmenten (`validTo` leer oder nicht vorbei), Verzögerungen addieren sich und verschieben spätere Durchfahrten. Ergebnis je getroffenem Incident eine Consequence. Details in [consequence-assessment.md](consequence-assessment.md).
 - Überschneidung: `passageEnd >= validFrom` und (`validTo` leer oder `passageStart <= validTo`), mit Zeitfenstern zusätzlich mindestens ein Fenster; die Abfragen bleiben auf der Hülle. Als reine Funktion `IncidentOverlap` in `incidents.logic`, auch für die Bewertung von Streckenvorschlägen. Andere Module lesen Incidents über `ActiveIncidents.onSegments` (Records, keine Entities).
-- Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht.
+- Bestehende Consequences werden aktualisiert (Id bleibt, für spätere Benachrichtigungen), nicht mehr zutreffende gelöscht, außer der Incident ist beendet: dann erledigt (siehe oben).
 - **Toleranz (umgesetzt):** Die (verschobene) Durchfahrt wird für die Prüfung um `max(15 min, 10 % der Zeit seit Abfahrt)` (höchstens 2 h) erweitert. Treffer nur durch die Toleranz sind „knapp“ (`MARGINAL`), höchstens `DELAYED`, siehe [consequence-assessment.md](consequence-assessment.md#toleranz-der-durchfahrt-beschlossen-2026-11-04).
 - Tests: `ConsequenceMatchingTest`, `RouteAssessorTest`.
 
@@ -134,7 +142,7 @@
 - **Event → Incident:** umgesetzt ohne Anreicherung und Zeitfenster (Stufe 2), Rest entworfen in [traffic-feed.md](traffic-feed.md#stufen).
 - **Neuplanung:** nach `NetworkRefreshed` (betroffene Routen neu planen) und Routen mit `ROUTING_UNAVAILABLE` automatisch erneut planen fehlen noch. Umfahrung bei `BLOCKED` über `recommendations`, Entwurf in [recommendations.md](recommendations.md).
 - **Verzögerung fortschreiben:** Eine Verzögerung auf einem Abschnitt verschiebt die erwartete Durchfahrt aller folgenden Abschnitte; derzeit nicht berücksichtigt, für die Bewertung geplant ([consequence-assessment.md](consequence-assessment.md#verzögerung-je-consequence)).
-- **Ende eines Incidents:** abgelaufene Consequences bleiben derzeit stehen; aufräumen oder als erledigt markieren.
+- **Ende eines Incidents:** gelöst durch erledigte Hinweise (siehe oben). Offen: erledigte Hinweise nach einiger Zeit automatisch entfernen.
 - **Impact und Delay genauer:** gelöst durch die Bewertung je Route ([consequence-assessment.md](consequence-assessment.md)); offen bleibt das Kalibrieren von Toleranz und Annahmen an echten Daten.
 - **Bookings:** Bezug zu Incidents (z. B. Check-in verpasst durch Verspätung, Unterkunft nicht erreichbar), Transport und Aktivitäten, Sprach-/Namenssuche mit KI (Stufe 3, die Suche nach Alternativen ist ein erster Teil davon), E-Mail-Weiterleitung (Stufe 4), Stornieren per API, Zeiten eines aus der Buchung angelegten Stops in der Zone der Unterkunft.
 - **Benachrichtigung:** wer wann worüber informiert wird, Schwellen (z. B. erst ab 15 min Verzögerung).

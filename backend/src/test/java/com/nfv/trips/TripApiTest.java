@@ -411,8 +411,8 @@ class TripApiTest {
 
         long segmentId = segment(departure.minusDays(1));
         routeLogic.replaceSections(routeId, List.of(new PlannedSection(segmentId, departure, departure.plusHours(1))));
-        transactionTemplate.executeWithoutResult(_ -> incidentLogic.create(IncidentType.CLOSURE, "Vollsperrung A22",
-                departure.minusHours(1), departure.plusHours(4), null, Set.of(segmentId)));
+        long incidentId = transactionTemplate.execute(_ -> incidentLogic.create(IncidentType.CLOSURE,
+                "Vollsperrung A22", departure.minusHours(1), departure.plusHours(4), null, Set.of(segmentId))).getId();
 
         mockMvc.perform(get("/api/v1/trips/{id}/incidents", tripId).with(user))
                 .andExpect(status().isOk())
@@ -430,7 +430,9 @@ class TripApiTest {
                 .andExpect(jsonPath("$[0].deadline").doesNotExist())
                 // the affected stretch for the map: the one section on the test segment
                 .andExpect(jsonPath("$[0].geometry", hasSize(2)))
-                .andExpect(jsonPath("$[0].geometry[0].latitude").value(47.2));
+                .andExpect(jsonPath("$[0].geometry[0].latitude").value(47.2))
+                .andExpect(jsonPath("$[0].resolved").value(false))
+                .andExpect(jsonPath("$[0].resolvedAt").doesNotExist());
         mockMvc.perform(get("/api/v1/trips/{id}/incidents/routes", tripId).with(user))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -443,6 +445,32 @@ class TripApiTest {
         mockMvc.perform(get("/api/v1/incidents/trip-counts").with(user))
                 .andExpect(jsonPath("$[0].tripId").value(tripId))
                 .andExpect(jsonPath("$[0].count").value(1));
+
+        String dismiss = "/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}";
+        mockMvc.perform(delete(dismiss, tripId, routeId, incidentId).with(user).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("INCIDENT_NOT_RESOLVED"));
+
+        // the closure is called off (ends at its start): shown as resolved, no longer counted, until removed
+        transactionTemplate.executeWithoutResult(_ -> incidentLogic.change(incidentId, "Vollsperrung A22",
+                departure.minusHours(1), departure.minusHours(1), null, Set.of(segmentId)));
+        mockMvc.perform(get("/api/v1/trips/{id}/incidents", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].resolved").value(true))
+                .andExpect(jsonPath("$[0].resolvedAt").isNotEmpty())
+                .andExpect(jsonPath("$[0].geometry", hasSize(2)));
+        mockMvc.perform(get("/api/v1/incidents/trip-counts").with(user)).andExpect(jsonPath("$", hasSize(0)));
+        mockMvc.perform(get("/api/v1/trips/{id}/incidents/routes", tripId).with(user))
+                .andExpect(jsonPath("$[0].worstCategory").doesNotExist());
+
+        mockMvc.perform(delete(dismiss, tripId, routeId, incidentId).with(otherUser).with(csrf()))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete(dismiss, tripId, routeId, incidentId + 1).with(user).with(csrf()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("INCIDENT_NOT_FOUND"));
+        mockMvc.perform(delete(dismiss, tripId, routeId, incidentId).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/api/v1/trips/{id}/incidents", tripId).with(user)).andExpect(jsonPath("$", hasSize(0)));
     }
 
     private long createTrip(RequestPostProcessor who, String name, String startAt, String endAt) throws Exception {

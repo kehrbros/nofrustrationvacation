@@ -205,7 +205,6 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 0 var(--ink);
   font-size: 26px;
   color: var(--ink);
   z-index: 5;
@@ -664,20 +663,37 @@ a {
   border: 2px solid var(--ink);
   border-radius: 999px;
   padding: 6px 12px 6px 8px;
-  box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
   max-width: 220px;
 }
-.va-map-incident span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* round chip with the icon only, the title is its tooltip and label */
+.va-map-incident {
+  position: relative;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+/* resolved (incident ended): small, plain, with a green check */
+.va-map-incident-resolved {
+  width: 26px;
+  height: 26px;
+  background: #ffffff;
+  border-width: 1.5px;
+}
+.va-map-incident-resolved > svg:first-child {
+  width: 14px;
+  height: 14px;
+}
+.va-map-incident-check {
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
 }
 /* chip per category of the consequence: too late in ink, delayed in the accent (default), no impact plain */
 .va-map-incident-too-late {
   color: #ffffff;
   background: var(--ink);
-  box-shadow: 0 3px 0 var(--accent);
 }
 .va-map-incident-too-late svg path:first-child {
   fill: var(--accent);
@@ -923,7 +939,6 @@ a {
 }
 .va-choice-main {
   background: var(--accent-soft);
-  box-shadow: 0 4px 0 var(--ink);
 }
 .va-choice-main > .anticon {
   background: var(--accent);
@@ -1132,6 +1147,29 @@ a.va-button {
 }
 .va-impact-no-impact {
   background: #ffffff;
+}
+.va-impact-resolved {
+  background: #e8f5ec;
+  border-color: #1f7a3d;
+}
+.va-impact-resolved .va-strong {
+  color: #1f7a3d;
+}
+.va-resolved-icon {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: #e8f5ec;
+  border: 2px solid var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #1f7a3d;
+}
+.va-sheet-actions {
+  gap: 8px;
 }
 .va-alternatives {
   list-style: none;

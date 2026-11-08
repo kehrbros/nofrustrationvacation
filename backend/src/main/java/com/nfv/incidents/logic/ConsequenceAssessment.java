@@ -29,7 +29,7 @@ import java.util.stream.Collectors;
 
 /**
  * Assesses a whole route against its target stop and stores the result as its {@link Consequence}s (created,
- * updated with stable ids, or removed), see Docs/consequence-assessment.md. Rules in {@link RouteAssessor}.
+ * updated with stable ids, resolved when their incident has ended, or removed), see Docs/consequence-assessment.md. Rules in {@link RouteAssessor}.
  * Runs in the transaction of the change that triggered it.
  */
 @Component
@@ -77,11 +77,21 @@ public class ConsequenceAssessment {
                     && !consequence.isOver(now, rules.maxWait());
             result.add(consequence);
         }
-        consequenceRepository.deleteAll(remaining.values());
+        // no longer hit: resolved if its incident has ended (shown as resolved until removed), otherwise removed
+        List<Consequence> gone = new ArrayList<>();
+        for (Consequence consequence : remaining.values()) {
+            if (consequence.getIncident().hasEnded(now)) {
+                consequence.resolve(now);
+                result.add(consequence);
+            } else {
+                gone.add(consequence);
+            }
+        }
+        consequenceRepository.deleteAll(gone);
         List<Consequence> saved = consequenceRepository.saveAll(result);
         if (becameTooLate) {
             events.publishEvent(new RouteTooLate(routeId, saved.stream()
-                    .filter(c -> c.getCategory() == Category.TOO_LATE)
+                    .filter(c -> c.getCategory() == Category.TOO_LATE && c.getResolvedAt() == null)
                     .map(c -> c.getIncident().getId()).collect(Collectors.toSet()), deadline));
         }
         return saved;

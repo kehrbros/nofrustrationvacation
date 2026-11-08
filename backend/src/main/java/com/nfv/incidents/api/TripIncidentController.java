@@ -16,11 +16,16 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.Clock;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 
@@ -30,14 +35,27 @@ import java.util.Map;
 public class TripIncidentController {
     private final TripIncidents tripIncidents;
     private final ConsequenceLines consequenceLines;
+    private final Clock clock;
 
     @Operation(summary = "Current incidents of a trip", description = "Incidents not ended yet, ranked: TOO_LATE by "
-            + "lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage.")
+            + "lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage. "
+            + "Then resolved ones (resolved = true, incident ended), most recently resolved first, until removed.")
     @GetMapping("/api/v1/trips/{tripId}/incidents")
     public List<TripIncidentDto> getTripIncidents(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
-        List<Consequence> active = tripIncidents.active(user.appUserId(), tripId);
-        Map<Long, List<GeoPoint>> lines = consequenceLines.of(active);
-        return active.stream().map(c -> toDto(c, lines.getOrDefault(c.getId(), List.of()))).toList();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        List<Consequence> shown = tripIncidents.shown(user.appUserId(), tripId);
+        Map<Long, List<GeoPoint>> lines = consequenceLines.of(shown);
+        return shown.stream().map(c -> toDto(c, lines.getOrDefault(c.getId(), List.of()), now)).toList();
+    }
+
+    @Operation(summary = "Remove a resolved incident from the trip", description = "Only once the incident has "
+            + "ended (resolved = true), 409 INCIDENT_NOT_RESOLVED before; 404 INCIDENT_NOT_FOUND if the route has no "
+            + "consequence of it.")
+    @DeleteMapping("/api/v1/trips/{tripId}/routes/{routeId}/incidents/{incidentId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void dismissResolvedIncident(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                        @PathVariable long routeId, @PathVariable long incidentId) {
+        tripIncidents.dismiss(user.appUserId(), tripId, routeId, incidentId);
     }
 
     @Operation(summary = "Situation of the routes of a trip", description = "Per planned route: worst category of "
@@ -57,7 +75,8 @@ public class TripIncidentController {
                 .map(entry -> new TripIncidentCountDto(entry.getKey(), entry.getValue())).toList();
     }
 
-    private static TripIncidentDto toDto(Consequence consequence, List<GeoPoint> line) {
+    private static TripIncidentDto toDto(Consequence consequence, List<GeoPoint> line, OffsetDateTime now) {
+        boolean resolved = consequence.isResolved(now);
         Incident incident = consequence.getIncident();
         return new TripIncidentDto(incident.getId(), consequence.getRouteId(), incident.getType(),
                 incident.getDescription(), incident.impact(), minutes(consequence.getDelay()),
@@ -66,7 +85,8 @@ public class TripIncidentController {
                 consequence.isDelayAssumed(), consequence.getPassageAt(), consequence.getExpectedArrival(),
                 consequence.getDeadline(), consequence.getWindowStart(), consequence.getWindowEnd(),
                 incident.isTimesUnconfirmed(),
-                line.stream().map(p -> new RouteLineDto.LinePointDto(p.lat(), p.lon())).toList());
+                line.stream().map(p -> new RouteLineDto.LinePointDto(p.lat(), p.lon())).toList(), resolved,
+                resolved ? TripIncidents.resolvedAt(consequence) : null);
     }
 
     private static RouteIncidentSummaryDto toDto(RouteIncidentSummary summary) {

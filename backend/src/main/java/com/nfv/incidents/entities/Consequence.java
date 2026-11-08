@@ -21,7 +21,8 @@ import java.time.OffsetDateTime;
  * section are referenced by id (trips module); the database removes the consequence with them.
  * <p>
  * {@link #impact()} describes the incident at that place, {@link #category} the effect on the arrival at the target
- * stop, see Docs/consequence-assessment.md.
+ * stop, see Docs/consequence-assessment.md. Once the incident has ended it stays as resolved ({@link #resolvedAt})
+ * until the traveller removes it from the map.
  */
 @Getter
 @Entity
@@ -59,6 +60,11 @@ public class Consequence extends AbstractEntity {
     private OffsetDateTime detectedAt;
     @Column(nullable = false)
     private OffsetDateTime updatedAt;
+    /**
+     * The incident has ended (set by the assessment or {@code ResolvedIncidents}); shown as resolved until the
+     * traveller removes it. {@code null}: not resolved.
+     */
+    private @Nullable OffsetDateTime resolvedAt;
 
     protected Consequence() {
     }
@@ -86,6 +92,21 @@ public class Consequence extends AbstractEntity {
         this.deadline = deadline;
         this.assessedAt = at;
         this.updatedAt = at;
+        // the incident applies again (e.g. reported again after it was cleared)
+        this.resolvedAt = null;
+    }
+
+    /** Marks it resolved because its incident has ended; keeps the first time. */
+    public void resolve(OffsetDateTime at) {
+        if (resolvedAt == null) {
+            this.resolvedAt = at;
+            this.updatedAt = at;
+        }
+    }
+
+    /** Resolved, or its incident has ended and {@code ResolvedIncidents} has not marked it yet. */
+    public boolean isResolved(OffsetDateTime now) {
+        return resolvedAt != null || incident.hasEnded(now);
     }
 
     /** The route has passed the place, including the wait there; an impassable one counts as waiting max-wait. */

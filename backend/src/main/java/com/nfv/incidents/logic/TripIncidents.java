@@ -7,6 +7,7 @@ import com.nfv.incidents.entities.Consequence;
 import com.nfv.incidents.entities.MatchKind;
 import com.nfv.trips.logic.RouteSchedule;
 import com.nfv.trips.logic.RouteSchedules;
+import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripLogic;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -22,9 +23,11 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /** Incidents as the travellers see them: per trip, via the consequences on its routes. Checks trip ownership. */
 @Service
@@ -45,14 +48,55 @@ public class TripIncidents {
      * of {@link #RANKING}.
      */
     public List<Consequence> active(long appUserId, long tripId) {
-        List<Long> routeIds = tripLogic.routes(appUserId, tripId).stream().map(r -> r.getId()).toList();
-        return routeIds.isEmpty() ? List.of() : current(routeIds).stream().sorted(RANKING).toList();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        return onTrip(appUserId, tripId).stream().filter(c -> !c.isResolved(now)).sorted(RANKING).toList();
     }
 
-    /** Consequences whose incident has not ended and whose place the route has not passed yet. */
+    /**
+     * What the map of the trip shows: the {@link #active} consequences, then the resolved ones (incident ended, not
+     * removed by the traveller yet), most recently resolved first. Without places the route has passed.
+     */
+    public List<Consequence> shown(long appUserId, long tripId) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        Map<Boolean, List<Consequence>> byResolved = onTrip(appUserId, tripId).stream()
+                .collect(Collectors.partitioningBy(c -> c.isResolved(now)));
+        return Stream.concat(byResolved.get(false).stream().sorted(RANKING),
+                byResolved.get(true).stream().sorted(Comparator.comparing((Consequence c) -> resolvedAt(c))
+                        .reversed().thenComparing(Consequence::getId))).toList();
+    }
+
+    /** When it was resolved: as marked, otherwise the end of the incident (not marked yet). */
+    public static OffsetDateTime resolvedAt(Consequence consequence) {
+        return consequence.getResolvedAt() != null ? consequence.getResolvedAt()
+                : consequence.getIncident().getValidTo();
+    }
+
+    /**
+     * Removes the resolved consequence of the incident on the route from the trip's map. Unknown, on another trip or
+     * of another user: {@link TripItemNotFoundException}; not resolved yet: {@link IncidentNotResolvedException}.
+     */
+    @Transactional
+    public void dismiss(long appUserId, long tripId, long routeId, long incidentId) {
+        boolean onTrip = tripLogic.routes(appUserId, tripId).stream().anyMatch(route -> route.getId() == routeId);
+        Consequence consequence = (onTrip ? consequenceRepository.findByRouteIdAndIncidentId(routeId, incidentId)
+                : Optional.<Consequence>empty())
+                .orElseThrow(() -> new TripItemNotFoundException("incident", incidentId));
+        if (!consequence.isResolved(OffsetDateTime.now(clock))) {
+            throw new IncidentNotResolvedException(incidentId);
+        }
+        // the incident has ended, so assessing the route again does not bring it back; it would if it applies again
+        consequenceRepository.delete(consequence);
+    }
+
+    private List<Consequence> onTrip(long appUserId, long tripId) {
+        List<Long> routeIds = tripLogic.routes(appUserId, tripId).stream().map(r -> r.getId()).toList();
+        return routeIds.isEmpty() ? List.of() : current(routeIds);
+    }
+
+    /** Consequences whose place the route has not passed yet, also resolved ones. */
     private List<Consequence> current(Collection<Long> routeIds) {
         OffsetDateTime now = OffsetDateTime.now(clock);
-        return consequenceRepository.findActiveOnRoutes(routeIds, now).stream()
+        return consequenceRepository.findOnRoutes(routeIds).stream()
                 .filter(consequence -> !consequence.isOver(now, rules.maxWait())).toList();
     }
 
@@ -71,7 +115,9 @@ public class TripIncidents {
         Map<Long, Long> tripIdsByRouteId = tripLogic.tripIdsByRouteId(appUserId);
         Map<Long, Integer> counts = new TreeMap<>();
         if (!tripIdsByRouteId.isEmpty()) {
+            OffsetDateTime now = OffsetDateTime.now(clock);
             current(tripIdsByRouteId.keySet()).stream()
+                    .filter(consequence -> !consequence.isResolved(now))
                     .filter(consequence -> COUNTED.contains(consequence.getCategory()))
                     .forEach(consequence -> counts.merge(tripIdsByRouteId.get(consequence.getRouteId()), 1,
                             Integer::sum));

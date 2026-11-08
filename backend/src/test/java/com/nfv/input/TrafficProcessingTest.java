@@ -256,8 +256,9 @@ class TrafficProcessingTest {
         Event resolvedEvent = event("566003", "2026-11-04T09:30:00.000+13:00");
         assertThat(resolvedEvent.getIncidentId()).isEqualTo(tunnel.getId());
         assertThat(incidentRepository.findById(tunnel.getId()).orElseThrow().getValidTo()).isAtSameInstantAs(NOW);
-        assertThat(consequenceRepository.findByRouteId(routeId))
-                .noneMatch(c -> c.getIncident().getId() == tunnel.getId());
+        // kept as resolved (green check on the map) until the traveller removes it
+        assertThat(tunnelConsequence(routeId, tunnel)).hasValueSatisfying(c ->
+                assertThat(c.getResolvedAt()).isNotNull());
     }
 
     @Test
@@ -435,7 +436,8 @@ class TrafficProcessingTest {
         assertThat(ended.getProcessingNote()).as("not FAILED").isNull();
         assertThat(ended.getIncidentId()).isEqualTo(tunnel.getId());
         assertThat(incidentRepository.findById(tunnel.getId()).orElseThrow().getValidTo()).isAtSameInstantAs(NOW);
-        assertThat(tunnelConsequence(routeId, tunnel)).isEmpty();
+        assertThat(tunnelConsequence(routeId, tunnel)).hasValueSatisfying(c ->
+                assertThat(c.getResolvedAt()).isNotNull());
     }
 
     @Test
