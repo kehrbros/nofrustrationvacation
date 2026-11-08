@@ -16,7 +16,8 @@
         <java.version>25</java.version>
         <lombok.version>1.18.42</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
-        <surefire.forkCount>2</surefire.forkCount>
+        <!-- one test JVM per two cores: 2 on a 4-core laptop, 1 on the 2-core CI runner (2 JVMs there were slower) -->
+        <surefire.forkCount>0.5C</surefire.forkCount>
         <archunit.version>1.5.0</archunit.version>
         <graphhopper.version>11.1</graphhopper.version>
         <timeshape.version>2024a.25</timeshape.version>
