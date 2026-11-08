@@ -11,13 +11,16 @@ export const LANGUAGES = ['de', 'en'] as const;
 export type Language = (typeof LANGUAGES)[number];
 
 const STORAGE_KEY = 'nfv.language';
+/** For texts missing in a language (none, the compiler checks): German is the source. */
 const FALLBACK: Language = 'de';
+/** UI language when the system language is neither German nor English. */
+const DEFAULT: Language = 'en';
 
 function isLanguage(value: unknown): value is Language {
   return typeof value === 'string' && (LANGUAGES as readonly string[]).includes(value);
 }
 
-/** Chosen language from the local storage, otherwise the language of the browser, otherwise German. */
+/** Chosen language from the local storage, otherwise the language of the system (browser), otherwise English. */
 export function detectLanguage(): Language {
   try {
     const stored = globalThis.localStorage?.getItem(STORAGE_KEY);
@@ -34,7 +37,7 @@ export function detectLanguage(): Language {
       return base;
     }
   }
-  return FALLBACK;
+  return DEFAULT;
 }
 
 export const i18n = i18next.createInstance();
