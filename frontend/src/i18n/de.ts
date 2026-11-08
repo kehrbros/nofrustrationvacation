@@ -400,6 +400,14 @@ export const de = {
     label: 'Karte mit Stops und Routen',
     stop: 'Stop {{position}}: {{name}}',
     alternatives: 'Alternativen ansehen: {{title}}',
+    showTrip: 'Ganze Reiseroute zeigen',
+    position: {
+      pawn: 'Deine aktuelle Position',
+      locate: 'Zu meiner Position',
+      searching: 'Deine Position wird gesucht …',
+      denied: 'Standort nicht freigegeben. Erlaube den Zugriff auf den Standort in den Einstellungen des Browsers.',
+      unavailable: 'Deine Position ist gerade nicht verfügbar.',
+    },
   },
   addBooking: {
     saveFailed: 'Die Buchung konnte nicht gespeichert werden.',

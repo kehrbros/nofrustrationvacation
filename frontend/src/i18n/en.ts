@@ -402,6 +402,14 @@ export const en: Messages<typeof de> = {
     label: 'Map with stops and routes',
     stop: 'Stop {{position}}: {{name}}',
     alternatives: 'View alternatives: {{title}}',
+    showTrip: 'Show the whole route',
+    position: {
+      pawn: 'Your current position',
+      locate: 'Go to my position',
+      searching: 'Finding your position …',
+      denied: 'Location not allowed. Allow access to your location in the browser settings.',
+      unavailable: 'Your position is not available right now.',
+    },
   },
   addBooking: {
     saveFailed: 'The booking could not be saved.',
