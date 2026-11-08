@@ -9,10 +9,12 @@ interface CoverImageProps {
   className?: string;
   /** Hint in the corner while there is no photo, e.g. on the current trip. */
   showHint?: boolean;
+  /** `thumbnail` in lists of trips: reduced copy, loads much faster than the original. */
+  size?: 'full' | 'thumbnail';
 }
 
 /** Title photo of a trip, or a drawn placeholder while there is none (generation is still open). */
-export default function CoverImage({ tripId, hasCoverImage, className, showHint }: CoverImageProps) {
+export default function CoverImage({ tripId, hasCoverImage, className, showHint, size = 'full' }: CoverImageProps) {
   const [url, setUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -21,7 +23,7 @@ export default function CoverImage({ tripId, hasCoverImage, className, showHint 
     }
     let objectUrl: string | null = null;
     let active = true;
-    void fetchCoverImage(tripId).then((blob) => {
+    void fetchCoverImage(tripId, size).then((blob) => {
       if (active && blob) {
         objectUrl = URL.createObjectURL(blob);
         setUrl(objectUrl);
@@ -33,7 +35,7 @@ export default function CoverImage({ tripId, hasCoverImage, className, showHint 
         URL.revokeObjectURL(objectUrl);
       }
     };
-  }, [tripId, hasCoverImage]);
+  }, [tripId, hasCoverImage, size]);
 
   if (hasCoverImage && url) {
     return <img className={`va-cover ${className ?? ''}`} src={url} alt="" />;

@@ -5,6 +5,7 @@ import com.nfv.trips.data.TripRepository;
 import com.nfv.trips.entities.CoverImageSource;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.TripCoverImage;
+import com.nfv.trips.logic.CoverThumbnailBackfill;
 import com.nfv.user.logic.AppUserProvisioning;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,7 +19,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Title photo of a trip: stored, replaced and deleted together with the trip. */
+/** Title photo of a trip: stored, replaced, thumbnails added later, deleted together with the trip. */
 @SpringBootTest
 class TripCoverImageTest {
     private static final OffsetDateTime NOW = OffsetDateTime.now(ZoneOffset.UTC).withNano(0);
@@ -33,14 +34,16 @@ class TripCoverImageTest {
     private TransactionTemplate transactionTemplate;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private CoverThumbnailBackfill coverThumbnailBackfill;
 
     @Test
     void generatedImageIsReplacedByUpload() {
         long tripId = trip();
-        coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, "image/png", new byte[]{1, 2, 3}, NOW));
+        coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, "image/png", new byte[]{1, 2, 3}, NOW, null));
 
         transactionTemplate.executeWithoutResult(_ -> coverImageRepository.findByTripId(tripId).orElseThrow()
-                .replace(CoverImageSource.UPLOADED, "image/jpeg", new byte[]{4, 5}, NOW.plusMinutes(1)));
+                .replace(CoverImageSource.UPLOADED, "image/jpeg", new byte[]{4, 5}, NOW.plusMinutes(1), null));
 
         transactionTemplate.executeWithoutResult(_ -> {
             TripCoverImage image = coverImageRepository.findByTripId(tripId).orElseThrow();
@@ -51,9 +54,28 @@ class TripCoverImageTest {
     }
 
     @Test
+    void backfillAddsMissingThumbnails() throws Exception {
+        long tripId = trip();
+        long undecodableTripId = trip();
+        coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.GENERATED, "image/jpeg",
+                CoverImageGenerationTest.jpeg(1536, 1024), NOW, null));
+        coverImageRepository.save(new TripCoverImage(undecodableTripId, CoverImageSource.UPLOADED, "image/webp",
+                new byte[]{1}, NOW, null));
+
+        coverThumbnailBackfill.backfill();
+
+        transactionTemplate.executeWithoutResult(_ -> {
+            TripCoverImage.Thumbnail thumbnail = coverImageRepository.findByTripId(tripId).orElseThrow()
+                    .thumbnail().orElseThrow();
+            assertThat(thumbnail.contentType()).isEqualTo("image/jpeg");
+            assertThat(coverImageRepository.findByTripId(undecodableTripId).orElseThrow().thumbnail()).isEmpty();
+        });
+    }
+
+    @Test
     void imageIsDeletedWithTheTrip() {
         long tripId = trip();
-        coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.UPLOADED, "image/jpeg", new byte[]{1}, NOW));
+        coverImageRepository.save(new TripCoverImage(tripId, CoverImageSource.UPLOADED, "image/jpeg", new byte[]{1}, NOW, null));
 
         // as a database cascade, the trips module has no delete logic yet
         jdbcTemplate.update("DELETE FROM trip WHERE id = ?", tripId);

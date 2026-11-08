@@ -40,7 +40,7 @@ function CurrentTrip({ trip }: { trip: TripSummary }) {
   const { day, of } = tripDay(trip.startAt, trip.endAt);
   return (
     <Link to={`/reisen/${trip.id}`} className="va-card va-card-current">
-      <CoverImage tripId={trip.id} hasCoverImage={trip.hasCoverImage} className="va-cover-wide" showHint />
+      <CoverImage tripId={trip.id} hasCoverImage={trip.hasCoverImage} className="va-cover-wide" size="thumbnail" showHint />
       <div className="va-card-body">
         <div className="va-row va-space-between va-baseline">
           <span className="va-card-title-large">{trip.name}</span>
@@ -62,7 +62,7 @@ function TripRow({ trip }: { trip: TripSummary }) {
   const until = untilStart(trip.startAt);
   return (
     <Link to={`/reisen/${trip.id}`} className={`va-card va-card-row ${trip.phase === 'PAST' ? 'va-card-past' : ''}`}>
-      <CoverImage tripId={trip.id} hasCoverImage={trip.hasCoverImage} className="va-cover-thumb" />
+      <CoverImage tripId={trip.id} hasCoverImage={trip.hasCoverImage} className="va-cover-thumb" size="thumbnail" />
       <div className="va-card-body va-card-body-tight">
         <span className="va-card-title">{trip.name}</span>
         <span className="va-muted">

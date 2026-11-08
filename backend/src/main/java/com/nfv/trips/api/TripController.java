@@ -9,6 +9,7 @@ import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.UpdateStopDto;
 import com.nfv.trips.dto.UpdateTripDto;
 import com.nfv.trips.entities.Trip;
+import com.nfv.trips.entities.TripCoverImage;
 import com.nfv.trips.logic.CoverImageGeneration;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.NewStop;
@@ -137,15 +138,36 @@ public class TripController {
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Title photo", description = "Image bytes, 404 if the trip has none.")
+    @Operation(summary = "Title photo", description = "Image bytes, 404 if the trip has none. ETag per photo, "
+            + "304 on If-None-Match.")
     @GetMapping(value = "/{tripId}/cover-image", produces = {MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, "image/webp"})
     public ResponseEntity<byte[]> getCoverImage(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
         return tripLogic.coverImage(user.appUserId(), tripId)
-                .map(image -> ResponseEntity.ok()
-                        .contentType(MediaType.parseMediaType(image.getContentType()))
-                        .cacheControl(CacheControl.noCache().cachePrivate())
-                        .body(image.getContent()))
+                .map(image -> coverImageResponse(image, "full", image.getContentType(), image.getContent()))
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @Operation(summary = "Title photo for lists",
+            description = "Reduced copy (JPEG, at most 768×512) for the trip list; the original if there is no "
+                    + "thumbnail (e.g. WebP). 404 if the trip has no photo. ETag per photo, 304 on If-None-Match.")
+    @GetMapping(value = "/{tripId}/cover-image/thumbnail",
+            produces = {MediaType.IMAGE_JPEG_VALUE, MediaType.IMAGE_PNG_VALUE, "image/webp"})
+    public ResponseEntity<byte[]> getCoverThumbnail(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        return tripLogic.coverImage(user.appUserId(), tripId)
+                .map(image -> image.thumbnail()
+                        .map(thumbnail -> coverImageResponse(image, "thumb", thumbnail.contentType(), thumbnail.content()))
+                        .orElseGet(() -> coverImageResponse(image, "full", image.getContentType(), image.getContent())))
+                .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    /** Revalidated on every use (a replaced photo shows at once), unchanged photos answer 304 without data. */
+    private static ResponseEntity<byte[]> coverImageResponse(TripCoverImage image, String variant, String contentType,
+                                                             byte[] content) {
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(contentType))
+                .cacheControl(CacheControl.noCache().cachePrivate())
+                .eTag(variant + "-" + image.getId() + "-" + image.getCreatedAt().toInstant().toEpochMilli())
+                .body(content);
     }
 
     @Operation(summary = "Upload a title photo", description = "JPEG, PNG or WebP up to 5 MB, replaces the current one.")

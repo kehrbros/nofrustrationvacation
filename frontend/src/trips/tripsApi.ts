@@ -4,6 +4,7 @@ import {
   deleteTrip as deleteTripRequest,
   generateCoverImage as generateCoverImageRequest,
   getCoverImage,
+  getCoverThumbnail,
   getRouteSummaries,
   getTrip,
   getTripIncidentCounts,
@@ -167,9 +168,13 @@ export async function generateCoverImage(tripId: number): Promise<void> {
   await unwrap(generateCoverImageRequest({ path: { tripId } }));
 }
 
-/** Title photo as blob (the request needs the access token, so no plain img src), null if the trip has none. */
-export async function fetchCoverImage(tripId: number): Promise<Blob | null> {
-  const { data, response } = await getCoverImage({ path: { tripId }, parseAs: 'blob' });
+/**
+ * Title photo as blob (the request needs the access token, so no plain img src), null if the trip has none.
+ * `thumbnail` loads the reduced copy for lists (the original if the backend has none).
+ */
+export async function fetchCoverImage(tripId: number, size: 'full' | 'thumbnail' = 'full'): Promise<Blob | null> {
+  const request = size === 'thumbnail' ? getCoverThumbnail : getCoverImage;
+  const { data, response } = await request({ path: { tripId }, parseAs: 'blob' });
   if (response?.status === 404 || !response?.ok) {
     return null;
   }
