@@ -84,7 +84,7 @@ class RoutePlanningTest {
     @BeforeEach
     void wellington() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
     }
 

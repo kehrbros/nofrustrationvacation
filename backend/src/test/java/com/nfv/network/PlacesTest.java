@@ -36,7 +36,7 @@ class PlacesTest {
     @BeforeEach
     void wellington() {
         if (regionImport.status(REGION).state() != RegionStatus.State.READY) {
-            regionImport.importRegion(REGION);
+            regionImport.loadOrImport(REGION);
         }
         versionId = regionImport.status(REGION).extractVersionId();
         List<long[]> pairs = jdbc.query("""

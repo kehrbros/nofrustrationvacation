@@ -118,7 +118,7 @@ class AutomaticProposalsTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         routeId = plannedRoute();
         when(conversation.runForSystem(any())).thenReturn(JSON.readTree(

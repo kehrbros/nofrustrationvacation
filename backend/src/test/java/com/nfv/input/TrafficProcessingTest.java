@@ -186,7 +186,7 @@ class TrafficProcessingTest {
         lastIncidentBefore = Objects.requireNonNull(
                 jdbc.queryForObject("SELECT COALESCE(MAX(id), 0) FROM incident", Long.class));
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         for (String source : List.of(NZTA, UNLOADED)) {
             jdbc.update("DELETE FROM message_enrichment WHERE source_id IN (SELECT id FROM event_source WHERE name = ?)",

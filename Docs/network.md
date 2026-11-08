@@ -143,6 +143,8 @@
   ```
 
 - Testregion `wellington` in `src/test/resources/config/application.properties`, kein Import beim Start. `RegionImportTest` importiert ausdrücklich: rund 1,5 s, 13.096 Segmente.
+- Tests, die das Netz brauchen, rufen vor jedem Test `loadOrImport`, solange die Region im Kontext nicht `READY` ist: Nur der erste Kontext je Testlauf importiert (rund 2 s), jeder weitere lädt den Graphen der aktuellen Version aus `graph-dir`. Ausdrücklich neu importieren nur `RegionImportTest` und `RegionImportPlacesTest`.
+- `graph-dir` je Surefire-Fork eigen (`target/graphs/wellington-<Fork>`, gesetzt in `pom.xml`), parallele JVMs teilen kein Graph-Verzeichnis.
 - Orte: Der Testextrakt enthält keine (die Abfrage oben holt nur Straßen). `PlaceReaderTest` liest die handgeschriebene `osm/places.osm`, `RegionImportPlacesTest` importiert eine Kopie von Wellington mit zwei ergänzten Orten, `PlacesTest` und `StopoversTest` legen Orte per SQL an.
 - `SegmentMatchingTest`: NZTA-Ereignisse der Stichprobe auf dem Extrakt (Terrace Tunnel als Punkt mit `ref`, Urban Motorway als Linie über den Extrakt hinaus, beide Fahrbahnen), siehe [traffic-feed.md](traffic-feed.md#tests).
 

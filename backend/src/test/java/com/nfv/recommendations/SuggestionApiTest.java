@@ -99,7 +99,7 @@ class SuggestionApiTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         String name = "suggestions-" + UUID.randomUUID();
         user = login(name);

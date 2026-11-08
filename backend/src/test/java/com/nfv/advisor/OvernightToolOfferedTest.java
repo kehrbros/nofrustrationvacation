@@ -1,6 +1,7 @@
 package com.nfv.advisor;
 
 import com.jayway.jsonpath.JsonPath;
+import com.nfv.advisor.logic.StayOptions;
 import com.nfv.assistant.logic.ConversationTool;
 import com.nfv.assistant.logic.ToolConversation;
 import com.nfv.incidents.entities.IncidentType;
@@ -66,6 +67,9 @@ class OvernightToolOfferedTest {
 
     @MockitoBean
     private ToolConversation conversation;
+    /** Unused here, mocked only so the Spring context is shared with StayProposalsTest. */
+    @MockitoBean
+    private StayOptions stayOptions;
     @Autowired
     private MockMvc mockMvc;
     @Autowired
@@ -96,7 +100,7 @@ class OvernightToolOfferedTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         username = "overnight-" + UUID.randomUUID();
         userId = inTransaction(() -> appUserProvisioning.findOrCreate(username, null, null).getId());

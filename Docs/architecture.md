@@ -183,10 +183,13 @@ flowchart LR
 
 ## Tests
 
-- Integrationstests mit `@SpringBootTest` gegen PostGIS (Testcontainers, JDBC-URL `jdbc:tc:postgis:…`, ein Container je Testlauf) und alle Migrationen, z. B. `ConsequenceMatchingTest`. Docker nötig. Streckennetz gegen einen Wellington-Testextrakt, siehe [network.md](network.md#tests).
+- Integrationstests mit `@SpringBootTest` gegen PostGIS (Testcontainers, JDBC-URL `jdbc:tc:postgis:…`, ein Container je Test-JVM) und alle Migrationen, z. B. `ConsequenceMatchingTest`. Docker nötig. Streckennetz gegen einen Wellington-Testextrakt, siehe [network.md](network.md#tests).
+- **Parallel:** Surefire verteilt die Testklassen auf 2 JVMs (`surefire.forkCount` in `pom.xml`, `-Dsurefire.forkCount=1` für einen Lauf in einer JVM). Jede JVM hat eigenen Container, eigene Datenbank und eigene Kontexte. Tests dürfen sich deshalb nicht auf Daten anderer Testklassen verlassen; welche Klassen zusammen in einer JVM laufen, ist nicht festgelegt.
+- **Kontexte:** Jede abweichende Kontext-Konfiguration (`@MockitoBean`, `properties`, `@DynamicPropertySource`, eigene `@TestConfiguration`, mit oder ohne `@AutoConfigureMockMvc`) startet einen eigenen Spring-Kontext (je etwa 1,5–2,5 s). Neue Tests möglichst mit einer bestehenden Kombination schreiben, statt eine weitere einzuführen.
 - Jeder im Testlauf zwischengespeicherte Spring-Kontext hält einen eigenen Verbindungspool auf derselben Datenbank (Grenze 100 Verbindungen). Deshalb Pool in den Test-Properties auf 5 begrenzt: Mit 10 scheitert der Kontextstart ab etwa 11 Kontexten an `too many clients`.
 - Architekturregeln mit ArchUnit (`AuthModuleIsolationTest`, `MoneyArchitectureTest`, `PayPalModuleTest`).
-- CI (`.github/workflows/backend.yml`): `mvn verify`, danach Abgleich der generierten `frontend/openapi.json`.
+- **OpenAPI:** `OpenApiSpecTest` schreibt `frontend/openapi.json` aus dem Testkontext (`GET /v3/api-docs`, Server-URL mit Port 18180 wie bisher), ohne die App ein zweites Mal zu starten. Also bei jedem `mvn test`/`mvn verify`.
+- CI (`.github/workflows/backend.yml`): `mvn test` (ohne Ryuk, der Runner wird verworfen), danach Abgleich der generierten `frontend/openapi.json`.
 
 ## Altbestand
 
