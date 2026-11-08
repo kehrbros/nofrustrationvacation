@@ -109,7 +109,7 @@
 - `Incident.vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, aus der Anreicherung, historisiert): `HEAVY_ONLY` wirkt nicht auf Pkw (`NO_IMPACT`).
 - `Incident.timesUnconfirmed` (`V36`, historisiert): Sperrung mit Uhrzeiten nur im Text, noch nicht gelesen; Typ `OTHER`, Bewertung `DELAYED` ohne Verzögerung, Hinweis „Zeiten prüfen“, siehe [traffic-feed.md](traffic-feed.md#verarbeitung-trafficeventprocessor).
 - Consequences sind abgeleitet und werden nie von Nutzern bearbeitet; der Nutzer kann nur eine erledigte von der Karte entfernen (siehe unten). Werden Route oder Section gelöscht, löscht die Datenbank die Consequence mit (`ON DELETE CASCADE`).
-- **Erledigte Hinweise (umgesetzt 2026-11-08, `V48`):** Endet ein Incident, wird seine Consequence nicht gelöscht, sondern als erledigt markiert (`Consequence.resolvedAt`):
+- **Erledigte Hinweise (umgesetzt 2026-11-08, `V49`):** Endet ein Incident, wird seine Consequence nicht gelöscht, sondern als erledigt markiert (`Consequence.resolvedAt`):
   - „Beendet“ = `Incident.hasEnded`: `validTo` erreicht, oder vor dem Beginn abgesagt (`validTo` = `validFrom`, so beendet `IncidentReporting` eine Meldung vor ihrem Start).
   - Sofort bei der Bewertung (`ConsequenceAssessment`, z. B. Quelle meldet das Ende), sonst durch den Job `ResolvedIncidents` (`ResolvedIncidentsScheduler`, alle `nfv.incidents.resolved-check.interval` = 5 min, in Tests aus), wenn `validTo` ohne Meldung abläuft. Bis zum Lauf gilt eine Consequence mit beendetem Incident schon als erledigt (`isResolved`).
   - Erledigte zählen nicht mehr: nicht in `TripIncidents.active`, Zähler je Trip, Zusammenfassung je Route, `ActiveIncidents.consequencesOnRoute` (Vorschläge, Agent) und `IncidentOverview.effects`.

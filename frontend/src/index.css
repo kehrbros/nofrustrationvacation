@@ -205,7 +205,6 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 0 var(--ink);
   font-size: 26px;
   color: var(--ink);
   z-index: 5;
@@ -664,7 +663,6 @@ a {
   border: 2px solid var(--ink);
   border-radius: 999px;
   padding: 6px 12px 6px 8px;
-  box-shadow: 0 3px 0 var(--ink);
   cursor: pointer;
   max-width: 220px;
 }
@@ -682,7 +680,6 @@ a {
   height: 26px;
   background: #ffffff;
   border-width: 1.5px;
-  box-shadow: 0 2px 0 var(--ink);
 }
 .va-map-incident-resolved > svg:first-child {
   width: 14px;
@@ -697,7 +694,6 @@ a {
 .va-map-incident-too-late {
   color: #ffffff;
   background: var(--ink);
-  box-shadow: 0 3px 0 var(--accent);
 }
 .va-map-incident-too-late svg path:first-child {
   fill: var(--accent);
@@ -943,7 +939,6 @@ a {
 }
 .va-choice-main {
   background: var(--accent-soft);
-  box-shadow: 0 4px 0 var(--ink);
 }
 .va-choice-main > .anticon {
   background: var(--accent);
