@@ -205,7 +205,6 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 6px 0 var(--ink);
   font-size: 26px;
   color: var(--ink);
   z-index: 5;
