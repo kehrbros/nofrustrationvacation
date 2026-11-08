@@ -70,6 +70,8 @@ export default function TripPage() {
     (consequence: TripIncident) => navigate(`/reisen/${id}/hinweise/${consequence.routeId}/${consequence.incidentId}`),
     [navigate, id],
   );
+  // a tap on the map above the expanded list folds it back in, like the toggle
+  const collapse = useCallback(() => setExpanded(false), []);
   const openRoute = useCallback((routeId: number) => navigate(`/reisen/${id}/routen/${routeId}`), [navigate, id]);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteStop = async (stopId: number) => {
@@ -175,6 +177,7 @@ export default function TripPage() {
             onConsequenceClick={openAlternatives}
             onResolvedClick={openResolved}
             bottomPadding={SHEET_COLLAPSED}
+            onMapClick={collapse}
           />
         </Suspense>
       </div>

@@ -29,6 +29,8 @@ export interface TripMapProps {
   onResolvedClick: (consequence: TripIncident) => void;
   /** Space the bottom sheet covers, kept free when fitting the stops. */
   bottomPadding: number;
+  /** Any tap on the map itself (not on a chip or a control), e.g. to collapse the expanded trip sheet. */
+  onMapClick?: () => void;
 }
 
 type Located = Stop & { latitude: number; longitude: number };
@@ -83,6 +85,7 @@ export default function TripMap({
   onConsequenceClick,
   onResolvedClick,
   bottomPadding,
+  onMapClick,
 }: TripMapProps) {
   const container = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
@@ -90,8 +93,8 @@ export default function TripMap({
   const markers = useRef<maplibregl.Marker[]>([]);
   const fitted = useRef<LinePoint[][] | undefined>(undefined);
   const consequences = useRef(new Map<string, TripIncident>());
-  const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect });
-  callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect };
+  const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick });
+  callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick };
 
   useEffect(() => {
     if (!container.current) {
@@ -107,6 +110,7 @@ export default function TripMap({
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     // top-left: the trip sheet covers the bottom corners on phones
     instance.addControl(new maplibregl.AttributionControl({ compact: false }), 'top-left');
+    instance.on('click', () => callbacks.current.onMapClick?.());
     instance.on('load', () => {
       instance.addSource('routes', { type: 'geojson', data: EMPTY });
       instance.addSource('route-preview', { type: 'geojson', data: EMPTY });
