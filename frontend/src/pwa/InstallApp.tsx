@@ -2,6 +2,8 @@ import { DownloadOutlined, PlusSquareOutlined, UploadOutlined } from '@ant-desig
 import { useState } from 'react';
 
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
+import Rich from '../i18n/Rich';
 import { promptInstall, useInstallMode } from './install';
 
 const DISMISSED_KEY = 'va.install-banner-dismissed';
@@ -20,23 +22,23 @@ export function IosInstructions({ open, onClose }: { open: boolean; onClose: () 
     <Sheet
       open={open}
       onClose={onClose}
-      title="App installieren"
+      title={t('install.title')}
       footer={
         <button type="button" className="va-button va-button-accent va-block" onClick={onClose}>
-          Verstanden
+          {t('install.understood')}
         </button>
       }
     >
-      <p className="va-muted">Auf iPhone und iPad geht das über das Teilen-Menü:</p>
+      <p className="va-muted">{t('install.iosIntro')}</p>
       <ol className="va-steps">
         <li>
-          <UploadOutlined aria-hidden="true" /> Tippe unten in Safari auf <strong>Teilen</strong>.
+          <UploadOutlined aria-hidden="true" /> <Rich text={t('install.iosShare')} />
         </li>
         <li>
-          <PlusSquareOutlined aria-hidden="true" /> Wähle <strong>Zum Home-Bildschirm</strong>.
+          <PlusSquareOutlined aria-hidden="true" /> <Rich text={t('install.iosHomeScreen')} />
         </li>
         <li>
-          Tippe oben rechts auf <strong>Hinzufügen</strong>.
+          <Rich text={t('install.iosAdd')} />
         </li>
       </ol>
     </Sheet>
@@ -57,7 +59,7 @@ export function InstallMenuItem() {
         className="va-menu-item va-menu-action"
         onClick={() => (mode === 'prompt' ? void promptInstall() : setInstructions(true))}
       >
-        <span>App installieren</span>
+        <span>{t('install.title')}</span>
         <DownloadOutlined aria-hidden="true" />
       </button>
       <IosInstructions open={instructions} onClose={() => setInstructions(false)} />
@@ -82,20 +84,20 @@ export function InstallBanner() {
     }
   };
   return (
-    <section className="va-install" aria-label="App installieren">
+    <section className="va-install" aria-label={t('install.title')}>
       <img src="/pwa-192x192.png" alt="" width={44} height={44} />
       <span className="va-column va-grow">
-        <span className="va-strong">Als App nutzen</span>
-        <span className="va-small va-muted">Start vom Home-Bildschirm</span>
+        <span className="va-strong">{t('install.banner')}</span>
+        <span className="va-small va-muted">{t('install.bannerHint')}</span>
       </span>
       <button
         type="button"
         className="va-button va-button-accent va-button-small"
         onClick={() => (mode === 'prompt' ? void promptInstall() : setInstructions(true))}
       >
-        Installieren
+        {t('install.install')}
       </button>
-      <button type="button" className="va-install-close" aria-label="Hinweis ausblenden" onClick={dismiss}>
+      <button type="button" className="va-install-close" aria-label={t('install.dismiss')} onClick={dismiss}>
         ×
       </button>
       <IosInstructions open={instructions} onClose={() => setInstructions(false)} />

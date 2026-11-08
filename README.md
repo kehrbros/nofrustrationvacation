@@ -24,6 +24,8 @@ Entities annotated with `@Audited` are historized by Hibernate Envers in `_aud` 
 
 Authentication (OAuth2/OIDC with an own identity provider that can be replaced by Keycloak) is described in [Docs/authentication.md](Docs/authentication.md).
 
+The frontend is available in German and English (i18next), every UI text is kept in both languages, see [Docs/i18n.md](Docs/i18n.md).
+
 Monetary values (single base currency USD, `Money` type, exchange rates and currency conversion at the API boundary) are described in [Docs/money.md](Docs/money.md).
 
 Accounting (credit and earnings accounts, top-ups and payouts via PayPal, carried over from the former Nfv app) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).

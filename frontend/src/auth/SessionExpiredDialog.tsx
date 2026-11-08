@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { useAuth } from 'react-oidc-context';
 
+import { t } from '../i18n';
 import Sheet from '../components/Sheet';
 import { loginState, sessionRejections, subscribeSession } from './session';
 
@@ -32,12 +33,12 @@ export default function SessionExpiredDialog() {
     <Sheet
       open={rejections > dismissed}
       onClose={() => setDismissed(rejections)}
-      eyebrow="Sitzung"
-      title="Bitte erneut anmelden"
+      eyebrow={t('auth.session')}
+      title={t('auth.loginAgain')}
       footer={
         <div className="va-actions">
           <button type="button" className="va-button va-button-accent va-block" disabled={busy} onClick={() => void loginInPopup()}>
-            {busy ? 'Anmeldung läuft …' : 'Anmelden'}
+            {busy ? t('auth.loggingIn') : t('auth.login')}
           </button>
           {popupFailed && (
             <button
@@ -45,17 +46,16 @@ export default function SessionExpiredDialog() {
               className="va-button va-button-outline va-block"
               onClick={() => void auth.signinRedirect({ state: loginState() })}
             >
-              In diesem Fenster anmelden
+              {t('auth.loginHere')}
             </button>
           )}
         </div>
       }
     >
-      <p>Deine Anmeldung ist abgelaufen. Diese Seite bleibt offen, nach der Anmeldung kannst du einfach weitermachen.</p>
+      <p>{t('auth.expired')}</p>
       {popupFailed && (
         <p className="va-small va-muted" role="status">
-          Das Anmeldefenster konnte nicht geöffnet werden. In diesem Fenster kommst du danach auf diese Seite zurück,
-          noch nicht gespeicherte Eingaben gehen dabei aber verloren.
+          {t('auth.popupFailed')}
         </p>
       )}
     </Sheet>

@@ -1,3 +1,5 @@
+import { locale, t } from '../i18n';
+
 /**
  * Points in time are exchanged with the backend as ISO 8601 with offset. The frontend uses the time zone of the
  * system: entered values get its offset, shown values are converted into it.
@@ -57,47 +59,30 @@ export function toDayInput(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
-const dayMonthYear = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long', year: 'numeric' });
-const dayMonth = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'long' });
-const weekdayDayMonthTime = new Intl.DateTimeFormat('de-DE', {
-  weekday: 'short',
-  day: 'numeric',
-  month: 'long',
-  hour: 'numeric',
-  minute: '2-digit',
-});
-const weekdayDayMonth = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'long' });
-const time = new Intl.DateTimeFormat('de-DE', { hour: 'numeric', minute: '2-digit' });
+// formats in the current language (Docs/i18n.md), created per call because the language can change
+const format = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale(), options);
 
-/** "12.–26. Juli 2027", "30. Juli – 2. August 2027" or "30. Dezember 2027 – 2. Januar 2028". */
+/** Ranges of Intl use thin spaces around the dash, the app writes normal ones. */
+export const plainSpaces = (text: string) => text.replace(/[\u2009\u202f]/g, ' ');
+
+/** "12.–26. Juli 2027", "30. Juli – 2. August 2027" or "30. Dezember 2027 – 2. Januar 2028" (German). */
 export function formatPeriod(startIso: string, endIso: string): string {
-  const start = new Date(startIso);
-  const end = new Date(endIso);
-  if (start.getFullYear() !== end.getFullYear()) {
-    return `${dayMonthYear.format(start)} – ${dayMonthYear.format(end)}`;
-  }
-  if (start.getMonth() !== end.getMonth()) {
-    return `${dayMonth.format(start)} – ${dayMonthYear.format(end)}`;
-  }
-  if (start.getDate() === end.getDate()) {
-    return dayMonthYear.format(start);
-  }
-  return `${start.getDate()}.–${dayMonthYear.format(end)}`;
+  return plainSpaces(format({ day: 'numeric', month: 'long', year: 'numeric' }).formatRange(new Date(startIso), new Date(endIso)));
 }
 
 /** "Sa., 14. Juli, 09:00" */
 export function formatDateTime(iso: string): string {
-  return weekdayDayMonthTime.format(new Date(iso));
+  return format({ weekday: 'short', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 }
 
 /** "Sa., 14. Juli" */
 export function formatDay(iso: string): string {
-  return weekdayDayMonth.format(new Date(iso));
+  return format({ weekday: 'short', day: 'numeric', month: 'long' }).format(new Date(iso));
 }
 
 /** "09:00" */
 export function formatTime(iso: string): string {
-  return time.format(new Date(iso));
+  return format({ hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
 }
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
@@ -122,24 +107,23 @@ export function untilStart(startIso: string, now: Date = new Date()): string | n
     return null;
   }
   if (days === 0) {
-    return 'heute';
+    return t('time.today');
   }
-  return days === 1 ? 'morgen' : `in ${days} Tagen`;
+  return days === 1 ? t('time.tomorrow') : t('time.inDays', { count: days });
 }
 
 /** "vor 20 Min.", "vor 3 Std.", "vor 2 Tagen" */
 export function formatAgo(iso: string, now: Date = new Date()): string {
   const minutes = Math.max(0, Math.round((now.getTime() - new Date(iso).getTime()) / 60000));
   if (minutes < 1) {
-    return 'gerade eben';
+    return t('time.justNow');
   }
   if (minutes < 60) {
-    return `vor ${minutes} Min.`;
+    return t('time.minutesAgo', { minutes });
   }
   const hours = Math.round(minutes / 60);
   if (hours < 24) {
-    return `vor ${hours} Std.`;
+    return t('time.hoursAgo', { hours });
   }
-  const days = Math.round(hours / 24);
-  return days === 1 ? 'vor 1 Tag' : `vor ${days} Tagen`;
+  return t('time.daysAgo', { count: Math.round(hours / 24) });
 }

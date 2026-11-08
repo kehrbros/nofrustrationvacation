@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { TripsApiError } from '../trips/tripsApi';
 import { extractAccommodation } from './bookingsApi';
 import { formFromDraft, type FilledForm } from './form';
@@ -12,7 +13,7 @@ export async function readConfirmation(shared: SharedContent | null, text: strin
   try {
     const draft = await extractAccommodation(input.text, input.file);
     if (!draft.found) {
-      return { ok: false, message: 'Darin haben wir keine Unterkunftsbuchung gefunden. Du kannst sie manuell eingeben.' };
+      return { ok: false, message: t('confirmation.notFound') };
     }
     return { ok: true, filled: formFromDraft(draft) };
   } catch (failure) {
@@ -23,14 +24,14 @@ export async function readConfirmation(shared: SharedContent | null, text: strin
 function readErrorMessage(failure: unknown): string {
   if (failure instanceof TripsApiError) {
     if (failure.code === 'ASSISTANT_RATE_LIMITED') {
-      return 'Gerade zu viele Anfragen. Bitte später noch einmal versuchen oder manuell eingeben.';
+      return t('confirmation.rateLimited');
     }
     if (failure.code === 'INVALID_BOOKING_INPUT') {
-      return 'Diese Datei können wir nicht lesen. Bitte Text, ein Bild (JPEG, PNG, WebP) oder ein PDF bis 5 MB verwenden.';
+      return t('confirmation.invalidInput');
     }
     if (failure.status === 413) {
-      return 'Die Datei ist zu groß (höchstens 5 MB).';
+      return t('confirmation.tooLarge');
     }
   }
-  return 'Die Bestätigung konnte gerade nicht gelesen werden. Du kannst die Buchung manuell eingeben.';
+  return t('confirmation.readFailed');
 }

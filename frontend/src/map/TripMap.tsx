@@ -2,6 +2,8 @@ import maplibregl, { type GeoJSONSource, type LngLatLike } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { useEffect, useRef } from 'react';
 
+import { t } from '../i18n';
+
 import { incidentTitle } from '../trips/incidentText';
 import type { LinePoint, Route, RouteLine, Stop, TripIncident } from '../trips/model';
 import type { RoutePreview } from '../trips/tripContext';
@@ -250,7 +252,7 @@ export default function TripMap({
         element.className = 'va-map-stop';
         element.innerHTML = `<span class="va-map-stop-number">${index + 1}</span><span class="va-map-stop-name"></span>`;
         element.querySelector('.va-map-stop-name')!.textContent = stop.name;
-        element.setAttribute('aria-label', `Stop ${index + 1}: ${stop.name}`);
+        element.setAttribute('aria-label', t('map.stop', { position: index + 1, name: stop.name }));
         markers.current.push(new maplibregl.Marker({ element, anchor: 'left', offset: [-14, 0] }).setLngLat([stop.longitude, stop.latitude]).addTo(instance));
       });
 
@@ -272,7 +274,7 @@ export default function TripMap({
         chip.className = chipClass(consequence);
         chip.innerHTML = `${WARNING_ICON}<span></span>`;
         chip.querySelector('span')!.textContent = incidentTitle(consequence);
-        chip.setAttribute('aria-label', `Alternativen ansehen: ${incidentTitle(consequence)}`);
+        chip.setAttribute('aria-label', t('map.alternatives', { title: incidentTitle(consequence) }));
         chip.addEventListener('click', (event) => {
           event.stopPropagation();
           callbacks.current.onConsequenceClick(consequence);
@@ -363,7 +365,7 @@ export default function TripMap({
 
   // MapLibre sets position: relative on its container, so the container fills an absolutely positioned frame
   return (
-    <div className="va-map" role="region" aria-label="Karte mit Stops und Routen">
+    <div className="va-map" role="region" aria-label={t('map.label')}>
       <div ref={container} className="va-map-canvas" />
     </div>
   );

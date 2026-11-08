@@ -1,3 +1,6 @@
+import { locale } from '../i18n';
+import { plainSpaces } from '../trips/time';
+
 /**
  * Times of bookings are local at the place (e.g. check-in 15:00 in Rome), whatever zone the phone is in. They come
  * as ISO 8601 with the offset of the place and are shown as written there, never converted into the system zone.
@@ -14,28 +17,25 @@ function asUtcDate(date: string, time = '00:00'): Date {
   return new Date(Date.UTC(year, month - 1, day, hours || 0, minutes || 0));
 }
 
-const dayFormat = new Intl.DateTimeFormat('de-DE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
-const dayMonthFormat = new Intl.DateTimeFormat('de-DE', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+// in the current language, created per call because the language can change
+const dayFormat = () =>
+  new Intl.DateTimeFormat(locale(), { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const dayMonthFormat = () => new Intl.DateTimeFormat(locale(), { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
 /** "Mo., 12. Juli · 15:00" in the local time of the place. */
 export function formatLocalDateTime(iso: string): string {
   const { date, time } = wallClock(iso);
-  return `${dayFormat.format(asUtcDate(date))} · ${time}`;
+  return `${dayFormat().format(asUtcDate(date))} · ${time}`;
 }
 
 /** "Mo., 12. Juli", the day at the place. */
 export function formatLocalDate(iso: string): string {
-  return dayFormat.format(asUtcDate(wallClock(iso).date));
+  return dayFormat().format(asUtcDate(wallClock(iso).date));
 }
 
 /** "12.–15. Juli" or "30. Juli – 2. Aug." for a stay, local at the place. */
 export function formatStay(startIso: string, endIso: string): string {
-  const start = asUtcDate(wallClock(startIso).date);
-  const end = asUtcDate(wallClock(endIso).date);
-  if (start.getUTCFullYear() === end.getUTCFullYear() && start.getUTCMonth() === end.getUTCMonth()) {
-    return `${start.getUTCDate()}.–${dayMonthFormat.format(end)}`;
-  }
-  return `${dayMonthFormat.format(start)} – ${dayMonthFormat.format(end)}`;
+  return plainSpaces(dayMonthFormat().formatRange(asUtcDate(wallClock(startIso).date), asUtcDate(wallClock(endIso).date)));
 }
 
 /** Nights between check-in and check-out (calendar days at the place). */

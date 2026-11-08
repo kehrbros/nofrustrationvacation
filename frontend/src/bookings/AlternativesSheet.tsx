@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
+import { formatMoney, formatNumber, t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
 import PayPalButton from '../payments/PayPalButton';
 import { substituteDeparture } from '../trips/routeOptionText';
@@ -114,7 +115,7 @@ export default function AlternativesSheet() {
     navigate('.', { replace: true });
     if (cancelled) {
       abortReservation(id).then(
-        () => setError('Die Zahlung wurde bei PayPal abgebrochen, es wurde nichts gebucht.'),
+        () => setError(t('payment.cancelledAtPayPal')),
         () => undefined,
       ).finally(() => setStep({ kind: 'criteria' }));
       return;
@@ -127,7 +128,7 @@ export default function AlternativesSheet() {
 
   useEffect(() => {
     if (step.kind === 'criteria' && booking && !criteria) {
-      fetchCriteria(booking.id).then(setCriteria, () => setError('Die Angaben der Buchung konnten nicht geladen werden.'));
+      fetchCriteria(booking.id).then(setCriteria, () => setError(t('alternatives.criteriaFailed')));
     }
   }, [step, booking, criteria]);
 
@@ -142,8 +143,8 @@ export default function AlternativesSheet() {
 
   if (!booking) {
     return (
-      <Sheet open onClose={close} title="Buchung nicht gefunden">
-        <p className="va-muted">Diese Buchung gibt es nicht mehr.</p>
+      <Sheet open onClose={close} title={t('booking.notFound')}>
+        <p className="va-muted">{t('booking.gone')}</p>
       </Sheet>
     );
   }
@@ -192,17 +193,17 @@ export default function AlternativesSheet() {
       setOldMarked(true);
       reload();
     } catch {
-      setError('Die alte Buchung konnte nicht markiert werden.');
+      setError(t('alternatives.markFailed'));
     }
   };
 
-  const title = step.kind === 'booked' ? 'Umgebucht' : step.kind === 'attention' ? 'Gebucht, Zahlung wird geprüft'
-    : 'Andere Unterkunft';
+  const title = step.kind === 'booked' ? t('alternatives.rebooked') : step.kind === 'attention' ? t('payment.bookedChecking')
+    : t('tripAlternatives.otherStay');
   return (
-    <Sheet open onClose={close} eyebrow={`statt ${booking.title}`} title={title} height="90vh"
+    <Sheet open onClose={close} eyebrow={t('alternatives.insteadOf', { title: booking.title })} title={title} height="90vh"
       footer={footer()}>
       {status && !status.searchAvailable && step.kind === 'criteria' && (
-        <Alert type="info" showIcon message="Die Suche nach Alternativen ist gerade nicht verfügbar." />
+        <Alert type="info" showIcon message={t('alternatives.unavailable')} />
       )}
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
       {notice && <Alert type="info" showIcon message={notice} closable onClose={() => setNotice(null)} />}
@@ -210,7 +211,7 @@ export default function AlternativesSheet() {
         ? <CriteriaForm criteria={criteria} onChange={setCriteria} />
         : <div className="va-empty"><Spin /></div>)}
       {step.kind === 'searching' && (
-        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Freie Unterkünfte werden gesucht und verglichen …</span></div>
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('alternatives.searching')}</span></div>
       )}
       {step.kind === 'results' && (
         <Results result={step.result} criteria={criteria!} onPick={(candidate) => pick(candidate, step.result)} />
@@ -219,12 +220,12 @@ export default function AlternativesSheet() {
         <HolderForm candidate={step.candidate} holder={holder} onChange={setHolder} />
       )}
       {step.kind === 'reserving' && (
-        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Preis bei {step.candidate.name} wird gesichert …</span></div>
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('payment.securingPrice', { hotel: step.candidate.name })}</span></div>
       )}
       {step.kind === 'pay' && <PaySummary reservation={step.reservation} holder={holder} />}
       {step.kind === 'booking' && <BookingProgress reservation={step.reservation} />}
       {step.kind === 'returned' && (
-        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">Zahlung wird geprüft und gebucht …</span></div>
+        <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('payment.checkingAndBooking')}</span></div>
       )}
       {step.kind === 'booked' && (
         <Booked reservation={step.reservation} oldTitle={booking.title} oldManageUrl={booking.manageUrl}
@@ -232,11 +233,8 @@ export default function AlternativesSheet() {
       )}
       {step.kind === 'attention' && (
         <div className="va-form">
-          <p className="va-strong"><CheckCircleOutlined aria-hidden="true" /> {step.reservation.hotelName} ist gebucht.</p>
-          <p className="va-muted">
-            Die Zahlung bei PayPal ist noch nicht abgeschlossen. Wir kümmern uns darum, du musst nichts tun. Der Betrag
-            ist bei PayPal nur reserviert, solange das nicht geklärt ist.
-          </p>
+          <p className="va-strong"><CheckCircleOutlined aria-hidden="true" /> {t('alternatives.isBooked', { hotel: step.reservation.hotelName })}</p>
+          <p className="va-muted">{t('alternatives.attention')}</p>
         </div>
       )}
     </Sheet>
@@ -247,28 +245,28 @@ export default function AlternativesSheet() {
       case 'criteria':
         return (
           <div className="va-row va-gap">
-            <button type="button" className="va-button va-button-outline" onClick={back}>Zurück</button>
+            <button type="button" className="va-button va-button-outline" onClick={back}>{t('alternatives.back')}</button>
             <button type="button" className="va-button va-grow" disabled={busy || !criteria || !canSearch(criteria) || !status?.searchAvailable}
               onClick={() => void search()}>
-              <SearchOutlined aria-hidden="true" /> {busy ? 'Suche läuft …' : 'Unterkünfte suchen'}
+              <SearchOutlined aria-hidden="true" /> {busy ? t('alternatives.searchRunning') : t('alternatives.search')}
             </button>
           </div>
         );
       case 'results':
         return (
           <button type="button" className="va-button va-button-outline va-block" onClick={() => setStep({ kind: 'criteria' })}>
-            Suche anpassen
+            {t('alternatives.adjust')}
           </button>
         );
       case 'holder':
         return (
           <div className="va-row va-gap">
             <button type="button" className="va-button va-button-outline" onClick={() => setStep({ kind: 'results', result: step.result })}>
-              Zurück
+              {t('alternatives.back')}
             </button>
             <button type="button" className="va-button va-grow" disabled={busy || !holderComplete(holder) || !status?.bookingAvailable}
               onClick={() => void reserve(step.candidate, step.result)}>
-              Weiter zur Zahlung
+              {t('payment.continue')}
             </button>
           </div>
         );
@@ -281,12 +279,12 @@ export default function AlternativesSheet() {
               orderId={step.reservation.payPalOrderId}
               approveUrl={step.reservation.approveUrl}
               onApprove={() => book(step.reservation)}
-              onCancel={() => setNotice('Zahlung abgebrochen, es wurde nichts gebucht. Du kannst es noch einmal versuchen.')}
-              onError={() => setError('PayPal konnte die Zahlung nicht starten. Bitte versuche es noch einmal.')}
+              onCancel={() => setNotice(t('payment.cancelled'))}
+              onError={() => setError(t('payment.startFailed'))}
             />
             {!step.reservation.payPalOrderId && !step.reservation.approveUrl && (
               <button type="button" className="va-button va-block" onClick={() => book(step.reservation)}>
-                Erneut versuchen
+                {t('common.retry')}
               </button>
             )}
             {step.result && (
@@ -294,7 +292,7 @@ export default function AlternativesSheet() {
                 void abortReservation(step.reservation.id).catch(() => undefined);
                 setStep({ kind: 'results', result: step.result! });
               }}>
-                Andere Unterkunft wählen
+                {t('alternatives.chooseOther')}
               </button>
             )}
           </div>
@@ -303,12 +301,12 @@ export default function AlternativesSheet() {
         return (
           <button type="button" className="va-button va-block"
             onClick={() => navigate(`/reisen/${trip.id}/buchungen/${step.reservation.bookingId}`)}>
-            Neue Buchung ansehen
+            {t('alternatives.viewNew')}
           </button>
         );
       case 'attention':
         return (
-          <button type="button" className="va-button va-block" onClick={close}>Zur Reise</button>
+          <button type="button" className="va-button va-block" onClick={close}>{t('payment.toTrip')}</button>
         );
       default:
         return undefined;
@@ -342,21 +340,21 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
   return (
     <div className="va-form">
       <p className="va-small va-muted">
-        Übernommen aus deiner Buchung. Wir zeigen nur Unterkünfte, die alles davon erfüllen.
+        {t('alternatives.criteriaIntro')}
       </p>
       <div className={mark('location')}>
-        <span className="va-label">Region</span>
+        <span className="va-label">{t('alternatives.region')}</span>
         {!changingPlace ? (
           <span className="va-row va-gap va-baseline">
-            <span className="va-muted va-grow"><EnvironmentOutlined aria-hidden="true" /> {criteria.placeName ?? 'Ort gewählt'}</span>
-            <button type="button" className="va-text-button" onClick={() => setChangingPlace(true)}>ändern</button>
+            <span className="va-muted va-grow"><EnvironmentOutlined aria-hidden="true" /> {criteria.placeName ?? t('stop.placeSelected')}</span>
+            <button type="button" className="va-text-button" onClick={() => setChangingPlace(true)}>{t('alternatives.change')}</button>
           </span>
         ) : (
           <>
-            <input type="search" autoComplete="off" aria-label="Ort suchen" placeholder="Ort oder Adresse suchen"
+            <input type="search" autoComplete="off" aria-label={t('alternatives.placeSearch')} placeholder={t('alternatives.placePlaceholder')}
               value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
             {places.length > 0 && (
-              <ul className="va-suggestions" aria-label="Vorschläge">
+              <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
                 {places.map((place) => (
                   <li key={`${place.latitude},${place.longitude}`}>
                     <button type="button" onClick={() => {
@@ -378,41 +376,41 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
         )}
       </div>
       <div className="va-field">
-        <label htmlFor="alt-radius">Umkreis: {(criteria.radiusMeters / 1000).toLocaleString('de-DE')} km</label>
+        <label htmlFor="alt-radius">{t('alternatives.radius', { km: formatNumber(criteria.radiusMeters / 1000) })}</label>
         <input id="alt-radius" type="range" min={500} max={20000} step={500} value={criteria.radiusMeters}
           onChange={(event) => set({ radiusMeters: Number(event.target.value) })} />
       </div>
       <div className="va-field-row">
         <div className={mark('checkIn')}>
-          <label htmlFor="alt-in">Anreise</label>
+          <label htmlFor="alt-in">{t('booking.checkIn')}</label>
           <input id="alt-in" type="date" value={criteria.checkIn} onChange={(event) => set({ checkIn: event.target.value })} />
         </div>
         <div className={mark('checkOut')}>
-          <label htmlFor="alt-out">Abreise</label>
+          <label htmlFor="alt-out">{t('booking.checkOut')}</label>
           <input id="alt-out" type="date" min={criteria.checkIn || undefined} value={criteria.checkOut}
             onChange={(event) => set({ checkOut: event.target.value })} />
         </div>
       </div>
       <div className="va-field-row">
         <div className={mark('guests')}>
-          <label htmlFor="alt-guests">Gäste</label>
+          <label htmlFor="alt-guests">{t('form.guests')}</label>
           <input id="alt-guests" type="number" min={1} max={36} inputMode="numeric" value={criteria.guests ?? ''}
             onChange={(event) => set({ guests: event.target.value ? Number(event.target.value) : null })} />
         </div>
         <div className="va-field">
-          <label htmlFor="alt-rooms">Zimmer</label>
+          <label htmlFor="alt-rooms">{t('form.rooms')}</label>
           <input id="alt-rooms" type="number" min={1} max={9} inputMode="numeric" value={criteria.rooms}
             onChange={(event) => set({ rooms: Math.max(1, Number(event.target.value) || 1) })} />
         </div>
       </div>
       <div className="va-field-row">
         <div className="va-field">
-          <label htmlFor="alt-price">Max. Preis gesamt</label>
-          <input id="alt-price" type="text" inputMode="decimal" placeholder="ohne Grenze" value={criteria.maxPrice}
+          <label htmlFor="alt-price">{t('alternatives.maxPrice')}</label>
+          <input id="alt-price" type="text" inputMode="decimal" placeholder={t('alternatives.noLimit')} value={criteria.maxPrice}
             onChange={(event) => set({ maxPrice: event.target.value })} />
         </div>
         <div className="va-field">
-          <label htmlFor="alt-currency">Währung</label>
+          <label htmlFor="alt-currency">{t('accommodation.currency')}</label>
           <input id="alt-currency" type="text" maxLength={3} autoCapitalize="characters" value={criteria.currency}
             onChange={(event) => set({ currency: event.target.value.toUpperCase() })} />
         </div>
@@ -429,11 +427,11 @@ function Results({ result, criteria, onPick }: {
   if (result.candidates.length === 0) {
     return (
       <div className="va-form">
-        <p className="va-strong">Keine Unterkunft erfüllt alle Kriterien.</p>
+        <p className="va-strong">{t('alternatives.none')}</p>
         <p className="va-muted">
           {result.offersChecked > 0
-            ? `${result.offersChecked} Angebote geprüft. Vergrößere den Umkreis oder erhöhe den Preis.`
-            : 'Für diesen Zeitraum gibt es in der Region keine freien Zimmer. Vergrößere den Umkreis.'}
+            ? t('alternatives.offersChecked', { count: result.offersChecked })
+            : t('alternatives.noRooms')}
         </p>
       </div>
     );
@@ -441,8 +439,8 @@ function Results({ result, criteria, onPick }: {
   return (
     <div className="va-form">
       <p className="va-small va-muted">
-        {result.candidates.length} {result.candidates.length === 1 ? 'freie Unterkunft' : 'freie Unterkünfte'} für
-        {' '}{criteriaSummary(criteria)}. {result.ranked ? 'Die passendste zuerst.' : 'Die günstigste zuerst.'}
+        {t('alternatives.found', { count: result.candidates.length, criteria: criteriaSummary(criteria) })}{' '}
+        {result.ranked ? t('alternatives.bestFirst') : t('alternatives.cheapestFirst')}
       </p>
       <ul className="va-plain-list va-alternatives">
         {result.candidates.map((candidate) => (
@@ -451,10 +449,10 @@ function Results({ result, criteria, onPick }: {
               onClick={() => onPick(candidate)}>
               {candidate.photoUrl && <img src={candidate.photoUrl} alt="" className="va-alternative-photo" loading="lazy" />}
               <span>
-                {candidate.hotelId === result.recommendedHotelId && <span className="va-chip va-chip-ink">Unsere Empfehlung</span>}
+                {candidate.hotelId === result.recommendedHotelId && <span className="va-chip va-chip-ink">{t('alternatives.recommendation')}</span>}
                 <span className="va-option-title">{candidate.name}</span>
                 <span className="va-small va-muted">
-                  {[candidate.stars ? <span key="s">{candidate.stars} <StarFilled aria-label="Sterne" /></span> : null,
+                  {[candidate.stars ? <span key="s">{candidate.stars} <StarFilled aria-label={t('alternatives.stars')} /></span> : null,
                     distance(candidate.distanceMeters), candidate.boardName].filter(Boolean)
                     .map((part, index) => <span key={index}>{index > 0 && ' · '}{part}</span>)}
                 </span>
@@ -462,11 +460,11 @@ function Results({ result, criteria, onPick }: {
                 <span className="va-small">
                   {candidate.refundable
                     ? candidate.freeCancellationUntil
-                      ? `Kostenlos stornierbar bis ${formatLocalDateTime(candidate.freeCancellationUntil)}`
-                      : 'Kostenlos stornierbar'
-                    : 'Nicht stornierbar'}
+                      ? t('alternatives.freeUntil', { time: formatLocalDateTime(candidate.freeCancellationUntil) })
+                      : t('alternatives.free')
+                    : t('alternatives.nonRefundable')}
                 </span>
-                {candidate.possiblySame && <span className="va-small va-check-hint">Möglicherweise die bisherige Unterkunft</span>}
+                {candidate.possiblySame && <span className="va-small va-check-hint">{t('alternatives.possiblySame')}</span>}
                 {candidate.reason && <span className="va-small">{candidate.reason}</span>}
               </span>
             </button>
@@ -490,30 +488,28 @@ export function HolderForm({ candidate, holder, onChange }: { candidate: HolderO
   return (
     <div className="va-form">
       <div className="va-impact">
-        <span className="va-eyebrow">{candidate.roomName ?? 'Unterkunft'}</span>
+        <span className="va-eyebrow">{candidate.roomName ?? t('addBooking.accommodation')}</span>
         <span className="va-strong">{candidate.name} · {money(candidate.price, candidate.currency)}</span>
       </div>
       <p className="va-small va-muted">
-        Für wen wird gebucht? Name, E-Mail und Telefon gehen an das Hotel und werden nach der Buchung bei uns
-        gelöscht. Auf diesem Gerät merken wir sie uns für die nächste Umbuchung. Vor der Zahlung wird der Preis noch
-        einmal gesichert.
+        {t('alternatives.holderIntro')}
       </p>
       <div className="va-field-row">
         <div className="va-field">
-          <label htmlFor="alt-first">Vorname</label>
+          <label htmlFor="alt-first">{t('alternatives.firstName')}</label>
           <input id="alt-first" autoComplete="given-name" value={holder.firstName} onChange={(event) => set({ firstName: event.target.value })} />
         </div>
         <div className="va-field">
-          <label htmlFor="alt-last">Nachname</label>
+          <label htmlFor="alt-last">{t('alternatives.lastName')}</label>
           <input id="alt-last" autoComplete="family-name" value={holder.lastName} onChange={(event) => set({ lastName: event.target.value })} />
         </div>
       </div>
       <div className="va-field">
-        <label htmlFor="alt-email">E-Mail</label>
+        <label htmlFor="alt-email">{t('booking.email')}</label>
         <input id="alt-email" type="email" autoComplete="email" value={holder.email} onChange={(event) => set({ email: event.target.value })} />
       </div>
       <div className="va-field">
-        <label htmlFor="alt-phone">Telefon</label>
+        <label htmlFor="alt-phone">{t('booking.phone')}</label>
         <input id="alt-phone" type="tel" autoComplete="tel" value={holder.phone} onChange={(event) => set({ phone: event.target.value })} />
       </div>
     </div>
@@ -524,31 +520,36 @@ export function PaySummary({ reservation, holder }: { reservation: Reservation; 
   return (
     <div className="va-form">
       <div className="va-impact">
-        <span className="va-eyebrow">Preis gesichert</span>
+        <span className="va-eyebrow">{t('payment.priceSecured')}</span>
         <span className="va-strong">{reservation.hotelName}</span>
         <span className="va-strong">{money(reservation.price, reservation.currency)}</span>
       </div>
       <dl className="va-facts">
-        <dt>Aufenthalt</dt>
+        <dt>{t('booking.stay')}</dt>
         <dd>{date(reservation.checkIn)} – {date(reservation.checkOut)}</dd>
-        <dt>Belegung</dt>
-        <dd>{reservation.guests} {reservation.guests === 1 ? 'Gast' : 'Gäste'}, {reservation.rooms} Zimmer</dd>
-        <dt>Gebucht für</dt>
+        <dt>{t('booking.occupancy')}</dt>
+        <dd>{t('common.guests', { count: reservation.guests })}, {t('common.rooms', { count: reservation.rooms })}</dd>
+        <dt>{t('payment.bookedFor')}</dt>
         <dd>{holder.firstName} {holder.lastName}</dd>
-        <dt>Preis</dt>
-        <dd>{money(reservation.price, reservation.currency)} <span className="va-small va-muted">inkl. {money(reservation.fee, reservation.currency)} Servicegebühr</span></dd>
-        <dt>Storno</dt>
+        <dt>{t('booking.price')}</dt>
+        <dd>
+          {money(reservation.price, reservation.currency)}{' '}
+          <span className="va-small va-muted">{t('payment.fee', { fee: money(reservation.fee, reservation.currency) })}</span>
+        </dd>
+        <dt>{t('booking.cancellation')}</dt>
         <dd>
           {reservation.refundable
-            ? reservation.freeCancellationUntil ? `kostenlos bis ${formatLocalDateTime(reservation.freeCancellationUntil)}, Geld zurück per PayPal` : 'kostenlos, Geld zurück per PayPal'
-            : 'nicht stornierbar'}
+            ? reservation.freeCancellationUntil
+              ? t('payment.freeUntilRefund', { time: formatLocalDateTime(reservation.freeCancellationUntil) })
+              : t('payment.freeRefund')
+            : t('proposal.nonRefundable')}
         </dd>
       </dl>
       <RouteHint reservationId={reservation.id} />
       <ul className="va-plain-list va-paypal-promise">
-        <li><CheckOutlined aria-hidden="true" /> Bezahlen ohne Kartendaten, du bleibst in der App.</li>
-        <li><CheckOutlined aria-hidden="true" /> PayPal reserviert den Betrag nur. Abgebucht wird erst, wenn das Hotel bestätigt hat.</li>
-        <li><CheckOutlined aria-hidden="true" /> Klappt die Buchung nicht, wird die Reservierung sofort freigegeben.</li>
+        <li><CheckOutlined aria-hidden="true" /> {t('payment.promiseNoCard')}</li>
+        <li><CheckOutlined aria-hidden="true" /> {t('payment.promiseReserved')}</li>
+        <li><CheckOutlined aria-hidden="true" /> {t('payment.promiseReleased')}</li>
       </ul>
     </div>
   );
@@ -573,7 +574,7 @@ function RouteHint({ reservationId }: { reservationId: number }) {
   }
   return (
     <div className="va-note">
-      <p className="va-strong"><NodeIndexOutlined aria-hidden="true" /> Anderer Ort</p>
+      <p className="va-strong"><NodeIndexOutlined aria-hidden="true" /> {t('payment.otherPlace')}</p>
       <p>{text.move}</p>
       {text.arrival && <p>{text.arrival}</p>}
       {text.warning && <Alert type="warning" showIcon message={text.warning} />}
@@ -586,15 +587,18 @@ export function BookingProgress({ reservation }: { reservation: Reservation }) {
   return (
     <div className="va-form" role="status" aria-live="polite">
       <div className="va-impact">
-        <span className="va-eyebrow">Wird gebucht</span>
+        <span className="va-eyebrow">{t('payment.booking')}</span>
         <span className="va-strong">{reservation.hotelName}</span>
       </div>
       <ol className="va-plain-list va-progress">
-        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> Preis gesichert</li>
-        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> Zahlung bei PayPal freigegeben</li>
-        <li><LoadingOutlined aria-hidden="true" /> Hotel bestätigt die Buchung, danach bucht PayPal {money(reservation.price, reservation.currency)} ab</li>
+        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> {t('payment.priceSecured')}</li>
+        <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> {t('payment.approved')}</li>
+        <li>
+          <LoadingOutlined aria-hidden="true" />{' '}
+          {t('payment.hotelConfirms', { amount: money(reservation.price, reservation.currency) })}
+        </li>
       </ol>
-      <p className="va-small va-muted">Das dauert wenige Sekunden. Du kannst die App schließen, die Buchung läuft weiter.</p>
+      <p className="va-small va-muted">{t('payment.fewSeconds')}</p>
     </div>
   );
 }
@@ -620,18 +624,19 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
       <dl className="va-facts">
         {place?.reference && (
           <>
-            <dt>Buchungsnr.</dt>
+            <dt>{t('booking.reference')}</dt>
             <dd className="va-mono">{place.reference}</dd>
           </>
         )}
-        <dt>Bezahlt</dt>
-        <dd>{money(reservation.price, reservation.currency)} mit PayPal</dd>
+        <dt>{t('payment.paid')}</dt>
+        <dd>{t('payment.withPayPal', { amount: money(reservation.price, reservation.currency) })}</dd>
         {reservation.refundable && (
           <>
-            <dt>Storno</dt>
+            <dt>{t('booking.cancellation')}</dt>
             <dd>
-              {reservation.freeCancellationUntil ? `kostenlos bis ${formatLocalDateTime(reservation.freeCancellationUntil)}` : 'kostenlos'},
-              {' '}in der Buchung, Geld kommt automatisch per PayPal zurück
+              {reservation.freeCancellationUntil
+                ? t('payment.bookedFreeUntil', { time: formatLocalDateTime(reservation.freeCancellationUntil) })
+                : t('payment.bookedFree')}
             </dd>
           </>
         )}
@@ -639,7 +644,7 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
       {place?.latitude != null && place.longitude != null && (
         <a className="va-button va-button-accent va-block" href={directionsUrl(place.latitude, place.longitude)}
           target="_blank" rel="noopener noreferrer">
-          <EnvironmentOutlined aria-hidden="true" /> Route zur Unterkunft
+          <EnvironmentOutlined aria-hidden="true" /> {t('payment.directions')}
         </a>
       )}
       {reservation.replannedRouteIds.length > 0 && (
@@ -647,19 +652,19 @@ function Booked({ reservation, oldTitle, oldManageUrl, oldProvider, oldMarked, o
       )}
       {!oldMarked ? (
         <div className="va-note">
-          <p>„{oldTitle}“ brauchst du nicht mehr? Sie steht auf deiner To-do-Liste der Reise. Markiere sie als storniert{oldManageUrl ? ' und storniere sie beim Anbieter' : ''}.</p>
+          <p>{oldManageUrl ? t('alternatives.oldWithProvider', { title: oldTitle }) : t('alternatives.old', { title: oldTitle })}</p>
 
           <div className="va-row va-gap">
-            <button type="button" className="va-button va-button-outline" onClick={onMarkOld}>Als storniert markieren</button>
+            <button type="button" className="va-button va-button-outline" onClick={onMarkOld}>{t('alternatives.markCancelled')}</button>
             {oldManageUrl && (
               <a className="va-button va-button-outline" href={oldManageUrl} target="_blank" rel="noopener noreferrer">
-                {oldProvider ? `Bei ${oldProvider} stornieren` : 'Beim Anbieter stornieren'}
+                {oldProvider ? t('todo.cancelAt', { provider: oldProvider }) : t('alternatives.cancelAtProvider')}
               </a>
             )}
           </div>
         </div>
       ) : (
-        <p className="va-small va-muted">„{oldTitle}“ ist als storniert markiert.</p>
+        <p className="va-small va-muted">{t('alternatives.marked', { title: oldTitle })}</p>
       )}
     </div>
   );
@@ -694,16 +699,17 @@ export function ReplannedRoutes({ stopId, routeIds }: { stopId: number; routeIds
   return (
     <div className="va-note">
       <p>
-        <NodeIndexOutlined aria-hidden="true" /> Der Stop liegt jetzt in {stop?.name ?? 'dem Ort der Unterkunft'}. Die
-        Route{routes.length > 1 ? 'n' : ''} dorthin und weiter {routes.length > 1 ? 'wurden' : 'wurde'} neu geplant.
+        <NodeIndexOutlined aria-hidden="true" />{' '}
+        {stop ? t('alternatives.stopMoved', { name: stop.name }) : t('alternatives.stopMovedPlace')}{' '}
+        {t('alternatives.routesReplanned', { count: routes.length })}
       </p>
       {choices.length > 0 && (
         <div className="va-column va-gap">
-          <span className="va-small va-muted">Es gibt mehrere sinnvolle Wege, wähle deinen:</span>
+          <span className="va-small va-muted">{t('alternatives.severalWays')}</span>
           {routes.filter((route) => choices.includes(route.id)).map((route) => (
             <Link key={route.id} className="va-button va-button-outline va-block"
               to={`/reisen/${trip.id}/routen/${route.id}`}>
-              Route {routeName(route, stopById)} wählen
+              {t('alternatives.chooseRoute', { route: routeName(route, stopById) })}
             </Link>
           ))}
         </div>
@@ -715,10 +721,12 @@ export function ReplannedRoutes({ stopId, routeIds }: { stopId: number; routeIds
 function criteriaSummary(criteria: Criteria): string {
   const guests = criteria.guests ?? 0;
   return [
-    criteria.placeName ? `${(criteria.radiusMeters / 1000).toLocaleString('de-DE')} km um ${criteria.placeName}` : null,
+    criteria.placeName
+      ? t('alternatives.around', { km: formatNumber(criteria.radiusMeters / 1000), place: criteria.placeName })
+      : null,
     criteria.checkIn && criteria.checkOut ? `${date(criteria.checkIn)} – ${date(criteria.checkOut)}` : null,
-    `${guests} ${guests === 1 ? 'Gast' : 'Gäste'}`,
-    criteria.maxPrice ? `bis ${money(criteria.maxPrice.replace(',', '.'), criteria.currency)}` : null,
+    t('common.guests', { count: guests }),
+    criteria.maxPrice ? t('alternatives.upTo', { price: money(criteria.maxPrice.replace(',', '.'), criteria.currency) }) : null,
   ].filter(Boolean).join(' · ');
 }
 
@@ -733,50 +741,45 @@ export function holderComplete(holder: Holder): boolean {
     && /^\+?[0-9 ()/-]{6,30}$/.test(holder.phone.trim());
 }
 
-export function money(amount: string, currency: string): string {
-  try {
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency }).format(Number(amount));
-  } catch {
-    return `${amount} ${currency}`;
-  }
-}
+export const money = formatMoney;
 
 function distance(meters: number): string {
-  return meters < 1000 ? `${Math.round(meters / 10) * 10} m` : `${(meters / 1000).toLocaleString('de-DE', { maximumFractionDigits: 1 })} km`;
+  return meters < 1000 ? `${Math.round(meters / 10) * 10} m` : `${formatNumber(meters / 1000, { maximumFractionDigits: 1 })} km`;
 }
 
+/** "12.07.2027" (German) or "12/07/2027" (English) from yyyy-mm-dd */
 export function date(value: string): string {
   const [year, month, day] = value.split('-');
-  return `${day}.${month}.${year}`;
+  return t('alternatives.date', { day, month, year });
 }
 
 export function failureText(reservation: Reservation): string {
   return reservation.status === 'FAILED'
-    ? 'Die Buchung hat nicht geklappt, es wurde nichts abgebucht. Bitte wähle eine andere Unterkunft.'
-    : 'Die Buchung ist noch nicht abgeschlossen.';
+    ? t('payment.failed')
+    : t('payment.notFinished');
 }
 
 export function errorText(failure: unknown): string {
   const code = failure instanceof TripsApiError ? failure.code : undefined;
   switch (code) {
     case 'OFFER_UNAVAILABLE':
-      return 'Das Angebot ist nicht mehr verfügbar. Es wurde nichts abgebucht, bitte suche erneut.';
+      return t('payment.error.OFFER_UNAVAILABLE');
     case 'PRICE_EXCEEDED':
-      return 'Der Preis ist inzwischen höher als dein Maximum. Bitte wähle ein anderes Angebot.';
+      return t('payment.error.PRICE_EXCEEDED');
     case 'PAYMENT_NOT_APPROVED':
-      return 'Die Zahlung wurde bei PayPal noch nicht freigegeben.';
+      return t('payment.error.PAYMENT_NOT_APPROVED');
     case 'PAYMENT_DECLINED':
-      return 'PayPal hat die Zahlung abgelehnt. Es wurde nichts gebucht.';
+      return t('payment.error.PAYMENT_DECLINED');
     case 'ALTERNATIVES_RATE_LIMITED':
-      return 'Zu viele Suchen in kurzer Zeit. Bitte versuche es später noch einmal.';
+      return t('payment.error.ALTERNATIVES_RATE_LIMITED');
     case 'ALTERNATIVES_UNAVAILABLE':
-      return 'Der Buchungsdienst antwortet gerade nicht. Eine laufende Buchung schließen wir automatisch ab, sonst versuche es gleich noch einmal.';
+      return t('payment.error.ALTERNATIVES_UNAVAILABLE');
     case 'PAYPAL_NOT_CONFIGURED':
     case 'PAYPAL_ERROR':
-      return 'PayPal ist gerade nicht erreichbar.';
+      return t('payment.error.PAYPAL_ERROR');
     case 'INVALID_BOOKING_INPUT':
-      return 'Bitte prüfe die Angaben.';
+      return t('payment.error.INVALID_BOOKING_INPUT');
     default:
-      return 'Das hat nicht geklappt. Bitte versuche es noch einmal.';
+      return t('common.failedTryAgain');
   }
 }

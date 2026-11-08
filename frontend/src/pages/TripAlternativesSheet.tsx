@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
 import Sheet from '../components/Sheet';
+import { t } from '../i18n';
 import { HOME_PATH } from '../layout/navigation';
 import ProposalsPanel from '../proposals/ProposalsPanel';
 import { tripAlternatives, type TripAlternative } from '../trips/alternatives';
@@ -31,7 +32,8 @@ export default function TripAlternativesSheet() {
 
   const target = route ? stopById.get(route.toStopId) : undefined;
   const alternatives = consequence && route ? tripAlternatives(consequence, route, target, bookings) : null;
-  const text = consequence ? consequenceText(consequence, target?.name ?? 'dein Ziel') : null;
+  const targetName = target?.name ?? t('alternativesSheet.yourTarget');
+  const text = consequence ? consequenceText(consequence, targetName) : null;
   const tripPath = `${HOME_PATH}/${trip.id}`;
   const from = route ? stopById.get(route.fromStopId) : undefined;
   const targetStay = target
@@ -43,11 +45,11 @@ export default function TripAlternativesSheet() {
       open
       onClose={close}
       icon={<span className="va-warning-icon"><WarningOutlined /></span>}
-      eyebrow={consequence ? `${incidentTypeLabel(consequence.type)} · ${categoryLabel(consequence.category)}` : 'Hinweis'}
-      title={consequence ? incidentTitle(consequence) : 'Hinweis nicht mehr aktuell'}
+      eyebrow={consequence ? `${incidentTypeLabel(consequence.type)} · ${categoryLabel(consequence.category)}` : t('incident.type.OTHER')}
+      title={consequence ? incidentTitle(consequence) : t('incidentSheet.outdated')}
       footer={
         <button type="button" className="va-button va-button-accent va-block" onClick={close}>
-          Zurück zur Karte
+          {t('alternativesSheet.backToMap')}
         </button>
       }
     >
@@ -58,20 +60,20 @@ export default function TripAlternativesSheet() {
             <span className="va-strong">{text.headline}</span>
             {text.detail && <span className="va-small">{text.detail}</span>}
             {summary && (
-              <RouteSituation summary={summary} targetName={target?.name ?? 'dein Ziel'}
+              <RouteSituation summary={summary} targetName={targetName}
                 incidentsOnRoute={incidents.filter((i) => i.routeId === route.id).length} />
             )}
           </div>
 
           <section className="va-section" aria-labelledby="va-proposals-title">
-            <h3 id="va-proposals-title" className="va-eyebrow">Lösungen</h3>
+            <h3 id="va-proposals-title" className="va-eyebrow">{t('alternativesSheet.solutions')}</h3>
             <ProposalsPanel
               tripId={trip.id}
               routeId={route.id}
               incidentId={consequence.incidentId}
               setting={{
-                fromName: from?.name ?? 'Start',
-                targetName: target?.name ?? 'dein Ziel',
+                fromName: from?.name ?? t('alternativesSheet.start'),
+                targetName,
                 targetStayTitle: targetStay?.title ?? null,
               }}
               onChanged={reload}
@@ -88,18 +90,18 @@ export default function TripAlternativesSheet() {
                   ))}
                 </ul>
                 <p className="va-small va-muted">
-                  Löschst du dabei einen Stop, kommen seine Buchungen auf deine To-do-Liste, damit du sie stornieren kannst.
+                  {t('alternativesSheet.deleteHint')}
                 </p>
               </div>
             )}
           </section>
 
           <Link to={`${tripPath}/hinweise/${route.id}/${consequence.incidentId}`} className="va-text-button">
-            Details zum Hinweis · aktualisiert {formatAgo(consequence.updatedAt)}
+            {t('alternativesSheet.details', { ago: formatAgo(consequence.updatedAt) })}
           </Link>
         </>
       ) : (
-        <p className="va-muted">Dieser Hinweis betrifft deine Reise nicht mehr.</p>
+        <p className="va-muted">{t('incidentSheet.notAffected')}</p>
       )}
     </Sheet>
   );
@@ -115,11 +117,14 @@ function RouteSituation({ summary, targetName, incidentsOnRoute }: {
   incidentsOnRoute: number;
 }) {
   if (summary.unpassable || summary.slackMinutes === null) {
-    return incidentsOnRoute > 1 ? <span className="va-small va-muted">{incidentsOnRoute} Hinweise auf dieser Route</span> : null;
+    return incidentsOnRoute > 1 ? <span className="va-small va-muted">{t('alternativesSheet.onRoute', { count: incidentsOnRoute })}</span> : null;
   }
   const incidentsDelay = minutesBetween(summary.plannedArrival, summary.expectedArrival);
   const together = incidentsOnRoute > 1 && incidentsDelay !== null
-    ? `Alle ${incidentsOnRoute} Hinweise zusammen: ${incidentsDelay > 0 ? `+${formatMinutes(incidentsDelay)}` : 'keine Verzögerung'}`
+    ? t('alternativesSheet.together', {
+      count: incidentsOnRoute,
+      delay: incidentsDelay > 0 ? `+${formatMinutes(incidentsDelay)}` : t('alternativesSheet.noDelay'),
+    })
     : null;
   if (summary.plannedTooLate) {
     const plannedLate = minutesBetween(summary.deadline, summary.plannedArrival);
@@ -127,17 +132,22 @@ function RouteSituation({ summary, targetName, incidentsOnRoute }: {
       <>
         {together && <span className="va-small va-muted">{together}</span>}
         <span className="va-small va-muted">
-          Unabhängig davon kommst du laut Planung {plannedLate !== null ? `${formatMinutes(plannedLate)} ` : ''}nach
-          der Ankunftszeit in {targetName} an. Prüf die Abfahrt und die Ankunftszeit deiner Stops.
+          {plannedLate !== null
+            ? t('alternativesSheet.plannedLateBy', { delay: formatMinutes(plannedLate), target: targetName })
+            : t('alternativesSheet.plannedLate', { target: targetName })}
         </span>
       </>
     );
   }
   const slack =
     summary.slackMinutes < 0
-      ? `${formatMinutes(-summary.slackMinutes)} zu spät`
-      : `${formatMinutes(summary.slackMinutes)} Puffer`;
-  return <span className="va-small va-muted">{together ? `${together}, damit ${slack}` : `Insgesamt: ${slack}`}</span>;
+      ? t('alternativesSheet.late', { delay: formatMinutes(-summary.slackMinutes) })
+      : t('alternativesSheet.slack', { slack: formatMinutes(summary.slackMinutes) });
+  return (
+    <span className="va-small va-muted">
+      {together ? t('alternativesSheet.togetherSlack', { together, slack }) : t('alternativesSheet.total', { slack })}
+    </span>
+  );
 }
 
 /** Whole minutes from one point in time to another, null if one is missing. */
@@ -160,7 +170,7 @@ function AlternativeRow({ alternative, tripPath }: { alternative: TripAlternativ
     return (
       <div className="va-alternative va-alternative-off" aria-disabled="true">
         {content}
-        <span className="va-chip va-chip-off">Keine Buchung</span>
+        <span className="va-chip va-chip-off">{t('alternativesSheet.noBooking')}</span>
       </div>
     );
   }

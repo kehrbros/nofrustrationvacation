@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { shortTime, systemTimeZone, wallClock } from './localTime';
 import type { AccommodationBookingInput, AccommodationDraft, Booking, BookingSource } from './model';
 
@@ -213,33 +214,33 @@ export function liteApiHotelId(form: AccommodationForm): string | null {
 const blank = (value: string) => (value.trim() ? value.trim() : null);
 const time = (value: string) => (value ? `${value.slice(0, 5)}:00` : null);
 
-/** German message for the first problem of the form, null if it can be saved. */
+/** Message for the first problem of the form (current language), null if it can be saved. */
 export function validateForm(form: AccommodationForm): string | null {
   if (!form.name.trim()) {
-    return 'Bitte den Namen der Unterkunft angeben.';
+    return t('form.nameMissing');
   }
   if (!form.checkInDate || !form.checkOutDate) {
-    return 'Bitte An- und Abreise angeben.';
+    return t('form.datesMissing');
   }
   const { checkIn, checkOut } = stayTimes(form);
   if (`${form.checkOutDate}T${checkOut}` <= `${form.checkInDate}T${checkIn}`) {
-    return 'Die Abreise muss nach der Anreise liegen.';
+    return t('form.checkOutBeforeCheckIn');
   }
   const price = form.price.trim().replace(',', '.');
   if (price && !/^\d{1,10}(\.\d{1,2})?$/.test(price)) {
-    return 'Bitte den Preis als Zahl angeben, z. B. 412,50.';
+    return t('form.priceInvalid');
   }
   if (price && !/^[A-Za-z]{3}$/.test(form.currency.trim())) {
-    return 'Bitte die Währung als Code angeben, z. B. EUR.';
+    return t('form.currencyInvalid');
   }
-  for (const [value, label] of [[form.manageUrl, 'Link zur Buchung'], [form.website, 'Website']] as const) {
+  for (const [value, label] of [[form.manageUrl, t('form.manageUrl')], [form.website, t('form.website')]] as const) {
     if (value.trim() && !/^https?:\/\/\S+$/i.test(value.trim())) {
-      return `${label} muss mit https:// beginnen.`;
+      return t('form.urlInvalid', { label });
     }
   }
-  for (const [value, label] of [[form.guests, 'Gäste'], [form.rooms, 'Zimmer']] as const) {
+  for (const [value, label] of [[form.guests, t('form.guests')], [form.rooms, t('form.rooms')]] as const) {
     if (value.trim() && !/^([1-9]|[1-9]\d)$/.test(value.trim())) {
-      return `${label}: bitte eine Zahl von 1 bis 99.`;
+      return t('form.numberInvalid', { label });
     }
   }
   return null;

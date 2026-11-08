@@ -3,6 +3,7 @@ import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
+import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
 import { fetchTripBookings } from '../bookings/bookingsApi';
 import type { Booking } from '../bookings/model';
@@ -72,8 +73,8 @@ export default function TripPage() {
     } catch (failure) {
       setDeleteError(
         failure instanceof TripsApiError && failure.code === 'STOP_IN_USE'
-          ? 'Am Stop wird gerade eine Unterkunft gebucht. Bitte versuche es gleich noch einmal.'
-          : 'Der Stop konnte nicht gelöscht werden.',
+          ? t('trip.stopInUse')
+          : t('trip.stopDeleteFailed'),
       );
     }
   };
@@ -85,8 +86,8 @@ export default function TripPage() {
     } catch (failure) {
       setDeleteError(
         failure instanceof TripsApiError && failure.code === 'STOP_IN_USE'
-          ? 'In der Reise wird gerade eine Unterkunft gebucht. Bitte versuche es gleich noch einmal.'
-          : 'Die Reise konnte nicht gelöscht werden.',
+          ? t('trip.tripInUse')
+          : t('trip.tripDeleteFailed'),
       );
     }
   };
@@ -95,8 +96,8 @@ export default function TripPage() {
     const notFound = error instanceof TripsApiError && error.status === 404;
     return (
       <div className="va-page">
-        <Alert type="error" showIcon message={notFound ? 'Diese Reise gibt es nicht.' : 'Die Reise konnte nicht geladen werden.'} />
-        <Link to="/reisen">Zurück zu Meine Reisen</Link>
+        <Alert type="error" showIcon message={notFound ? t('trip.notFound') : t('trip.loadFailed')} />
+        <Link to="/reisen">{t('trip.backToTrips')}</Link>
       </div>
     );
   }
@@ -126,7 +127,7 @@ export default function TripPage() {
   return (
     <div className="va-trip">
       <header className="va-trip-header">
-        <Link to="/reisen" className="va-icon-button" aria-label="Zurück zu Meine Reisen">
+        <Link to="/reisen" className="va-icon-button" aria-label={t('trip.backToTrips')}>
           <ArrowLeftOutlined />
         </Link>
         <div className="va-trip-titles">
@@ -134,15 +135,15 @@ export default function TripPage() {
           <span className="va-muted">{formatPeriod(trip.startAt, trip.endAt)}</span>
         </div>
         <Popconfirm
-          title="Reise löschen?"
+          title={t('trip.deleteTrip')}
           description={tripDeletionText(trip, bookings)}
-          okText="Löschen"
+          okText={t('common.delete')}
           okButtonProps={{ danger: true }}
-          cancelText="Abbrechen"
+          cancelText={t('common.cancel')}
           placement="bottomRight"
           onConfirm={() => removeTrip()}
         >
-          <button type="button" className="va-icon-button" aria-label="Reise löschen">
+          <button type="button" className="va-icon-button" aria-label={t('trip.deleteTripLabel')}>
             <DeleteOutlined />
           </button>
         </Popconfirm>
@@ -170,10 +171,10 @@ export default function TripPage() {
 
       {/* the dock keeps the add button right above the sheet, collapsed or expanded */}
       <div className="va-trip-dock">
-        <Link to="stops/neu" className="va-fab va-fab-dock" aria-label="Stop hinzufügen">
+        <Link to="stops/neu" className="va-fab va-fab-dock" aria-label={t('trip.addStop')}>
           <PlusOutlined />
         </Link>
-        <section aria-label="Stops und Hinweise" className={`va-trip-sheet ${expanded ? 'va-trip-sheet-expanded' : ''}`}>
+        <section aria-label={t('trip.sheet')} className={`va-trip-sheet ${expanded ? 'va-trip-sheet-expanded' : ''}`}>
           <button
             type="button"
             className="va-trip-sheet-toggle"
@@ -183,15 +184,15 @@ export default function TripPage() {
             <span className="va-sheet-grip" aria-hidden="true" />
             <span className="va-row va-space-between va-baseline va-full">
               <span className="va-sheet-summary">
-                {stopCount === 1 ? '1 Stop' : `${stopCount} Stops`} · {incidents.length === 1 ? '1 Hinweis' : `${incidents.length} Hinweise`}
+                {t('common.stops', { count: stopCount })} · {t('common.hints', { count: incidents.length })}
               </span>
-              <span className="va-muted">{expanded ? 'Karte ↓' : 'Liste ↑'}</span>
+              <span className="va-muted">{expanded ? t('trip.showMap') : t('trip.showList')}</span>
             </span>
           </button>
 
           {deleteError && <Alert type="error" showIcon closable message={deleteError} onClose={() => setDeleteError(null)} />}
 
-          {stopCount === 0 && <p className="va-empty">Noch keine Stops. Füge mit + den ersten Stop hinzu.</p>}
+          {stopCount === 0 && <p className="va-empty">{t('trip.noStops')}</p>}
 
           <TodoList tripId={trip.id} version={data} onChanged={reload} compact={!expanded} onExpand={() => setExpanded(true)} />
 
@@ -211,22 +212,25 @@ export default function TripPage() {
                       <span className="va-column va-grow">
                         <span className="va-strong">{stop.name}</span>
                         <span className="va-small va-muted">
-                          {[stop.arrivalAt && `an ${formatDateTime(stop.arrivalAt)}`, stop.departureAt && `ab ${formatDateTime(stop.departureAt)}`]
+                          {[
+                            stop.arrivalAt && t('trip.arrives', { time: formatDateTime(stop.arrivalAt) }),
+                            stop.departureAt && t('trip.departs', { time: formatDateTime(stop.departureAt) }),
+                          ]
                             .filter(Boolean)
-                            .join(' · ') || 'ohne Zeiten'}
-                          {stop.latitude == null && ' · nicht auf der Karte'}
+                            .join(' · ') || t('trip.noTimes')}
+                          {stop.latitude == null && ` · ${t('trip.notOnMap')}`}
                         </span>
                       </span>
                       <Popconfirm
-                        title={`${stop.name} löschen?`}
+                        title={t('trip.deleteStop', { name: stop.name })}
                         description={stopDeletionText(trip, stop.id, bookingsByStop.get(stop.id) ?? [])}
-                        okText="Löschen"
+                        okText={t('common.delete')}
                         okButtonProps={{ danger: true }}
-                        cancelText="Abbrechen"
+                        cancelText={t('common.cancel')}
                         placement="topRight"
                         onConfirm={() => deleteStop(stop.id)}
                       >
-                        <button type="button" className="va-icon-button va-plain" aria-label={`Stop ${stop.name} löschen`}>
+                        <button type="button" className="va-icon-button va-plain" aria-label={t('trip.deleteStopLabel', { name: stop.name })}>
                           <DeleteOutlined />
                         </button>
                       </Popconfirm>
@@ -251,7 +255,7 @@ function StopBookings({ bookings, stopId }: { bookings: Booking[]; stopId: numbe
   return (
     <div className="va-stop-bookings">
       {bookings.map((booking) => (
-        <Link key={booking.id} to={`buchungen/${booking.id}`} className="va-booking-row" aria-label={`Buchung ${booking.title} ansehen`}>
+        <Link key={booking.id} to={`buchungen/${booking.id}`} className="va-booking-row" aria-label={t('trip.viewBooking', { title: booking.title })}>
           <span className="va-booking-icon" aria-hidden="true"><HomeOutlined /></span>
           <span className="va-column va-grow">
             <span className="va-strong">{booking.title}</span>
@@ -260,7 +264,7 @@ function StopBookings({ bookings, stopId }: { bookings: Booking[]; stopId: numbe
         </Link>
       ))}
       <Link to={`stops/${stopId}/buchung`} className="va-text-button va-add-booking">
-        + Buchung
+        {t('trip.addBooking')}
       </Link>
     </div>
   );
@@ -272,14 +276,14 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
   const incident = context.incidentsByRoute.get(route.id)?.[0];
   const line = context.routeLines.get(route.id);
   return (
-    <Link to={`routen/${route.id}`} className="va-route-row" aria-label={`Route ${routeName(route, context.stopById)} ansehen`}>
+    <Link to={`routen/${route.id}`} className="va-route-row" aria-label={t('trip.viewRoute', { route: routeName(route, context.stopById) })}>
       <span className="va-column va-grow">
         <span className="va-strong">{routeName(route, context.stopById)}</span>
         <span className="va-small va-muted">
           {[
-            line?.via && `über ${line.via}`,
+            line?.via && t('trip.via', { via: line.via }),
             line && formatDuration(line.durationSeconds),
-            from?.departureAt ? `Abfahrt ${formatDateTime(from.departureAt)}` : 'Abfahrt offen',
+            from?.departureAt ? t('trip.departure', { time: formatDateTime(from.departureAt) }) : t('trip.departureOpen'),
             incident && incidentTitle(incident),
           ]
             .filter(Boolean)

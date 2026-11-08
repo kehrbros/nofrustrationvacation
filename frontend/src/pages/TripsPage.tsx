@@ -3,6 +3,7 @@ import { Alert, Skeleton } from 'antd';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
+import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
 import ProfileButton from '../profile/ProfileButton';
 import SharedBookingNote from '../bookings/SharedBookingNote';
@@ -16,21 +17,21 @@ import { fetchTrips } from '../trips/tripsApi';
 type Tab = 'upcoming' | 'past';
 
 function stopsText(trip: TripSummary) {
-  const stops = trip.stopCount === 1 ? '1 Stop' : `${trip.stopCount} Stops`;
+  const stops = t('common.stops', { count: trip.stopCount });
   if (trip.phase === 'PAST') {
     return stops;
   }
   if (trip.incidentCount === 0) {
-    return `${stops} · keine Hinweise`;
+    return `${stops} · ${t('trips.noHints')}`;
   }
-  return `${stops} · ${trip.incidentCount === 1 ? '1 Hinweis' : `${trip.incidentCount} Hinweise`}`;
+  return `${stops} · ${t('common.hints', { count: trip.incidentCount })}`;
 }
 
 function IncidentBadge({ count }: { count: number }) {
   return (
     <span className="va-chip va-chip-soft">
       <WarningOutlined aria-hidden="true" />
-      {count === 1 ? '1 Hinweis zur Route' : `${count} Hinweise zur Route`}
+      {t('trips.routeHints', { count })}
     </span>
   );
 }
@@ -44,12 +45,12 @@ function CurrentTrip({ trip }: { trip: TripSummary }) {
         <div className="va-row va-space-between va-baseline">
           <span className="va-card-title-large">{trip.name}</span>
           <span className="va-chip va-chip-ink">
-            Tag {Math.min(day, of)} von {of}
+            {t('trips.dayOf', { day: Math.min(day, of), of })}
           </span>
         </div>
         <span className="va-muted">
           {formatPeriod(trip.startAt, trip.endAt)}
-          {trip.nextStopName && ` · nächster Stop ${trip.nextStopName}`}
+          {trip.nextStopName && ` · ${t('trips.nextStop', { name: trip.nextStopName })}`}
         </span>
         {trip.incidentCount > 0 && <IncidentBadge count={trip.incidentCount} />}
       </div>
@@ -85,14 +86,14 @@ export default function TripsPage() {
   return (
     <div className="va-page">
       <header className="va-page-header">
-        <h1 className="va-page-title">Meine Reisen</h1>
+        <h1 className="va-page-title">{t('trips.title')}</h1>
         <ProfileButton />
       </header>
 
       <SharedBookingNote />
       <InstallBanner />
 
-      {error !== undefined && <Alert type="error" showIcon message="Die Reisen konnten nicht geladen werden." />}
+      {error !== undefined && <Alert type="error" showIcon message={t('trips.loadFailed')} />}
       {loading && !data && <Skeleton active paragraph={{ rows: 6 }} />}
 
       {data && (
@@ -100,18 +101,18 @@ export default function TripsPage() {
           {current && (
             <section aria-labelledby="current-title" className="va-section">
               <h2 id="current-title" className="va-eyebrow">
-                Aktuelle Reise
+                {t('trips.current')}
               </h2>
               <CurrentTrip trip={current} />
             </section>
           )}
 
-          <div role="tablist" aria-label="Weitere Reisen" className="va-tabs">
+          <div role="tablist" aria-label={t('trips.more')} className="va-tabs">
             <button type="button" role="tab" id="tab-upcoming" aria-controls="trip-list" aria-selected={tab === 'upcoming'} onClick={() => setTab('upcoming')}>
-              Anstehende ({upcoming.length})
+              {t('trips.upcoming', { count: upcoming.length })}
             </button>
             <button type="button" role="tab" id="tab-past" aria-controls="trip-list" aria-selected={tab === 'past'} onClick={() => setTab('past')}>
-              Vergangene ({past.length})
+              {t('trips.past', { count: past.length })}
             </button>
           </div>
 
@@ -123,16 +124,16 @@ export default function TripsPage() {
               <p className="va-empty">
                 {tab === 'upcoming'
                   ? data.length === 0
-                    ? 'Noch keine Reisen. Lege mit + deine erste Reise an.'
-                    : 'Keine anstehenden Reisen.'
-                  : 'Keine vergangenen Reisen.'}
+                    ? t('trips.empty')
+                    : t('trips.noUpcoming')
+                  : t('trips.noPast')}
               </p>
             )}
           </div>
         </>
       )}
 
-      <Link to="/reisen/neu" className="va-fab" aria-label="Reise hinzufügen">
+      <Link to="/reisen/neu" className="va-fab" aria-label={t('trips.add')}>
         <PlusOutlined />
       </Link>
     </div>

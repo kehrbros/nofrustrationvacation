@@ -1,5 +1,6 @@
 import { useParams } from 'react-router';
 
+import { t } from '../i18n';
 import { useTripContext } from '../trips/tripContext';
 import AddBookingSheet from './AddBookingSheet';
 import { createAccommodationBooking } from './bookingsApi';
@@ -14,7 +15,7 @@ export default function StopBookingSheet() {
   return (
     <AddBookingSheet
       onClose={close}
-      context={stop ? `Stop ${stop.name}` : undefined}
+      context={stop ? t('booking.stop', { name: stop.name }) : undefined}
       defaults={stayDefaults(trip, stop, bookings)}
       near={stopPoint(stop)}
       onSubmit={async (form, source) => {

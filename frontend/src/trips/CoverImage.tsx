@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { t } from '../i18n';
 import { fetchCoverImage } from './tripsApi';
 
 interface CoverImageProps {
@@ -68,7 +69,7 @@ export default function CoverImage({ tripId, hasCoverImage, className, showHint 
           </>
         )}
       </svg>
-      {showHint && <span className="va-cover-hint">Noch kein Titelfoto</span>}
+      {showHint && <span className="va-cover-hint">{t('cover.none')}</span>}
     </div>
   );
 }

@@ -1316,3 +1316,18 @@ a.va-button {
 .va-todo-line .va-muted {
   margin-left: auto;
 }
+
+/* ---------- language switch in the profile menu ---------- */
+.va-language-switch {
+  flex: none;
+  margin-top: 0;
+  width: 168px;
+}
+.va-language-switch button {
+  min-height: 36px;
+  font-size: 14px;
+}
+.va-language-switch button[aria-pressed='true'] {
+  background: var(--ink);
+  color: #ffffff;
+}

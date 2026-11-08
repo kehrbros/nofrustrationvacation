@@ -1,6 +1,7 @@
 import { Spin } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 
+import { t } from '../i18n';
 import { loadPayPal } from './paypalSdk';
 
 /**
@@ -64,7 +65,7 @@ export default function PayPalButton({ clientId, currency, orderId, approveUrl, 
       <div ref={container} hidden={state === 'fallback'} />
       {state === 'loading' && <div className="va-empty"><Spin size="small" /></div>}
       {state === 'fallback' && approveUrl && (
-        <a className="va-button va-button-accent va-block" href={approveUrl}>Weiter zu PayPal</a>
+        <a className="va-button va-button-accent va-block" href={approveUrl}>{t('payment.toPayPal')}</a>
       )}
     </div>
   );

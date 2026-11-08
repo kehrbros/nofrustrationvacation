@@ -3,6 +3,7 @@ import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { t } from '../i18n';
 import type { StayBookingState } from '../bookings/StayBookingSheet';
 import { TripsApiError } from '../trips/tripsApi';
 import { formatAgo } from '../trips/time';
@@ -74,8 +75,8 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       setRun(await fetchRun(runId));
     } catch (failure) {
       setError(failure instanceof TripsApiError && failure.code === 'NO_ACTIVE_CONSEQUENCE'
-        ? 'Für diesen Hinweis gibt es gerade nichts umzuplanen.'
-        : 'Die Suche konnte nicht gestartet werden. Bitte versuche es noch einmal.');
+        ? t('proposals.nothingToReplan')
+        : t('proposals.searchFailed'));
     } finally {
       setBusy(false);
     }
@@ -98,8 +99,8 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       setDone(doneText(accepted.kind));
     } catch (failure) {
       setError(failure instanceof TripsApiError && failure.code === 'PROPOSAL_NOT_APPLICABLE'
-        ? 'Das geht so nicht mehr, die Reise hat sich inzwischen geändert. Bitte aktualisiere die Lösungen.'
-        : 'Das hat nicht geklappt. Bitte versuche es noch einmal.');
+        ? t('proposals.notApplicable')
+        : t('common.failedTryAgain'));
     } finally {
       setBusy(false);
     }
@@ -123,7 +124,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
   };
 
   if (run === undefined) {
-    return <div className="va-empty"><LoadingOutlined aria-hidden="true" /> Lösungen werden geladen …</div>;
+    return <div className="va-empty"><LoadingOutlined aria-hidden="true" /> {t('proposals.loading')}</div>;
   }
 
   const result = run && (run.status === 'COMPLETED' || run.status === 'COMPLETED_WITHOUT_MODEL') ? run : null;
@@ -133,24 +134,24 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       {done && <div className="va-success"><CheckCircleOutlined aria-hidden="true" /><span>{done}</span></div>}
 
       {run === null && (
-        <p className="va-muted">Wir suchen für dich, wie du trotzdem gut ankommst: andere Strecke, andere Abfahrt oder eine Übernachtung.</p>
+        <p className="va-muted">{t('proposals.intro')}</p>
       )}
       {isRunning(run) && (
         <div className="va-note va-row va-gap" role="status" aria-live="polite">
           <LoadingOutlined aria-hidden="true" />
           <span className="va-column">
-            <span className="va-strong">Lösungen werden gesucht …</span>
-            <span className="va-small">Das dauert meist ein bis zwei Minuten. Du kannst den Dialog schließen.</span>
+            <span className="va-strong">{t('proposals.searching')}</span>
+            <span className="va-small">{t('proposals.searchingHint')}</span>
           </span>
         </div>
       )}
-      {run?.status === 'FAILED' && <p className="va-muted">Die Suche hat nicht geklappt. Versuche es noch einmal.</p>}
-      {result && result.proposals.length === 0 && <p className="va-muted">Es wurde keine passende Lösung gefunden.</p>}
+      {run?.status === 'FAILED' && <p className="va-muted">{t('proposals.runFailed')}</p>}
+      {result && result.proposals.length === 0 && <p className="va-muted">{t('proposals.none')}</p>}
       {result && result.stale && result.proposals.length > 0 && (
-        <Alert type="warning" showIcon message="Die Lage hat sich seitdem geändert, die Zeiten stimmen vielleicht nicht mehr." />
+        <Alert type="warning" showIcon message={t('proposals.stale')} />
       )}
       {result && result.decision === 'DISMISSED' && result.proposals.length > 0 && (
-        <p className="va-small va-muted">Du hast diese Vorschläge verworfen. Du kannst trotzdem einen übernehmen oder sie aktualisieren.</p>
+        <p className="va-small va-muted">{t('proposals.dismissed')}</p>
       )}
 
       {result && result.proposals.length > 0 && (
@@ -175,15 +176,15 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
         {!isRunning(run) && (
           <button type="button" className={`va-button ${result && result.proposals.length > 0 ? 'va-button-outline' : ''}`}
             disabled={busy} onClick={() => void search()}>
-            <ReloadOutlined aria-hidden="true" /> {run === null ? 'Lösungen suchen' : 'Aktualisieren'}
+            <ReloadOutlined aria-hidden="true" /> {run === null ? t('proposals.search') : t('proposals.refresh')}
           </button>
         )}
         <button type="button" className="va-text-button" aria-expanded={manualOpen} aria-controls="va-manual-planning"
           onClick={() => void toggleManual()}>
-          {result && result.proposals.length > 0 ? 'Keine passt, ich plane selbst um' : 'Selbst umplanen'} {manualOpen ? '↑' : '↓'}
+          {result && result.proposals.length > 0 ? t('proposals.noneFits') : t('proposals.planMyself')} {manualOpen ? '↑' : '↓'}
         </button>
       </div>
-      {run && !isRunning(run) && <span className="va-small va-muted">Stand {formatAgo(run.createdAt)}</span>}
+      {run && !isRunning(run) && <span className="va-small va-muted">{t('proposals.asOf', { ago: formatAgo(run.createdAt) })}</span>}
     </div>
   );
 }
@@ -206,14 +207,14 @@ function ProposalCard({ proposal, setting, chosen, open, busy, onOpen, onTake }:
           <span className="va-strong">{texts.title}</span>
           <span className="va-small va-muted">{texts.detail}</span>
         </span>
-        {chosen ? <span className="va-chip va-chip-ink"><CheckOutlined aria-hidden="true" /> Gewählt</span>
-          : proposal.rank === 1 && <span className="va-chip va-chip-soft">Empfohlen</span>}
+        {chosen ? <span className="va-chip va-chip-ink"><CheckOutlined aria-hidden="true" /> {t('proposals.chosen')}</span>
+          : proposal.rank === 1 && <span className="va-chip va-chip-soft">{t('proposals.recommended')}</span>}
       </button>
       {open && (
         <div className="va-proposal-confirm">
           <p>{texts.effect}</p>
           <button type="button" className="va-button va-block" disabled={busy} onClick={onTake}>
-            {busy ? 'Wird übernommen …' : takeLabel(proposal.kind)}
+            {busy ? t('proposals.taking') : takeLabel(proposal.kind)}
           </button>
         </div>
       )}
@@ -236,23 +237,23 @@ function icon(kind: ProposalKind) {
 function takeLabel(kind: ProposalKind): string {
   switch (kind) {
     case 'STOPOVER':
-      return 'Übernehmen und Hotel buchen';
+      return t('proposals.take.STOPOVER');
     case 'TARGET_STAY':
-      return 'Weiter zur Buchung';
+      return t('proposals.take.TARGET_STAY');
     case 'KEEP_ROUTE':
-      return 'So lassen';
+      return t('proposals.take.KEEP_ROUTE');
     default:
-      return 'Übernehmen';
+      return t('proposals.take.other');
   }
 }
 
 function doneText(kind: ProposalKind): string {
   switch (kind) {
     case 'REROUTE':
-      return 'Übernommen. Die Route ist neu geplant.';
+      return t('proposals.done.REROUTE');
     case 'SHIFT_DEPARTURE':
-      return 'Übernommen. Die Abfahrt ist geändert, die Route neu geplant.';
+      return t('proposals.done.SHIFT_DEPARTURE');
     default:
-      return 'Alles klar, an der Reise ändert sich nichts.';
+      return t('proposals.done.other');
   }
 }

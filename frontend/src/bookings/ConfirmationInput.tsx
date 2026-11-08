@@ -1,6 +1,7 @@
 import { FileTextOutlined, LinkOutlined, PaperClipOutlined, SnippetsOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 
+import { t } from '../i18n';
 import type { SharedContent } from './shareTarget';
 
 interface Props {
@@ -55,27 +56,27 @@ export default function ConfirmationInput({
         <Alert
           type="info"
           showIcon
-          message="Automatisches Auslesen ist auf diesem Server nicht eingerichtet."
-          description="Du kannst die Buchung manuell eingeben."
+          message={t('confirmation.unavailable')}
+          description={t('confirmation.unavailableHint')}
         />
       )}
       {sharedText && (
         <div className="va-field">
-          <span className="va-label">An die App geteilt</span>
+          <span className="va-label">{t('confirmation.shared')}</span>
           <span className="va-file">
             {/^https?:\/\/\S+$/.test(sharedText) ? <LinkOutlined aria-hidden="true" /> : <SnippetsOutlined aria-hidden="true" />}
             <span className="va-grow va-ellipsis">{sharedText}</span>
-            <button type="button" className="va-text-button" onClick={removeSharedText}>entfernen</button>
+            <button type="button" className="va-text-button" onClick={removeSharedText}>{t('confirmation.remove')}</button>
           </span>
-          <span className="va-small va-muted">Wird zusammen mit dem eingefügten Text gelesen.</span>
+          <span className="va-small va-muted">{t('confirmation.sharedHint')}</span>
         </div>
       )}
       <div className="va-field">
-        <label htmlFor="booking-text">{sharedText ? 'Weiterer Text der Bestätigung' : 'Text der Bestätigung'}</label>
+        <label htmlFor="booking-text">{sharedText ? t('confirmation.moreText') : t('confirmation.text')}</label>
         <textarea
           id="booking-text"
           rows={7}
-          placeholder="Text der Bestätigungsmail hier einfügen …"
+          placeholder={t('confirmation.placeholder')}
           value={text}
           onChange={(event) => onTextChange(event.target.value)}
         />
@@ -87,22 +88,22 @@ export default function ConfirmationInput({
               navigator.clipboard.readText().then((pasted) => pasted && onTextChange(pasted), () => undefined);
             }}
           >
-            <SnippetsOutlined aria-hidden="true" /> Aus Zwischenablage einfügen
+            <SnippetsOutlined aria-hidden="true" /> {t('confirmation.pasteClipboard')}
           </button>
         )}
       </div>
-      <div className="va-divider" role="separator"><span>und / oder</span></div>
+      <div className="va-divider" role="separator"><span>{t('confirmation.andOr')}</span></div>
       <div className="va-field">
-        <span className="va-label">Screenshot oder PDF</span>
+        <span className="va-label">{t('confirmation.file')}</span>
         {shownFile ? (
           <span className="va-file">
             {shownFile.type === 'application/pdf' ? <FileTextOutlined aria-hidden="true" /> : <PaperClipOutlined aria-hidden="true" />}
-            <span className="va-grow va-ellipsis">{shownFile.name}{sharedFile && ' (geteilt)'}</span>
-            <button type="button" className="va-text-button" onClick={removeFile}>entfernen</button>
+            <span className="va-grow va-ellipsis">{shownFile.name}{sharedFile && ` ${t('confirmation.sharedFile')}`}</span>
+            <button type="button" className="va-text-button" onClick={removeFile}>{t('confirmation.remove')}</button>
           </span>
         ) : (
           <label className="va-button va-button-outline va-block va-file-pick">
-            <PaperClipOutlined aria-hidden="true" /> Datei wählen
+            <PaperClipOutlined aria-hidden="true" /> {t('confirmation.chooseFile')}
             <input
               type="file"
               accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
@@ -110,7 +111,7 @@ export default function ConfirmationInput({
               onChange={(event) => {
                 const chosen = event.target.files?.[0] ?? null;
                 if (chosen && chosen.size > MAX_FILE_BYTES) {
-                  onError('Die Datei ist größer als 5 MB.');
+                  onError(t('confirmation.fileTooLarge'));
                   return;
                 }
                 onError(null);
@@ -121,14 +122,14 @@ export default function ConfirmationInput({
         )}
       </div>
       <p className="va-small va-muted">
-        Wird zur Auswertung an OpenAI übertragen und nicht gespeichert. PIN, Zahlungs- und Gästedaten übernehmen wir nicht.
+        {t('confirmation.privacy')}
       </p>
       {error && (
         <Alert
           type="warning"
           showIcon
           message={error}
-          action={<button type="button" className="va-text-button" onClick={onManual}>Manuell eingeben</button>}
+          action={<button type="button" className="va-text-button" onClick={onManual}>{t('addBooking.manual')}</button>}
         />
       )}
     </div>

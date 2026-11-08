@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { formatDistance, formatDuration } from '../trips/routeOptionText';
 import { formatTime } from '../trips/time';
 import type { RouteCheck } from './alternativesApi';
@@ -19,19 +20,17 @@ export function routeCheckText(check: RouteCheck | null): RouteCheckText | null 
   if (!check?.otherPlace) {
     return null;
   }
-  const move = `${formatDistance(check.distanceMeters)} vom bisherigen Stop entfernt. Nach der Buchung wird der Stop `
-    + 'dorthin verlegt und die Route neu geplant.';
+  const move = t('routeCheck.move', { distance: formatDistance(check.distanceMeters) });
   if (!check.arrivalAt) {
     return { move, arrival: null, warning: null };
   }
-  const delay = check.delaySeconds >= 60 ? ` (inkl. ${formatDuration(check.delaySeconds)} Verzögerung)` : '';
-  const checkIn = check.checkInUntil ? `, Check-in bis ${formatTime(check.checkInUntil)}` : '';
-  const arrival = `Ankunft ca. ${formatTime(check.arrivalAt)}${delay}${checkIn}`;
+  const delay = check.delaySeconds >= 60 ? t('routeCheck.delay', { duration: formatDuration(check.delaySeconds) }) : '';
+  const checkIn = check.checkInUntil ? t('routeCheck.checkIn', { time: formatTime(check.checkInUntil) }) : '';
+  const arrival = t('routeCheck.arrival', { time: formatTime(check.arrivalAt), delay, checkIn });
   const warning = check.blocked
-    ? 'Auch der beste Weg dorthin führt durch eine Sperrung.'
+    ? t('routeCheck.blocked')
     : check.late && check.checkInUntil
-      ? `Du kommst voraussichtlich erst nach dem Check-in-Ende (${formatTime(check.checkInUntil)}) an. Frag beim Hotel `
-        + 'nach einem späten Check-in oder wähle eine Unterkunft näher an der Route.'
+      ? t('routeCheck.late', { time: formatTime(check.checkInUntil) })
       : null;
   return { move, arrival, warning };
 }

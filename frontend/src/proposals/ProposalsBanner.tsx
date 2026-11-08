@@ -2,6 +2,7 @@ import { BulbOutlined } from '@ant-design/icons';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
+import { t } from '../i18n';
 import type { TripDetail, TripIncident } from '../trips/model';
 import { routeName } from '../trips/tripContext';
 import type { Stop } from '../trips/model';
@@ -41,8 +42,8 @@ export default function ProposalsBanner({ trip, incidentsByRoute, stopById }: {
     <Link className="va-trip-banner" to={`alternativen/${route.id}/${incident.incidentId}`} role="status">
       <BulbOutlined aria-hidden="true" />
       <span className="va-column">
-        <span className="va-strong">{count === 1 ? '1 Lösung' : `${count} Lösungen`} für {routeName(route, stopById)}</span>
-        <span className="va-small">Tippen zum Ansehen und Übernehmen.</span>
+        <span className="va-strong">{t('proposals.banner', { count, route: routeName(route, stopById) })}</span>
+        <span className="va-small">{t('proposals.bannerHint')}</span>
       </span>
     </Link>
   );

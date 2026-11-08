@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import { completeTodo, listTodos, reopenTodo } from '../generated/api';
 import type { BookingTodoDto } from '../generated/api';
 import { TripsApiError } from '../trips/tripsApi';
@@ -71,23 +72,17 @@ export async function reopenTodoAgain(todoId: number): Promise<BookingTodo> {
   return toTodo(await unwrap(reopenTodo({ path: { todoId } })));
 }
 
-const reasonTexts: Record<TodoReason, string> = {
-  REPLACED: 'Ersetzt durch eine neue Unterkunft',
-  STOP_REMOVED: 'Der Stop wurde gelöscht',
-  ARRIVAL_LATER: 'Du kommst später an',
-};
-
 export function todoReasonText(todo: BookingTodo): string {
-  return reasonTexts[todo.reason];
+  return t(`todo.reason.${todo.reason}`);
 }
 
 /** "Bei Booking.com stornieren", "Hotel Adler informieren" */
 export function todoActionText(todo: BookingTodo): string {
   if (todo.kind === 'NOTIFY_LATE_ARRIVAL') {
-    return `${todo.title} informieren`;
+    return t('todo.notify', { title: todo.title });
   }
-  if (todo.bookedInApp) {
-    return `${todo.title} stornieren`;
+  if (todo.bookedInApp || !todo.provider) {
+    return t('todo.cancel', { title: todo.title });
   }
-  return todo.provider ? `Bei ${todo.provider} stornieren` : `${todo.title} stornieren`;
+  return t('todo.cancelAt', { provider: todo.provider });
 }
