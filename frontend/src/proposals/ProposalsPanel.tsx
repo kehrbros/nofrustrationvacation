@@ -24,17 +24,18 @@ const POLL_MS = 2500;
 /**
  * The solutions for a route hit by an incident: searched in the background when asked for (again at any time), the
  * best first. Taking one changes the trip (route, departure, a night on the way) or leads to booking the hotel;
- * "plan myself" dismisses them. See Docs/advisor.md#frontend.
+ * opening "plan myself" dismisses open ones. See Docs/advisor.md#frontend.
  */
-export default function ProposalsPanel({ tripId, routeId, incidentId, setting, onChanged, onPlanMyself }: {
+export default function ProposalsPanel({ tripId, routeId, incidentId, setting, onChanged, manualOpen, onToggleManual }: {
   tripId: number;
   routeId: number;
   incidentId: number;
   setting: ProposalSetting;
   /** The trip changed, load it again. */
   onChanged: () => void;
-  /** Dismissed: show the ways to plan again by hand. */
-  onPlanMyself: () => void;
+  /** The ways to plan again by hand are shown (below the panel, by the caller). */
+  manualOpen: boolean;
+  onToggleManual: (open: boolean) => void;
 }) {
   const navigate = useNavigate();
   // undefined: loading
@@ -97,23 +98,28 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       setDone(doneText(accepted.kind));
     } catch (failure) {
       setError(failure instanceof TripsApiError && failure.code === 'PROPOSAL_NOT_APPLICABLE'
-        ? 'Das geht so nicht mehr, die Reise hat sich inzwischen geändert. Bitte suche neu.'
+        ? 'Das geht so nicht mehr, die Reise hat sich inzwischen geändert. Bitte aktualisiere die Lösungen.'
         : 'Das hat nicht geklappt. Bitte versuche es noch einmal.');
     } finally {
       setBusy(false);
     }
   };
 
-  const dismiss = async () => {
-    if (run && !isRunning(run) && run.decision !== 'DISMISSED') {
+  /** Opening "plan myself" while proposals wait for a decision dismisses them. */
+  const toggleManual = async () => {
+    if (manualOpen) {
+      onToggleManual(false);
+      return;
+    }
+    setSelected(null);
+    onToggleManual(true);
+    if (run && !isRunning(run) && run.decision == null && run.proposals.length > 0) {
       try {
         setRun(await dismissProposals(run.runId));
       } catch {
         // planning by hand works without it
       }
     }
-    setSelected(null);
-    onPlanMyself();
   };
 
   if (run === undefined) {
@@ -144,7 +150,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
         <Alert type="warning" showIcon message="Die Lage hat sich seitdem geändert, die Zeiten stimmen vielleicht nicht mehr." />
       )}
       {result && result.decision === 'DISMISSED' && result.proposals.length > 0 && (
-        <p className="va-small va-muted">Du hast diese Vorschläge verworfen. Du kannst trotzdem einen übernehmen oder neu suchen.</p>
+        <p className="va-small va-muted">Du hast diese Vorschläge verworfen. Du kannst trotzdem einen übernehmen oder sie aktualisieren.</p>
       )}
 
       {result && result.proposals.length > 0 && (
@@ -169,11 +175,12 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
         {!isRunning(run) && (
           <button type="button" className={`va-button ${result && result.proposals.length > 0 ? 'va-button-outline' : ''}`}
             disabled={busy} onClick={() => void search()}>
-            <ReloadOutlined aria-hidden="true" /> {run === null ? 'Lösungen suchen' : 'Neu suchen'}
+            <ReloadOutlined aria-hidden="true" /> {run === null ? 'Lösungen suchen' : 'Aktualisieren'}
           </button>
         )}
-        <button type="button" className="va-text-button" onClick={() => void dismiss()}>
-          Keine passt, ich plane selbst um
+        <button type="button" className="va-text-button" aria-expanded={manualOpen} aria-controls="va-manual-planning"
+          onClick={() => void toggleManual()}>
+          {result && result.proposals.length > 0 ? 'Keine passt, ich plane selbst um' : 'Selbst umplanen'} {manualOpen ? '↑' : '↓'}
         </button>
       </div>
       {run && !isRunning(run) && <span className="va-small va-muted">Stand {formatAgo(run.createdAt)}</span>}
