@@ -7,6 +7,7 @@
     <div class="va-sheet-inner">
         <h1 class="va-title">Konto erstellen</h1>
         <p class="va-note va-note-error" th:if="${error}" th:text="${error}" role="alert"></p>
+        <p class="va-note" th:if="${param.expired}" role="status">Die Seite war zu lange geöffnet. Bitte gib deine Daten noch einmal ein.</p>
         <form class="va-form" th:action="@{/register}" method="post">
             <label class="va-field">Benutzername
                 <input class="va-input" type="text" name="username" th:value="${username}" autocomplete="username" autocapitalize="none" required autofocus>

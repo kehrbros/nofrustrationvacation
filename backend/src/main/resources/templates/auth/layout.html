@@ -83,6 +83,7 @@
             width: 100%;
         }
         .va-btn-primary { background: var(--ink); color: #ffffff; }
+        a.va-btn-link { display: flex; align-items: center; justify-content: center; text-decoration: none; }
         .va-btn-primary:hover { background: #2a2a2a; }
         .va-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
         .va-btn-small { height: 38px; font-size: 14px; width: auto; padding: 0 16px; }
@@ -127,6 +128,20 @@
             .va-sheet { flex: none; width: 100%; max-width: 480px; border-radius: 28px; padding: 32px 28px; }
         }
     </style>
+    <script>
+        // a second submit of the same form (double click, Enter + click) would carry the CSRF token the first login
+        // already replaced and end on a 403, see StaleFormAccessDeniedHandler. Restored from the back/forward cache
+        // the form can be sent again.
+        document.addEventListener('submit', function (event) {
+            if (event.target.dataset.sent) {
+                event.preventDefault();
+            }
+            event.target.dataset.sent = 'true';
+        });
+        window.addEventListener('pageshow', function () {
+            document.querySelectorAll('form').forEach(function (form) { delete form.dataset.sent; });
+        });
+    </script>
 </head>
 <body>
 <header th:fragment="hero(tagline)" class="va-hero">

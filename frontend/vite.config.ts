@@ -51,7 +51,10 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
         navigateFallback: '/index.html',
         // backend and identity provider paths must reach the server, never the cached app shell
-        navigateFallbackDenylist: [/^\/api\//, /^\/oauth2\//, /^\/login/, /^\/logout/, /^\/\.well-known\//, /^\/mcp/],
+        navigateFallbackDenylist: [
+          /^\/api\//, /^\/oauth2\//, /^\/login/, /^\/logout/, /^\/register/, /^\/account\//, /^\/connect\//,
+          /^\/error/, /^\/\.well-known\//, /^\/mcp/,
+        ],
         runtimeCaching: [
           {
             // map tiles and styles: last seen map also offline

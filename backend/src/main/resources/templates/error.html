@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<!--/* Error page for browsers (replaces Spring's Whitelabel page), JSON clients still get the JSON error.
+       Texts in messages*.properties (German and English, by Accept-Language). */-->
+<html xmlns:th="http://www.thymeleaf.org" th:lang="${#locale.language}">
+<head th:replace="~{auth/layout :: head(#{error.page.title})}"></head>
+<body>
+<header th:replace="~{auth/layout :: hero(#{error.page.tagline})}"></header>
+<main class="va-sheet">
+    <div class="va-sheet-inner" th:with="kind=${status == 403 ? 'forbidden' : (status == 404 ? 'notFound' : (status != null and status >= 500 ? 'server' : 'other'))}">
+        <h1 class="va-title" th:text="#{|error.${kind}.title|}">Etwas ist schiefgelaufen</h1>
+        <p class="va-note" th:text="#{|error.${kind}.text|}">Bitte versuche es noch einmal.</p>
+        <a class="va-btn va-btn-primary va-btn-link" th:href="${@environment.getProperty('nfv.frontend-url')} + '/'"
+           th:text="#{error.page.toApp}">Zur App</a>
+        <p class="va-switch" th:if="${status != null}" th:text="#{error.page.code(${status})}">Fehlercode 403</p>
+    </div>
+</main>
+</body>
+</html>
