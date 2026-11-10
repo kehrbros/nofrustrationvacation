@@ -7,6 +7,7 @@ import com.nfv.network.logic.RegionImport;
 import com.nfv.network.logic.RegionStatus;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 
@@ -20,8 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @SpringBootTest
 class RegionImportTest {
     private static final String REGION = "wellington";
-    private static final Path GRAPHS = Path.of("target/graphs/wellington");
 
+    /** One directory per surefire fork, see pom.xml */
+    @Value("${nfv.network.regions.wellington.graph-dir}")
+    private Path graphs;
     @Autowired
     private RegionImport regionImport;
     @Autowired
@@ -61,8 +64,8 @@ class RegionImportTest {
         assertThat(count("SELECT COUNT(*) FROM edge_mapping WHERE extract_version_id = ?", first)).isZero();
         assertThat(count("SELECT COUNT(*) FROM road_segment WHERE region = ? AND retired_at IS NOT NULL", REGION))
                 .isZero();
-        assertThat(Files.exists(GRAPHS.resolve(Long.toString(first)))).isFalse();
-        assertThat(Files.isDirectory(GRAPHS.resolve(Long.toString(second)))).isTrue();
+        assertThat(Files.exists(graphs.resolve(Long.toString(first)))).isFalse();
+        assertThat(Files.isDirectory(graphs.resolve(Long.toString(second)))).isTrue();
     }
 
     @Test

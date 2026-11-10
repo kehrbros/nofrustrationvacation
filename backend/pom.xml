@@ -16,6 +16,8 @@
         <java.version>25</java.version>
         <lombok.version>1.18.42</lombok.version>
         <springdoc.version>3.0.3</springdoc.version>
+        <!-- one test JVM per two cores: 2 on a 4-core laptop, 1 on the 2-core CI runner (2 JVMs there were slower) -->
+        <surefire.forkCount>0.5C</surefire.forkCount>
         <archunit.version>1.5.0</archunit.version>
         <graphhopper.version>11.1</graphhopper.version>
         <timeshape.version>2024a.25</timeshape.version>
@@ -197,56 +199,20 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
-                <configuration>
-                    <jvmArguments>-Dspring.application.admin.enabled=true</jvmArguments>
-                </configuration>
-                <executions>
-                    <execution>
-                        <id>start-for-openapi</id>
-                        <phase>pre-integration-test</phase>
-                        <goals>
-                            <goal>start</goal>
-                        </goals>
-                        <configuration>
-                            <!-- Test properties: PostGIS via Testcontainers, no ECB or PayPal calls -->
-                            <useTestClasspath>true</useTestClasspath>
-                            <additionalClasspathElements>
-                                <additionalClasspathElement>${project.build.testOutputDirectory}</additionalClasspathElement>
-                            </additionalClasspathElements>
-                            <!-- CI runners need longer than the default 30 s (PostGIS container, 30 migrations) -->
-                            <wait>1000</wait>
-                            <maxAttempts>180</maxAttempts>
-                        </configuration>
-                    </execution>
-                    <execution>
-                        <id>stop-after-openapi</id>
-                        <phase>post-integration-test</phase>
-                        <goals>
-                            <goal>stop</goal>
-                        </goals>
-                    </execution>
-                </executions>
             </plugin>
+            <!-- frontend/openapi.json is written by OpenApiSpecTest, CI fails if it differs from the committed file -->
             <plugin>
-                <groupId>org.springdoc</groupId>
-                <artifactId>springdoc-openapi-maven-plugin</artifactId>
-                <version>1.5</version>
-                <executions>
-                    <execution>
-                        <id>generate-openapi</id>
-                        <phase>integration-test</phase>
-                        <goals>
-                            <goal>generate</goal>
-                        </goals>
-                    </execution>
-                </executions>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <!-- Committed contract for the frontend, CI fails if it differs from the generated spec -->
-                    <outputDir>${project.basedir}/../frontend</outputDir>
-                    <outputFileName>openapi.json</outputFileName>
-                    <failOnError>true</failOnError>
-                    <!-- server.port of application.properties, the start goal above uses it as well -->
-                    <apiDocsUrl>http://localhost:18180/v3/api-docs</apiDocsUrl>
+                    <!-- Test classes run in parallel JVMs, each with its own PostGIS container and Spring contexts
+                         (Docs/architecture.md#tests). -Dsurefire.forkCount=1 runs them in one JVM. -->
+                    <forkCount>${surefire.forkCount}</forkCount>
+                    <reuseForks>true</reuseForks>
+                    <systemPropertyVariables>
+                        <!-- GraphHopper writes the graph to disk, parallel JVMs must not share the directory -->
+                        <nfv.network.regions.wellington.graph-dir>target/graphs/wellington-${surefire.forkNumber}</nfv.network.regions.wellington.graph-dir>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
         </plugins>

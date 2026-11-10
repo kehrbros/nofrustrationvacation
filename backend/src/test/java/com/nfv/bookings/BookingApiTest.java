@@ -4,6 +4,8 @@ import com.jayway.jsonpath.JsonPath;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.assistant.logic.ExtractionInput;
 import com.nfv.assistant.logic.StructuredExtraction;
+import com.nfv.bookings.logic.LiteApi;
+import com.nfv.paypal.PayPalCheckout;
 import com.nfv.user.entities.AppUser;
 import com.nfv.user.logic.AppUserProvisioning;
 import com.nfv.user.security.AppUserAuthentication;
@@ -57,6 +59,11 @@ class BookingApiTest {
     private AppUserProvisioning appUserProvisioning;
     @MockitoBean
     private StructuredExtraction extraction;
+    /** Unused here, mocked only so the Spring context is shared with AlternativeApiTest and LiteApiStayOptionsTest. */
+    @MockitoBean
+    private LiteApi liteApi;
+    @MockitoBean
+    private PayPalCheckout checkout;
 
     @Autowired
     private com.nfv.bookings.logic.BookingTodos todos;

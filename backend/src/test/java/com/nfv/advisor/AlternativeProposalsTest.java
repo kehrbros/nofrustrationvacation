@@ -118,7 +118,7 @@ class AlternativeProposalsTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         username = "advisor-" + UUID.randomUUID();
         user = login(username);

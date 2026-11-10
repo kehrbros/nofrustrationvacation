@@ -94,7 +94,7 @@ class StopoversTest {
     @BeforeEach
     void wellington() {
         if (regionImport.status(REGION).state() != RegionStatus.State.READY) {
-            regionImport.importRegion(REGION);
+            regionImport.loadOrImport(REGION);
         }
         versionId = regionImport.status(REGION).extractVersionId();
         userId = inTransaction(() -> appUserProvisioning.findOrCreate("stopover-" + UUID.randomUUID(), null, null)

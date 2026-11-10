@@ -23,8 +23,12 @@ jobs:
           java-version: '25'
           cache: maven
           cache-dependency-path: backend/pom.xml
+      # OpenApiSpecTest writes frontend/openapi.json, no jar needed for the tests
       - name: Test and generate OpenAPI spec
-        run: mvn -B verify
+        run: mvn -B test
+        env:
+          # the runner is thrown away after the job, no reaper container needed to remove the test containers
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
       - name: Check committed OpenAPI spec
         working-directory: .
         run: |

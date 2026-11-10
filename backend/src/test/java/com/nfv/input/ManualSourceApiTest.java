@@ -91,7 +91,7 @@ class ManualSourceApiTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         // incidents of other test classes in the shared database must not move or block these routes
         jdbc.update("UPDATE incident SET valid_to = valid_from");

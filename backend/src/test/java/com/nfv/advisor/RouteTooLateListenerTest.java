@@ -85,7 +85,7 @@ class RouteTooLateListenerTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         when(conversation.runForSystem(any())).thenReturn(JSON.readTree(
                 "{\"summary\":\"Stay.\",\"proposals\":[{\"option_id\":\"keep_route\",\"reason\":\"-\"}]}"));

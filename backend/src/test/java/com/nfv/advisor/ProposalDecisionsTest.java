@@ -119,7 +119,7 @@ class ProposalDecisionsTest {
     @BeforeEach
     void setUp() {
         if (regionImport.status("wellington").state() != RegionStatus.State.READY) {
-            regionImport.importRegion("wellington");
+            regionImport.loadOrImport("wellington");
         }
         String username = "decisions-" + UUID.randomUUID();
         userId = inTransaction(() -> appUserProvisioning.findOrCreate(username, null, null).getId());
