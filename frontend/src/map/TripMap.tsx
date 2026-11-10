@@ -6,6 +6,7 @@ import { t } from '../i18n';
 
 import { incidentTitle } from '../trips/incidentText';
 import { pawnElement } from './pawn';
+import { metersPerPixel } from './scale';
 import type { CurrentPosition } from './position';
 import type { LinePoint, Route, RouteLine, Stop, TripIncident } from '../trips/model';
 import type { RoutePreview } from '../trips/tripContext';
@@ -44,6 +45,13 @@ export interface TripMapProps {
   bottomPadding: number;
   /** Any tap on the map itself (not on a chip or a control), e.g. to collapse the expanded trip sheet. */
   onMapClick?: () => void;
+  /**
+   * Set: the next tap anywhere picks that point (routes and chips do not open), e.g. the place of a test incident;
+   * with the metres per screen pixel there, to snap within a distance on screen.
+   */
+  onPickPoint?: ((point: LinePoint, metersPerPixel: number) => void) | null;
+  /** Point picked for a dialog, marked with a pink pin. */
+  pickedPoint?: LinePoint | null;
   /** The user's current position, marked with a green pawn while known. */
   position?: CurrentPosition;
   /** Latest request to show the whole trip or the position; a position request waits for the first fix. */
@@ -115,6 +123,8 @@ export default function TripMap({
   onResolvedClick,
   bottomPadding,
   onMapClick,
+  onPickPoint,
+  pickedPoint,
   position,
   focus,
 }: TripMapProps) {
@@ -126,8 +136,9 @@ export default function TripMap({
   const consequences = useRef(new Map<string, TripIncident>());
   const pawn = useRef<maplibregl.Marker | null>(null);
   const focused = useRef<number | null>(null);
-  const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick });
-  callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick };
+  const picked = useRef<maplibregl.Marker | null>(null);
+  const callbacks = useRef({ onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick, onPickPoint });
+  callbacks.current = { onRouteClick, onConsequenceClick, onResolvedClick, onPreviewSelect: preview?.onSelect, onMapClick, onPickPoint };
 
   useEffect(() => {
     if (!container.current) {
@@ -143,7 +154,14 @@ export default function TripMap({
     instance.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
     // top-left: the trip sheet covers the bottom corners on phones
     instance.addControl(new maplibregl.AttributionControl({ compact: false }), 'top-left');
-    instance.on('click', () => callbacks.current.onMapClick?.());
+    instance.on('click', (event) => {
+      const pick = callbacks.current.onPickPoint;
+      if (pick) {
+        pick({ latitude: event.lngLat.lat, longitude: event.lngLat.lng }, metersPerPixel(event.lngLat.lat, instance.getZoom()));
+      } else {
+        callbacks.current.onMapClick?.();
+      }
+    });
     instance.on('load', () => {
       instance.addSource('routes', { type: 'geojson', data: EMPTY });
       instance.addSource('route-preview', { type: 'geojson', data: EMPTY });
@@ -214,6 +232,9 @@ export default function TripMap({
       });
       for (const layer of ['routes-line', 'routes-unplanned']) {
         instance.on('click', layer, (event) => {
+          if (callbacks.current.onPickPoint) {
+            return;
+          }
           const routeId = event.features?.[0]?.properties?.routeId;
           const onConsequence = instance.queryRenderedFeatures(event.point, { layers: ['consequences-casing'] }).length > 0;
           if (typeof routeId === 'number' && !onConsequence) {
@@ -224,7 +245,7 @@ export default function TripMap({
       for (const layer of ['consequences-casing', 'consequences-line']) {
         instance.on('click', layer, (event) => {
           const consequence = consequences.current.get(String(event.features?.[0]?.properties?.key));
-          if (consequence) {
+          if (consequence && !callbacks.current.onPickPoint) {
             // the route line below would open the route sheet as well
             event.originalEvent.stopPropagation();
             event.preventDefault();
@@ -235,7 +256,7 @@ export default function TripMap({
       for (const layer of ['route-preview-other', 'route-preview-selected']) {
         instance.on('click', layer, (event) => {
           const index = event.features?.[0]?.properties?.index;
-          if (typeof index === 'number') {
+          if (typeof index === 'number' && !callbacks.current.onPickPoint) {
             callbacks.current.onPreviewSelect?.(index);
           }
         });
@@ -251,6 +272,7 @@ export default function TripMap({
     return () => {
       loaded.current = false;
       pawn.current = null;
+      picked.current = null;
       instance.remove();
       map.current = null;
     };
@@ -451,6 +473,28 @@ export default function TripMap({
     pawn.current.setLngLat([here.longitude, here.latitude]).addTo(instance);
     pawn.current.getElement().classList.toggle('va-map-pawn-stale', stale);
   }, [here, stale]);
+
+  // pin of a picked point, crosshair while picking
+  const picking = !!onPickPoint;
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) {
+      return;
+    }
+    instance.getCanvas().style.cursor = picking ? 'crosshair' : '';
+    if (!pickedPoint) {
+      picked.current?.remove();
+      picked.current = null;
+      return;
+    }
+    if (!picked.current) {
+      const element = document.createElement('div');
+      element.className = 'va-map-picked';
+      element.setAttribute('aria-hidden', 'true');
+      picked.current = new maplibregl.Marker({ element, anchor: 'center' });
+    }
+    picked.current.setLngLat([pickedPoint.longitude, pickedPoint.latitude]).addTo(instance);
+  }, [pickedPoint, picking]);
 
   // each focus request once; one for the position waits until it is known
   useEffect(() => {

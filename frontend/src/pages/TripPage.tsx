@@ -1,10 +1,11 @@
-import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined } from '@ant-design/icons';
+import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined, ThunderboltFilled } from '@ant-design/icons';
 import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
 import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
+import { hasRole } from '../auth/session';
 import { fetchTripBookings } from '../bookings/bookingsApi';
 import type { Booking } from '../bookings/model';
 import { stayLabel } from '../bookings/text';
@@ -16,7 +17,7 @@ import ProposalsBanner from '../proposals/ProposalsBanner';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
-import type { RouteLine, TripIncident } from '../trips/model';
+import type { LinePoint, RouteLine, TripIncident } from '../trips/model';
 import { formatDuration } from '../trips/routeOptionText';
 import { fetchRouteLines } from '../trips/routesApi';
 import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
@@ -46,6 +47,20 @@ export default function TripPage() {
   );
   const [expanded, setExpanded] = useState(false);
   const [routePreview, setRoutePreview] = useState<RoutePreview | null>(null);
+  // picking a point on the map for a dialog (test incident); the function is kept in an object, React would call it
+  type PointPicker = (point: LinePoint, metersPerPixel: number) => void;
+  const [pointPicker, setPointPickerState] = useState<{ onPick: PointPicker } | null>(null);
+  const setPointPicker = useCallback((onPick: PointPicker | null) => setPointPickerState(onPick ? { onPick } : null), []);
+  const [pickedPoint, setPickedPoint] = useState<LinePoint | null>(null);
+  // test incidents only for the role tester, the endpoint needs it (Docs/traffic-feed.md#testquelle-manual)
+  const [tester, setTester] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void hasRole('tester').then((value) => active && setTester(value));
+    return () => {
+      active = false;
+    };
+  }, []);
   const position = useCurrentPosition();
   const [focus, setFocus] = useState<MapFocus | null>(null);
   // why the position button cannot help, shown for a moment next to the buttons
@@ -146,6 +161,8 @@ export default function TripPage() {
     bookingsByStop,
     routeLines,
     setRoutePreview,
+    setPointPicker,
+    setPickedPoint,
     reload,
     close,
   };
@@ -200,6 +217,8 @@ export default function TripPage() {
             onResolvedClick={openResolved}
             bottomPadding={SHEET_COLLAPSED}
             onMapClick={collapse}
+            onPickPoint={pointPicker?.onPick ?? null}
+            pickedPoint={pickedPoint}
             position={position}
             focus={focus}
           />
@@ -209,6 +228,11 @@ export default function TripPage() {
       {/* the dock keeps the add button right above the sheet, collapsed or expanded */}
       <div className="va-trip-dock">
         <div className="va-dock-actions">
+          {tester && (
+            <Link to="stoerungen/neu" className="va-fab va-fab-dock va-fab-incident" aria-label={t('testIncident.open')} title={t('testIncident.open')}>
+              <ThunderboltFilled />
+            </Link>
+          )}
           {positionHint && (
             <span className="va-dock-hint" role="status">
               {positionHint}

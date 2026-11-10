@@ -42,6 +42,29 @@ export async function accessToken(): Promise<string | undefined> {
 }
 
 /**
+ * Whether the access token carries the role, claim `roles` (own IdP) or `realm_access.roles` (Keycloak), as the
+ * backend reads it (`nfv.security.roles-claim`). Only to show or hide UI; the backend checks the role itself.
+ */
+export async function hasRole(role: string): Promise<boolean> {
+  return tokenRoles(await accessToken()).includes(role);
+}
+
+export function tokenRoles(token: string | undefined): string[] {
+  const payload = token?.split('.')[1];
+  if (!payload) {
+    return [];
+  }
+  try {
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+    const claims = JSON.parse(json) as { roles?: unknown; realm_access?: { roles?: unknown } };
+    const roles = Array.isArray(claims.roles) ? claims.roles : claims.realm_access?.roles;
+    return Array.isArray(roles) ? roles.filter((value): value is string => typeof value === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Renews the access token with the refresh token, concurrent calls share one renewal. Resolves to the renewed user,
  * or the current one if renewing failed but its token is still valid, otherwise null.
  */

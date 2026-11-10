@@ -19,6 +19,13 @@ export interface TripContext {
   routeLines: Map<number, RouteLine>;
   /** Shows the suggestions of a route on the map (null: none), see RouteSheet. */
   setRoutePreview: (preview: RoutePreview | null) => void;
+  /**
+   * Set: the next tap on the map picks a point and calls it with the metres per screen pixel there (routes and chips
+   * do not open); null ends picking.
+   */
+  setPointPicker: (onPick: ((point: LinePoint, metersPerPixel: number) => void) | null) => void;
+  /** Point marked on the map with a pink pin, e.g. the place of a test incident; null: none. */
+  setPickedPoint: (point: LinePoint | null) => void;
   /** Loads trip and incidents again, e.g. after adding a stop. */
   reload: () => void;
   /** Back to the map. */

@@ -7,6 +7,8 @@
   --accent: #f2b705;
   --accent-soft: #fff4cc;
   --map-bg: #eef0ea;
+  /* test tools only (report a test incident), so they never look like a normal function */
+  --test-pink: #e6338a;
   font-family: Outfit, system-ui, -apple-system, 'Segoe UI', sans-serif;
   color: var(--ink);
 }
@@ -228,6 +230,64 @@ a {
 }
 .va-dock-actions .va-fab-dock {
   margin: 0;
+}
+/* test incident button (role tester): same row, alone on the left; the row then spans the width */
+.va-dock-actions:has(.va-fab-incident) {
+  align-self: stretch;
+  margin-left: 20px;
+}
+.va-dock-actions .va-fab-incident {
+  margin-right: auto;
+  background: var(--test-pink);
+  color: #ffffff;
+}
+.va-incident-badge {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  background: var(--test-pink);
+  border: 2px solid var(--ink);
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  color: #ffffff;
+}
+/* while a point is picked on the map: the sheet is down, this hint at the top */
+.va-pick-hint {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(100vw - 32px);
+  font-size: 15px;
+  background: #ffffff;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 8px 12px;
+}
+.va-test-incident {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  padding: 10px 12px;
+}
+.va-map-picked {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--test-pink);
+  border: 3px solid #ffffff;
+  outline: 2px solid var(--ink);
 }
 .va-map-button {
   pointer-events: auto;
