@@ -1,4 +1,4 @@
-import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined, ThunderboltFilled } from '@ant-design/icons';
+import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
@@ -230,7 +230,8 @@ export default function TripPage() {
         <div className="va-dock-actions">
           {tester && (
             <Link to="stoerungen/neu" className="va-fab va-fab-dock va-fab-incident" aria-label={t('testIncident.open')} title={t('testIncident.open')}>
-              <ThunderboltFilled />
+              <ThunderboltOutlined />
+              <span className="va-fab-label" aria-hidden="true">{t('testIncident.label')}</span>
             </Link>
           )}
           {positionHint && (

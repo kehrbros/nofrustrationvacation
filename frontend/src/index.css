@@ -237,9 +237,25 @@ a {
   margin-left: 20px;
 }
 .va-dock-actions .va-fab-incident {
+  /* relative for the caption; .va-fab's right/bottom (meant for position: fixed) would then shift it off screen */
+  position: relative;
+  right: auto;
+  bottom: auto;
   margin-right: auto;
   background: var(--test-pink);
   color: #ffffff;
+}
+/* tiny caption below the round button, inside the dock's bottom margin so the row keeps its height */
+.va-fab-label {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ink);
 }
 .va-incident-badge {
   flex: none;

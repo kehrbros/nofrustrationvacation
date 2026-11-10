@@ -428,6 +428,7 @@ export const de = {
   },
   testIncident: {
     open: 'Störung melden (Test)',
+    label: 'Test Issue',
     eyebrow: 'Test · Störung melden',
     eyebrowEdit: 'Test · Meldung ändern',
     mine: 'Deine Testmeldungen auf diesem Gerät',

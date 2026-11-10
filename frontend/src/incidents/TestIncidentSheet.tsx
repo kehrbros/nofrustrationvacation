@@ -1,4 +1,4 @@
-import { AimOutlined, ThunderboltFilled } from '@ant-design/icons';
+import { AimOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 
@@ -148,7 +148,7 @@ export default function TestIncidentSheet() {
         onClose={done}
         eyebrow={editingId ? t('testIncident.eyebrowEdit') : t('testIncident.eyebrow')}
         title={titles[step]}
-        icon={<span className="va-incident-badge" aria-hidden="true"><ThunderboltFilled /></span>}
+        icon={<span className="va-incident-badge" aria-hidden="true"><ThunderboltOutlined /></span>}
         footer={footer()}
       >
         {previous && (
