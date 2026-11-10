@@ -32,7 +32,7 @@
 | `user/security/AppUserJwtAuthenticationConverter` | JWT → `AppUser` (anlegen falls nötig) → `AppUserAuthentication` mit Principal `CurrentUser(appUserId, username)` |
 | `user/logic/AppUserProvisioning` | race-sicheres Find-or-Create |
 | `common/data/UsernameRevisionListener` | schreibt den Username in `revinfo.username` (Envers) |
-| `auth/logic/TestAccountInitializer` | legt beim Start `test`/`test` an, wenn noch kein `AuthAccount` existiert (`nfv.auth.test-account.enabled`) |
+| `auth/logic/TestAccountInitializer` | legt beim Start `test`/`test` mit Rolle `tester` an, wenn noch kein `AuthAccount` existiert (`nfv.auth.test-account.enabled`); ein bestehendes `test` bekommt `tester` beim Start nachträglich, aber nur wenn es das älteste Konto ist (also vom Initializer angelegt, nicht fremd registriert). Rolle wirkt im Frontend erst nach neuem Login (Token) |
 
 - Signaturschlüssel: `nfv.auth.signing-key` (PEM, PKCS#8 RSA, Secret `NFV_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
 - Autorisierungen (Codes, Access und Refresh Tokens) und Consents liegen in der Datenbank (`JdbcOAuth2AuthorizationService`).
