@@ -44,10 +44,18 @@ class AlternativeRanking {
             stay, pricePerNight per night.
             First decide for every candidate whether it is comparable to the current accommodation: the same kind of \
             accommodation (e.g. hotel, motel, apartment, lodge, holiday park, hostel/backpackers) and a similar \
-            standard of comfort and privacy. A hostel or backpackers with dormitories or shared bathrooms is not \
-            comparable to a hotel or motel. A clearly better accommodation is comparable. Judge from stars, kind, \
-            description, facilities, room and price per night. If little is known about the current accommodation, \
-            take its name and price per night as a hint to its standard; when in doubt, it is comparable.
+            standard of comfort and privacy, in both directions. The traveller chose this standard and budget; a \
+            replacement should neither be clearly worse nor clearly more upmarket.
+            - Not comparable, lower: a hostel or backpackers with dormitories or shared bathrooms instead of a hotel \
+            or motel.
+            - Not comparable, higher: a luxury, upscale or 5-star hotel or resort instead of a hostel, backpackers, \
+            motel, holiday park or simple hotel; 2 or more stars above the current one; a price per night more than \
+            about 2.5 times the current one.
+            - Comparable: the same class, or slightly better (e.g. one star more, a private room instead of a \
+            dormitory in the same kind of place) at a price per night not far above the current one.
+            Judge from stars, kind, description, facilities, room and price per night. If little is known about the \
+            current accommodation, take its name and price per night as a hint to its standard. When in doubt, it is \
+            comparable, unless its price per night is far above the current one.
             Then rank the comparable candidates by how equivalent they are and how convenient for the traveller: \
             similar category and comfort, close to the current place, good rating, free cancellation, reasonable \
             price. Prefer a clearly better fit over a slightly cheaper one.

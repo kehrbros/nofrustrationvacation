@@ -27,7 +27,8 @@
 ## Rollen: Assistant und LiteAPI
 
 - **Grundsatz:** Ob ein Angebot die Kriterien erfüllt, entscheidet das Backend anhand der Daten von LiteAPI, nicht das Sprachmodell. Das Modell vergleicht nur Angebote, die alle Kriterien schon erfüllen, mit der bisherigen Unterkunft. Es erfindet keine Preise oder Verfügbarkeit und löst keine Buchung aus.
-- **Seit 2026-11-10 darf das Modell ausschließen:** Kandidaten, die nicht zur bisherigen Unterkunft passen (andere Art oder deutlich niedrigerer Standard, z. B. Backpackers statt Hotel), fallen weg, die übrigen ordnet es. Vorher durfte es nur ordnen. Anlass: in Nelson bestand das Ergebnis fast nur aus günstigen Backpackers. Das Ergebnis meldet die Zahl der ausgeschlossenen (`excludedByAssistant`), das Frontend zeigt sie als Hinweis.
+- **Seit 2026-11-10 darf das Modell ausschließen:** Kandidaten, die nicht zur bisherigen Unterkunft passen (andere Art oder deutlich anderer Standard, z. B. Backpackers statt Hotel), fallen weg, die übrigen ordnet es. Vorher durfte es nur ordnen. Anlass: in Nelson bestand das Ergebnis fast nur aus günstigen Backpackers.
+  - **In beide Richtungen** (2026-11-10): auch deutlich gehobener ist nicht vergleichbar, z. B. Luxus- oder 5-Sterne-Hotel statt Backpackers, Motel oder einfachem Hotel, 2 oder mehr Sterne über der bisherigen, Preis pro Nacht über etwa dem 2,5-Fachen. Etwas besser (ein Stern mehr, Einzel- statt Mehrbettzimmer) bleibt vergleichbar. Anlass: zu einem günstigen Backpackers kam ein teures Sofitel. Vorher stand im Prompt „deutlich besser ist vergleichbar“. Der Max. Preis begrenzt das nur, wenn die Buchung einen Preis hat. Das Ergebnis meldet die Zahl der ausgeschlossenen (`excludedByAssistant`), das Frontend zeigt sie als Hinweis.
 
 | Aufgabe | wer |
 |---|---|
