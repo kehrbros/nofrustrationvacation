@@ -74,6 +74,7 @@ flowchart LR
     incidents --> network
     incidents -->|RouteSectionRepository| trips
     trips -.->|RouteChanged| incidents
+    trips -.->|StopsDeleting, StopRescheduling| bookings
     trips -.->|StopArrivalChanged| incidents
     input -->|IncidentReporting| incidents
     input -->|StructuredExtraction| assistant
@@ -91,7 +92,7 @@ flowchart LR
 ```
 
 - **Referenzen über Modulgrenzen nur per Id** (`appUserId`, `segmentId`, `stopId`, `routeId`, `routeSectionId`, `incidentId`), mit Fremdschlüssel in der Datenbank. JPA-Beziehungen (`@ManyToOne`) nur innerhalb eines Moduls. Pfeile oben zeigen diese Id-Referenzen und die Aufrufe.
-- **Rückwärts über Events:** `trips` kennt `incidents` nicht. Nach dem Planen einer Route veröffentlicht `RouteLogic` das Spring-Event `RouteChanged`, `incidents` reagiert darauf (synchron, in derselben Transaktion).
+- **Rückwärts über Events:** `trips` kennt `incidents` nicht. Nach dem Planen einer Route veröffentlicht `RouteLogic` das Spring-Event `RouteChanged`, `incidents` reagiert darauf (synchron, in derselben Transaktion). Ebenso kennt `trips` `bookings` nicht: vor dem Löschen von Stops `StopsDeleting`, nach neuer Ankunft/Abfahrt eines Stops `StopRescheduling` (Buchungen müssen in die Tage des Stops passen, siehe [domain.md](domain.md#bookings)); die Listener lehnen per Exception ab, die die Transaktion zurückrollt.
 - **`network` nach außen nur über `network.logic`** (`Routing`, `SegmentQueries`, `Places`, `RegionImport`, `NetworkRefreshed`), keine Entities, Repositories oder GraphHopper-Typen. Später per ArchUnit.
 - **`incidents` liest den Index aus `trips`:** `ConsequenceMatcher` nutzt `RouteSectionRepository` (Index Segment → RouteSection). Später ggf. durch eine schmale Schnittstelle in `trips.logic` ersetzen.
 - **`input` und `incidents`** (beschlossen 2026-11-04, umgesetzt): `input` empfängt, speichert, liest und reichert an (`→ assistant`), kennt `network` nicht. `incidents` verortet über `network.SegmentMatching` (`IncidentReporting`), legt Incidents an und bewertet Consequences. Bewertung bei geänderter Ankunft über das Event `StopArrivalChanged` aus `trips`.

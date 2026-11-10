@@ -85,7 +85,7 @@
     },
     "/api/v1/accommodation-bookings/{bookingId}" : {
       "put" : {
-        "description" : "Source and status stay.",
+        "description" : "Source and status stay. Check-in and check-out must lie within the days of the stop, otherwise 409 BOOKING_OUTSIDE_STOP with the stop's arrival/departure, both extended to the booking and whether the booking can be shortened. stopConflict=EXTEND_STOP moves the stop to the days of the booking, TRIM_BOOKING shortens the booking.",
         "operationId" : "changeAccommodationBooking",
         "parameters" : [ {
           "in" : "path",
@@ -94,6 +94,14 @@
           "schema" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }, {
+          "in" : "query",
+          "name" : "stopConflict",
+          "required" : false,
+          "schema" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "EXTEND_STOP", "TRIM_BOOKING" ]
           }
         } ],
         "requestBody" : {
@@ -2059,7 +2067,7 @@
         "tags" : [ "Trips" ]
       },
       "put" : {
-        "description" : "New coordinates or departure plan the affected routes again.",
+        "description" : "New coordinates or departure plan the affected routes again. Bookings at the stop must lie within its days (arrival day to departure day), otherwise 409 STOP_BOOKINGS_CONFLICT with the bookings and the extended arrival/departure. With bookingConflict=TRIM_BOOKINGS the bookings are shortened to the new days instead.",
         "operationId" : "updateStop",
         "parameters" : [ {
           "in" : "path",
@@ -2076,6 +2084,14 @@
           "schema" : {
             "type" : "integer",
             "format" : "int64"
+          }
+        }, {
+          "in" : "query",
+          "name" : "bookingConflict",
+          "required" : false,
+          "schema" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "TRIM_BOOKINGS" ]
           }
         } ],
         "requestBody" : {

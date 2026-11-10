@@ -22,6 +22,8 @@ import com.nfv.bookings.logic.BookingLogic;
 import com.nfv.bookings.logic.BookingTodos;
 import com.nfv.bookings.logic.BookingView;
 import com.nfv.bookings.logic.NewAccommodationBooking;
+import com.nfv.bookings.logic.StopConflict;
+import com.nfv.trips.logic.TripEditing;
 import com.nfv.user.security.CurrentUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -55,6 +57,7 @@ public class BookingController {
     private final AccommodationExtractor extractor;
     private final AccommodationLookup lookup;
     private final BookingTodos todos;
+    private final TripEditing tripEditing;
 
     @Operation(summary = "To-do list of a trip", description = "Bookings to cancel or to tell about a later arrival "
             + "after the trip changed, the newest first, also those done.")
@@ -98,12 +101,20 @@ public class BookingController {
         return toDto(bookingLogic.createAccommodation(user.appUserId(), stopId, toInput(booking)));
     }
 
-    @Operation(summary = "Replace an accommodation booking", description = "Source and status stay.")
+    @Operation(summary = "Replace an accommodation booking", description = "Source and status stay. Check-in and "
+            + "check-out must lie within the days of the stop, otherwise 409 BOOKING_OUTSIDE_STOP with the stop's "
+            + "arrival/departure, both extended to the booking and whether the booking can be shortened. "
+            + "stopConflict=EXTEND_STOP moves the stop to the days of the booking, TRIM_BOOKING shortens the booking.")
     @PutMapping("/accommodation-bookings/{bookingId}")
     public BookingDto changeAccommodationBooking(@AuthenticationPrincipal CurrentUser user,
                                                  @PathVariable long bookingId,
-                                                 @RequestBody AccommodationBookingInputDto booking) {
-        return toDto(bookingLogic.changeAccommodation(user.appUserId(), bookingId, toInput(booking)));
+                                                 @RequestBody AccommodationBookingInputDto booking,
+                                                 @RequestParam(required = false) @Nullable StopConflict stopConflict) {
+        BookingLogic.ChangedBooking changed = bookingLogic.changeAccommodation(user.appUserId(), bookingId,
+                toInput(booking), stopConflict);
+        // a stop with a new departure gets its route planned again, outside the transaction
+        tripEditing.plan(changed.change());
+        return toDto(changed.view());
     }
 
     @Operation(summary = "Delete a booking")

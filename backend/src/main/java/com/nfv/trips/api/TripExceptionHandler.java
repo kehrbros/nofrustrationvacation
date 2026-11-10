@@ -4,6 +4,7 @@ import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.LocationOutsideRegionsException;
+import com.nfv.trips.logic.StopBookingsConflictException;
 import com.nfv.trips.logic.StopInUseException;
 import com.nfv.trips.logic.TripItemNotFoundException;
 import com.nfv.trips.logic.TripNotFoundException;
@@ -45,6 +46,18 @@ public class TripExceptionHandler {
     @ExceptionHandler(StopInUseException.class)
     public ResponseEntity<ProblemDetail> handleStopInUse(StopInUseException exception) {
         return problem(HttpStatus.CONFLICT, "STOP_IN_USE", exception.getMessage());
+    }
+
+    /** Bookings outside the new days of the stop: the frontend offers to extend the stop or shorten the bookings. */
+    @ExceptionHandler(StopBookingsConflictException.class)
+    public ResponseEntity<ProblemDetail> handleBookingsConflict(StopBookingsConflictException exception) {
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.CONFLICT, "STOP_BOOKINGS_CONFLICT",
+                exception.getMessage());
+        ProblemDetail problem = response.getBody();
+        problem.setProperty("bookings", exception.getBookings());
+        problem.setProperty("extendedArrivalAt", exception.getExtendedArrivalAt());
+        problem.setProperty("extendedDepartureAt", exception.getExtendedDepartureAt());
+        return response;
     }
 
     @ExceptionHandler(AssistantUnavailableException.class)

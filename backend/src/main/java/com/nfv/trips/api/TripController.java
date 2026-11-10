@@ -6,17 +6,20 @@ import com.nfv.trips.dto.MoveStopDto;
 import com.nfv.trips.dto.RouteLineDto;
 import com.nfv.trips.dto.TripDetailDto;
 import com.nfv.trips.dto.TripSummaryDto;
+import com.nfv.trips.dto.BookingConflict;
 import com.nfv.trips.dto.UpdateStopDto;
 import com.nfv.trips.dto.UpdateTripDto;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.TripCoverImage;
 import com.nfv.trips.logic.CoverImageGeneration;
 import com.nfv.trips.logic.InvalidTripInputException;
+import com.nfv.trips.logic.BookingFit;
 import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.RouteLines;
 import com.nfv.trips.logic.TripEditing;
 import com.nfv.trips.logic.TripLogic;
 import com.nfv.user.security.CurrentUser;
+import jakarta.annotation.Nullable;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -111,12 +115,17 @@ public class TripController {
         return tripDtos.detail(user.appUserId(), tripId);
     }
 
-    @Operation(summary = "Change a stop", description = "New coordinates or departure plan the affected routes again.")
+    @Operation(summary = "Change a stop", description = "New coordinates or departure plan the affected routes again. "
+            + "Bookings at the stop must lie within its days (arrival day to departure day), otherwise 409 "
+            + "STOP_BOOKINGS_CONFLICT with the bookings and the extended arrival/departure. With "
+            + "bookingConflict=TRIM_BOOKINGS the bookings are shortened to the new days instead.")
     @PutMapping("/{tripId}/stops/{stopId}")
     public TripDetailDto updateStop(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
-                                    @PathVariable long stopId, @RequestBody UpdateStopDto stop) {
+                                    @PathVariable long stopId, @RequestBody UpdateStopDto stop,
+                                    @RequestParam(required = false) @Nullable BookingConflict bookingConflict) {
         tripEditing.updateStop(user.appUserId(), tripId, stopId,
-                new NewStop(stop.name(), stop.latitude(), stop.longitude(), stop.arrivalAt(), stop.departureAt()));
+                new NewStop(stop.name(), stop.latitude(), stop.longitude(), stop.arrivalAt(), stop.departureAt()),
+                bookingConflict == BookingConflict.TRIM_BOOKINGS ? BookingFit.TRIM_BOOKINGS : BookingFit.CHECK);
         return tripDtos.detail(user.appUserId(), tripId);
     }
 

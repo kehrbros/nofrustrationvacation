@@ -35,6 +35,13 @@ interface Props {
  * assistant, together with content shared to the app and not yet saved), manual input. Every way ends in the same
  * form the user checks before saving.
  */
+/** Thrown by onSubmit when the user cancelled saving, e.g. in a dialog of the caller; the form stays open. */
+export class SubmitCancelled extends Error {
+  constructor() {
+    super('cancelled');
+  }
+}
+
 export default function AddBookingSheet({ onClose, onSubmit, context, initialForm, submitLabel, defaults, near }: Props) {
   const [step, setStep] = useState<Step>(initialForm ? 'review' : 'choose');
   const [form, setForm] = useState<AccommodationForm>(initialForm ?? withStayDefaults(emptyForm(), defaults));
@@ -94,8 +101,9 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
       if (source === 'SHARE') {
         await clearShared().catch(() => undefined);
       }
-    } catch {
-      setError(t('addBooking.saveFailed'));
+    } catch (failure) {
+      // cancelled by the caller (e.g. in its dialog): back to the form without a message
+      setError(failure instanceof SubmitCancelled ? null : t('addBooking.saveFailed'));
       setSaving(false);
     }
   };

@@ -546,7 +546,7 @@ class ConsequenceMatchingTest {
 
     private void arriveAt(OffsetDateTime arrival) {
         inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId,
-                new NewStop("Kupferzell", TARGET[0], TARGET[1], arrival, null)));
+                new NewStop("Kupferzell", TARGET[0], TARGET[1], arrival, null), com.nfv.trips.logic.BookingFit.IGNORE));
     }
 
     /** One section of 15 minutes starting at {@code passage}. */

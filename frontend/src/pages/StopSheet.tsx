@@ -1,7 +1,7 @@
 import { CloseOutlined, EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 
 import AddBookingSheet from '../bookings/AddBookingSheet';
 import { createAccommodationBooking } from '../bookings/bookingsApi';
@@ -11,24 +11,55 @@ import { stayDefaults } from '../bookings/stayDefaults';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
+import type { NewStop, Stop } from '../trips/model';
+import StayConflictDialog from '../trips/StayConflictDialog';
+import { outsideBookingLabel, stopBookingsConflict, stopDaysLabel, type StopBookingsConflict } from '../trips/stayConflict';
 import { useTripContext } from '../trips/tripContext';
-import { localDateTimeIso } from '../trips/time';
-import { addStop, TripsApiError } from '../trips/tripsApi';
+import { localDateTimeIso, toDateTimeInput } from '../trips/time';
+import { addStop, TripsApiError, updateStop } from '../trips/tripsApi';
 
 /**
  * "Stop hinzufügen": place search, arrival and departure; the stop is appended to the trip. An accommodation booking
  * entered here fills place and times if still empty and is saved with the stop.
+ *
+ * With a stop id in the path "Stop bearbeiten": name, place and times of that stop. Bookings at the stop must fit its
+ * new days, otherwise a dialog offers to extend the stop to them or shorten them (Docs/domain.md#bookings).
  */
 export default function StopSheet() {
+  const { trip, stopById, close } = useTripContext();
+  const { stopId } = useParams();
+  if (stopId === undefined) {
+    return <StopForm />;
+  }
+  const stop = stopById.get(Number(stopId));
+  if (!stop) {
+    return (
+      <Sheet open onClose={close} title={t('stop.notFound')}>
+        <p className="va-muted">{t('stop.gone')}</p>
+      </Sheet>
+    );
+  }
+  // a new form per stop, its fields start with the stop's values
+  return <StopForm key={`${trip.id}-${stop.id}`} edited={stop} />;
+}
+
+function StopForm({ edited }: { edited?: Stop }) {
   const { trip, bookings, reload, close } = useTripContext();
   const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
-  const [place, setPlace] = useState<Place | null>(null);
+  const [place, setPlace] = useState<Place | null>(
+    edited?.latitude != null && edited.longitude != null
+      ? { name: edited.name, detail: '', latitude: edited.latitude, longitude: edited.longitude }
+      : null,
+  );
+  const [name, setName] = useState(edited?.name ?? '');
   const [searchFailed, setSearchFailed] = useState(false);
   const [noMatch, setNoMatch] = useState(false);
-  const [arrival, setArrival] = useState('');
-  const [departure, setDeparture] = useState('');
+  const [arrival, setArrival] = useState(toDateTimeInput(edited?.arrivalAt ?? null));
+  const [departure, setDeparture] = useState(toDateTimeInput(edited?.departureAt ?? null));
+  const [conflict, setConflict] = useState<{ stop: NewStop; conflict: StopBookingsConflict } | null>(null);
+  const [conflictError, setConflictError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [addingBooking, setAddingBooking] = useState(false);
@@ -75,6 +106,17 @@ export default function StopSheet() {
       setError(t('stop.departureBeforeArrival'));
       return;
     }
+    if (edited) {
+      setError(null);
+      await saveChanges({
+        name: name.trim() || place.name.trim(),
+        latitude: place.latitude,
+        longitude: place.longitude,
+        arrivalAt,
+        departureAt,
+      });
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -115,19 +157,60 @@ export default function StopSheet() {
     }
   };
 
+  /** Saves the edited stop; bookings outside its new days open the dialog, its choice saves again. */
+  const saveChanges = async (stop: NewStop, trimBookings = false) => {
+    if (!edited) {
+      return;
+    }
+    setSaving(true);
+    try {
+      await updateStop(trip.id, edited.id, stop, trimBookings);
+      setConflict(null);
+      reload();
+      close();
+    } catch (failure) {
+      setSaving(false);
+      const found = stopBookingsConflict(failure);
+      if (found) {
+        setConflict({ stop, conflict: found });
+        setConflictError(conflict ? t('stayConflict.failed') : null);
+        return;
+      }
+      if (conflict) {
+        setConflictError(t('stayConflict.failed'));
+        return;
+      }
+      setError(failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS'
+        ? t('stop.outsideRegions')
+        : t('stop.saveFailed'));
+    }
+  };
+
+  const extended = conflict && {
+    ...conflict.stop,
+    arrivalAt: conflict.conflict.extendedArrivalAt ?? conflict.stop.arrivalAt,
+    departureAt: conflict.conflict.extendedDepartureAt ?? conflict.stop.departureAt,
+  };
+
   return (
     <Sheet
       open
       onClose={close}
-      title={t('trip.addStop')}
+      title={edited ? t('stop.editTitle') : t('trip.addStop')}
       height="90vh"
       footer={
         <button type="submit" form="stop-form" className="va-button va-button-accent va-block" disabled={saving}>
-          {saving ? t('common.saving') : t('stop.save')}
+          {saving ? t('common.saving') : edited ? t('stop.saveChanges') : t('stop.save')}
         </button>
       }
     >
       <form id="stop-form" className="va-form" onSubmit={(event) => void submit(event)} noValidate>
+        {edited && (
+          <div className="va-field">
+            <label htmlFor="stop-name">{t('stop.name')}</label>
+            <input id="stop-name" type="text" maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+        )}
         <div className="va-field">
           <label htmlFor="stop-place">{t('stop.place')}</label>
           <input
@@ -142,13 +225,22 @@ export default function StopSheet() {
             }}
           />
           <span id="stop-place-hint" className="va-small va-muted">
-            {place ? t('stop.placeChosen', { detail: place.detail || t('stop.placeSelected') }) : t('stop.placeHint')}
+            {place
+              ? place.detail ? t('stop.placeChosen', { detail: place.detail }) : edited ? t('stop.currentPlace') : t('stop.placeChosen', { detail: t('stop.placeSelected') })
+              : t('stop.placeHint')}
           </span>
           {places.length > 0 && (
             <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
               {places.map((candidate) => (
                 <li key={`${candidate.latitude},${candidate.longitude}`}>
-                  <button type="button" onClick={() => setPlace(candidate)}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPlace(candidate);
+                      // a new place renames the stop, the name can still be changed
+                      setName(candidate.name);
+                    }}
+                  >
                     <EnvironmentOutlined aria-hidden="true" />
                     <span className="va-column">
                       <span className="va-strong">{candidate.name}</span>
@@ -163,12 +255,14 @@ export default function StopSheet() {
           {searchFailed && <span className="va-small va-muted">{t('stop.searchUnavailable')}</span>}
         </div>
 
-        <div className="va-field">
-          <span className="va-label">{t('stop.order')}</span>
-          <span className="va-muted">
-            {previous ? t('stop.orderAfter', { name: previous.name, position: trip.stops.length }) : t('stop.orderFirst')}
-          </span>
-        </div>
+        {!edited && (
+          <div className="va-field">
+            <span className="va-label">{t('stop.order')}</span>
+            <span className="va-muted">
+              {previous ? t('stop.orderAfter', { name: previous.name, position: trip.stops.length }) : t('stop.orderFirst')}
+            </span>
+          </div>
+        )}
 
         <div className="va-field-row">
           <div className="va-field">
@@ -181,7 +275,7 @@ export default function StopSheet() {
           </div>
         </div>
 
-        {booking ? (
+        {edited ? null : booking ? (
           <div className="va-booking-row va-booking-draft">
             <span className="va-booking-icon" aria-hidden="true"><HomeOutlined /></span>
             <span className="va-column va-grow">
@@ -201,6 +295,25 @@ export default function StopSheet() {
         )}
         {error && <Alert type="error" showIcon message={error} />}
       </form>
+      {conflict && extended && (
+        <StayConflictDialog
+          title={t('stayConflict.stopTitle')}
+          text={t('stayConflict.stopText', { count: conflict.conflict.bookings.length })}
+          items={conflict.conflict.bookings.map(outsideBookingLabel)}
+          extendLabel={t('stayConflict.extendStop')}
+          extendDetail={t('stayConflict.extendDetail', { days: stopDaysLabel(extended.arrivalAt, extended.departureAt) })}
+          trimLabel={t('stayConflict.trimBookings', { count: conflict.conflict.bookings.length })}
+          trimDisabled={conflict.conflict.bookings.some((outside) => !outside.trimmable)}
+          busy={saving}
+          error={conflictError}
+          onCancel={() => {
+            setConflict(null);
+            setConflictError(null);
+          }}
+          onExtend={() => void saveChanges(extended)}
+          onTrim={() => void saveChanges(conflict.stop, true)}
+        />
+      )}
       {addingBooking && (
         <AddBookingSheet
           context={t('stop.newStop')}

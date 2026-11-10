@@ -1421,3 +1421,10 @@ a.va-button {
   background: var(--ink);
   color: #ffffff;
 }
+
+/* bookings that do not fit the days of their stop, see StayConflictDialog */
+.va-conflict-list {
+  margin: 0;
+  padding-left: 20px;
+  font-weight: 700;
+}

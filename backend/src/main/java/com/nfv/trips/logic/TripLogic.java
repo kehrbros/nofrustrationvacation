@@ -174,21 +174,52 @@ public class TripLogic {
 
     /**
      * Changes the stop. New coordinates discard the sections of the routes to and from it, a new departure those of
-     * the route from it. The arrival does not affect planning, it publishes {@link StopArrivalChanged}.
+     * the route from it. The arrival does not affect planning, it publishes {@link StopArrivalChanged}. New arrival or
+     * departure publish {@link StopRescheduling} unless {@code fit} is {@link BookingFit#IGNORE}, the bookings at the
+     * stop must fit the new days.
+     *
+     * @throws StopBookingsConflictException bookings at the stop would lie outside the new days
      */
     @Transactional
-    public TripChange updateStop(long appUserId, long tripId, long stopId, NewStop changed) {
+    public TripChange updateStop(long appUserId, long tripId, long stopId, NewStop changed, BookingFit fit) {
         get(appUserId, tripId);
         Stop stop = stopRepository.findById(stopId).filter(s -> s.getTrip().getId() == tripId)
                 .orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
         String name = validate(changed);
         boolean relocated = !Objects.equals(stop.getLatitude(), changed.latitude())
                 || !Objects.equals(stop.getLongitude(), changed.longitude());
-        boolean departs = !sameInstant(stop.getDepartureAt(), changed.departureAt());
-        boolean arrives = !sameInstant(stop.getArrivalAt(), changed.arrivalAt());
         stop.rename(name);
         stop.relocate(changed.latitude(), changed.longitude());
-        stop.reschedule(changed.arrivalAt(), changed.departureAt());
+        return reschedule(stop, relocated, changed.arrivalAt(), changed.departureAt(), fit);
+    }
+
+    /**
+     * New arrival and departure of the stop, name and place stay (also a stop without coordinates), e.g. extended to
+     * the days of a booking. Effects as in {@link #updateStop}.
+     *
+     * @throws TripItemNotFoundException unknown or foreign stop
+     */
+    @Transactional
+    public TripChange rescheduleStop(long appUserId, long stopId, @Nullable OffsetDateTime arrivalAt,
+                                     @Nullable OffsetDateTime departureAt, BookingFit fit) {
+        Stop stop = stop(appUserId, stopId).orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
+        if (arrivalAt != null && departureAt != null && departureAt.isBefore(arrivalAt)) {
+            throw new InvalidTripInputException("departure before arrival");
+        }
+        return reschedule(stop, false, arrivalAt, departureAt, fit);
+    }
+
+    private TripChange reschedule(Stop stop, boolean relocated, @Nullable OffsetDateTime arrivalAt,
+                                  @Nullable OffsetDateTime departureAt, BookingFit fit) {
+        long stopId = stop.getId();
+        long tripId = stop.getTrip().getId();
+        boolean departs = !sameInstant(stop.getDepartureAt(), departureAt);
+        boolean arrives = !sameInstant(stop.getArrivalAt(), arrivalAt);
+        stop.reschedule(arrivalAt, departureAt);
+        if ((arrives || departs) && fit != BookingFit.IGNORE) {
+            // bookings checks (and maybe shortens) the bookings at the stop, a conflict rolls everything back
+            events.publishEvent(new StopRescheduling(stopId, arrivalAt, departureAt, fit));
+        }
         Set<Long> affected = new LinkedHashSet<>();
         Set<Long> arrivingRoutes = new LinkedHashSet<>();
         for (Route route : routeRepository.findByTripId(tripId)) {

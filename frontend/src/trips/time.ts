@@ -53,6 +53,15 @@ export function localDateTimeIso(value: string): string | null {
   return Number.isNaN(date.getTime()) ? null : toOffsetIso(date);
 }
 
+/** ISO point in time as value of an input of type datetime-local (yyyy-mm-ddThh:mm) in the system time zone. */
+export function toDateTimeInput(iso: string | null): string {
+  if (!iso) {
+    return '';
+  }
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 /** Day of an ISO point in time in the system time zone, as yyyy-mm-dd for inputs of type date. */
 export function toDayInput(iso: string): string {
   const date = new Date(iso);

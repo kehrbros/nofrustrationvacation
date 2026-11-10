@@ -4,6 +4,7 @@ import com.nfv.trips.dto.RouteDetailDto;
 import com.nfv.trips.dto.TripDetailDto;
 import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.WaypointInputDto;
+import com.nfv.trips.logic.BookingFit;
 import com.nfv.trips.logic.NewStop;
 import com.nfv.trips.logic.NewWaypoint;
 import com.nfv.trips.logic.TripEditing;
@@ -105,7 +106,8 @@ public class TripTools {
         return tripDtos.detail(appUserId, tripId);
     }
 
-    @McpTool(name = "update_stop", description = "Replaces all fields of a stop." + PLANNING,
+    @McpTool(name = "update_stop", description = "Replaces all fields of a stop. Bookings at the stop must lie "
+            + "within its days (arrival day to departure day), otherwise the change is refused." + PLANNING,
             annotations = @McpTool.McpAnnotations(readOnlyHint = false, destructiveHint = false, idempotentHint = true,
                     openWorldHint = false))
     public TripDetailDto updateStop(
@@ -120,7 +122,7 @@ public class TripTools {
             @Nullable OffsetDateTime departureAt) {
         long appUserId = appUserId();
         tripEditing.updateStop(appUserId, tripId, stopId,
-                new NewStop(name, latitude, longitude, arrivalAt, departureAt));
+                new NewStop(name, latitude, longitude, arrivalAt, departureAt), BookingFit.CHECK);
         return tripDtos.detail(appUserId, tripId);
     }
 
