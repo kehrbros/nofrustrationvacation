@@ -169,7 +169,8 @@ public class LiteApi {
     }
 
     private static final int MAX_FACILITIES = 15;
-    private static final int MAX_DESCRIPTION = 600;
+    /** Enough for kind, rooms and standard; longer only makes the comparison by the assistant slower. */
+    private static final int MAX_DESCRIPTION = 300;
     private static final Pattern TAG = Pattern.compile("<[^>]*>");
     private static final Pattern SPACE = Pattern.compile("\\s+");
 

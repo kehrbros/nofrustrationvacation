@@ -1,6 +1,7 @@
 package com.nfv.assistant.logic;
 
 import com.nfv.assistant.config.AssistantProperties;
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -52,6 +53,20 @@ public class StructuredExtraction {
      */
     public JsonNode extract(long appUserId, String instructions, String schemaName, JsonNode schema,
                             List<ExtractionInput> inputs, boolean webSearch) {
+        return extract(appUserId, instructions, schemaName, schema, inputs, webSearch, null);
+    }
+
+    /**
+     * Like {@link #extract(long, String, String, JsonNode, List)} with a reasoning effort, e.g. {@link
+     * ReasoningEffort#LOW} for a fast answer where the user waits.
+     */
+    public JsonNode extract(long appUserId, String instructions, String schemaName, JsonNode schema,
+                            List<ExtractionInput> inputs, ReasoningEffort effort) {
+        return extract(appUserId, instructions, schemaName, schema, inputs, false, effort);
+    }
+
+    private JsonNode extract(long appUserId, String instructions, String schemaName, JsonNode schema,
+                             List<ExtractionInput> inputs, boolean webSearch, @Nullable ReasoningEffort effort) {
         if (!isAvailable()) {
             throw new AssistantUnavailableException("assistant is not configured");
         }
@@ -59,6 +74,9 @@ public class StructuredExtraction {
         ObjectNode request = request(instructions, schemaName, schema, inputs);
         if (webSearch) {
             request.putArray("tools").addObject().put("type", "web_search");
+        }
+        if (effort != null) {
+            request.putObject("reasoning").put("effort", effort.apiValue());
         }
         return send(request);
     }

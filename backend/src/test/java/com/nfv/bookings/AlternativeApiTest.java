@@ -2,6 +2,7 @@ package com.nfv.bookings;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nfv.assistant.logic.ExtractionInput;
+import com.nfv.assistant.logic.ReasoningEffort;
 import com.nfv.assistant.logic.StructuredExtraction;
 import com.nfv.bookings.logic.LiteApi;
 import com.nfv.bookings.logic.OfferUnavailableException;
@@ -130,7 +131,8 @@ class AlternativeApiTest {
                 offer("far", 42.0000, 12.4964, "100.00", "EUR"),
                 offer("dollar", 41.9030, 12.4970, "100.00", "USD")));
         when(extraction.isAvailable()).thenReturn(true);
-        when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any()))
+        when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any(),
+                eq(ReasoningEffort.LOW)))
                 .thenReturn(jsonMapper.readTree("""
                         {"ranking": [{"hotelId": "good", "comparable": true, "reason": "Gleiche Kategorie, ruhig gelegen."},
                                      {"hotelId": "invented", "comparable": true, "reason": "x"},
@@ -157,7 +159,8 @@ class AlternativeApiTest {
         when(liteApi.profile("hostel")).thenReturn(new LiteApi.HotelProfile("hostel", null, "Hostel",
                 "Dormitories with shared bathrooms.", List.of("Shared kitchen")));
         when(extraction.isAvailable()).thenReturn(true);
-        when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any()))
+        when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any(),
+                eq(ReasoningEffort.LOW)))
                 .thenReturn(jsonMapper.readTree("""
                         {"ranking": [{"hotelId": "hotel", "comparable": true, "reason": "Gleiche Kategorie."},
                                      {"hotelId": "hostel", "comparable": false, "reason": "Hostel mit Mehrbettzimmern."}]}"""));
@@ -172,7 +175,8 @@ class AlternativeApiTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<ExtractionInput>> input = ArgumentCaptor.forClass(List.class);
-        verify(extraction).extract(anyLong(), anyString(), eq("alternative_ranking"), any(), input.capture());
+        verify(extraction).extract(anyLong(), anyString(), eq("alternative_ranking"), any(), input.capture(),
+                eq(ReasoningEffort.LOW));
         String text = ((ExtractionInput.Text) input.getValue().getFirst()).text();
         assertThat(text).contains("\"kind\":\"Hostel\"", "Dormitories with shared bathrooms.", "\"pricePerNight\":\"137.50 EUR\"");
     }
@@ -213,7 +217,7 @@ class AlternativeApiTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.candidates[*].hotelId", contains("cheap", "good")))
                 .andExpect(jsonPath("$.ranked").value(false));
-        verify(extraction, never()).extract(anyLong(), anyString(), anyString(), any(), any());
+        verify(extraction, never()).extract(anyLong(), anyString(), anyString(), any(), any(), any(ReasoningEffort.class));
     }
 
     @Test

@@ -8,6 +8,7 @@ import com.nfv.trips.entities.Stop;
 import com.nfv.trips.logic.TripLogic;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -29,6 +30,7 @@ import java.util.regex.Pattern;
  * comparable, ranks the rest), see Docs/accommodation-alternatives.md. Runs without transaction, the calls to LiteAPI
  * and the model take seconds.
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AlternativeSearch {
@@ -133,7 +135,9 @@ public class AlternativeSearch {
      */
     public SearchResult search(long appUserId, long bookingId, AlternativeCriteria criteria) {
         BookingView view = bookingLogic.accommodation(appUserId, bookingId);
+        long start = System.nanoTime();
         Offers found = find(appUserId, criteria);
+        long ratesDone = System.nanoTime();
         if (ranking.isAvailable() && !found.candidates().isEmpty()) {
             List<AlternativeCandidate> pool = found.candidates().stream()
                     .sorted(Comparator.comparingInt(AlternativeCandidate::distanceMeters)
@@ -147,18 +151,34 @@ public class AlternativeSearch {
             }
             pool.forEach(candidate -> ids.add(candidate.hotelId()));
             Map<String, LiteApi.HotelProfile> loaded = profiles.all(ids);
+            long profilesDone = System.nanoTime();
             AlternativeRanking.Result result = ranking.rank(appUserId, view.booking(), view.accommodation(),
                     currentHotelId == null ? null : loaded.get(currentHotelId), pool, loaded,
                     ChronoUnit.DAYS.between(criteria.checkIn(), criteria.checkOut()));
+            long rankingDone = System.nanoTime();
+            log.info("Alternatives search: rates {} ms ({} offers, {} hotels), profiles {} ms ({} of {}), "
+                            + "ranking {} ms ({}), total {} ms",
+                    millis(start, ratesDone), found.checked(), found.candidates().size(),
+                    millis(ratesDone, profilesDone), loaded.size(), ids.size(),
+                    millis(profilesDone, rankingDone),
+                    result == null ? "failed" : result.excluded() + " excluded",
+                    millis(start, rankingDone));
             if (result != null) {
                 List<AlternativeCandidate> ranked = result.candidates().stream()
                         .limit(properties.maxCandidates()).toList();
                 return new SearchResult(ranked, ranked.isEmpty() ? null : ranked.getFirst().hotelId(), true,
                         found.checked(), result.excluded());
             }
+        } else {
+            log.info("Alternatives search: rates {} ms ({} offers, {} hotels), no ranking",
+                    millis(start, ratesDone), found.checked(), found.candidates().size());
         }
         return new SearchResult(byPrice(found.candidates(), properties.maxCandidates()), null, false,
                 found.checked(), 0);
+    }
+
+    private static long millis(long fromNanos, long toNanos) {
+        return (toNanos - fromNanos) / 1_000_000;
     }
 
     private static List<AlternativeCandidate> byPrice(List<AlternativeCandidate> candidates, int limit) {
