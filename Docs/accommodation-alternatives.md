@@ -26,20 +26,24 @@
 
 ## Rollen: Assistant und LiteAPI
 
-- **Grundsatz:** Ob ein Angebot die Kriterien erfüllt, entscheidet das Backend anhand der Daten von LiteAPI, nicht das Sprachmodell. Das Modell wählt und begründet unter den Angeboten, die alle Kriterien schon erfüllen. Es erfindet keine Preise oder Verfügbarkeit und löst keine Buchung aus.
+- **Grundsatz:** Ob ein Angebot die Kriterien erfüllt, entscheidet das Backend anhand der Daten von LiteAPI, nicht das Sprachmodell. Das Modell vergleicht nur Angebote, die alle Kriterien schon erfüllen, mit der bisherigen Unterkunft. Es erfindet keine Preise oder Verfügbarkeit und löst keine Buchung aus.
+- **Seit 2026-11-10 darf das Modell ausschließen:** Kandidaten, die nicht zur bisherigen Unterkunft passen (andere Art oder deutlich niedrigerer Standard, z. B. Backpackers statt Hotel), fallen weg, die übrigen ordnet es. Vorher durfte es nur ordnen. Anlass: in Nelson bestand das Ergebnis fast nur aus günstigen Backpackers. Das Ergebnis meldet die Zahl der ausgeschlossenen (`excludedByAssistant`), das Frontend zeigt sie als Hinweis.
 
 | Aufgabe | wer |
 |---|---|
 | Kriterien aus der aktuellen Buchung vorbefüllen | Backend, deterministisch (`AlternativeCriteria.from(booking)`) |
 | Verfügbarkeit für Gäste und Zimmer im Zeitraum, Preise, Storno | LiteAPI (`/hotels/rates`) |
-| Harte Prüfung jedes Angebots gegen alle Kriterien (Preis ≤ Max., Abstand ≤ Umkreis, Zeitraum, Belegung) | Backend, nach der Antwort von LiteAPI |
-| „Gleichwertig zur bisherigen Unterkunft“: Reihenfolge der geprüften Angebote, beste Alternative, kurze Begründung | Assistant (`StructuredExtraction`, Schema in `bookings.logic`) |
+| Harte Prüfung jedes Angebots gegen alle Kriterien (Preis ≤ Max., Abstand ≤ Umkreis, Zeitraum, Belegung, Mindeststerne) | Backend, nach der Antwort von LiteAPI |
+| „Gleichwertig zur bisherigen Unterkunft“: nicht vergleichbare Angebote ausschließen, Reihenfolge der übrigen, beste Alternative, kurze Begründung | Assistant (`StructuredExtraction`, Schema in `bookings.logic`) |
 | Preis sichern, buchen, ggf. stornieren | LiteAPI, nur nach Bestätigung des Nutzers |
 | Zahlung | PayPal (Modul `paypal`) oder später Payment SDK, siehe [Zahlung](#zahlung); nie das Modell |
 
-- **Was das Modell bekommt:** die bisherige Unterkunft (Name, Art, Sterne falls bekannt, Lage, Preis pro Nacht, Hausregeln) und je Kandidat nur Fakten (Hotel-Id, Name, Sterne, Bewertung, Abstand, Gesamtpreis, Verpflegung, stornierbar ja/bis, Check-in-Zeit, wichtige Ausstattung). Höchstens Top-N (z. B. 20, vorsortiert nach Abstand und Preis).
-- **Was es liefert:** Liste von Hotel-Ids mit Rang und Begründung. Ids, die nicht unter den Kandidaten sind, verwirft das Backend.
-- **Ohne Assistant** (kein OpenAI-Key, Rate-Limit, Fehler): die Suche funktioniert trotzdem, Reihenfolge nach Abstand und Preis, ohne Begründung. In der Notlage soll die Suche nicht am Modell scheitern.
+- **Was das Modell bekommt:** die bisherige Unterkunft (Name, Adresse, Gesamtpreis, Nächte, Preis pro Nacht; ist `placeRef` eine LiteAPI-Hotel-Id, zusätzlich Sterne, Art, Beschreibung, Ausstattung) und je Kandidat nur Fakten (Hotel-Id, Name, Sterne, Bewertung, Abstand, Gesamtpreis, Preis pro Nacht, Zimmer, Verpflegung, stornierbar, Art, Beschreibung, Ausstattung).
+  - Die nächsten `nfv.bookings.alternatives.ranking-pool` (40) Kandidaten nach Abstand, dann Preis. Vorher die 20 günstigsten, dadurch kamen bessere Hotels gar nicht beim Modell an.
+  - Art, Beschreibung und Ausstattung aus `GET /data/hotel` (`hotelType`, `hotelDescription` als Text ohne HTML, gekürzt auf 600 Zeichen, `hotelFacilities` höchstens 15), ein Aufruf je Hotel, parallel (höchstens 6 gleichzeitig), im Speicher einen Tag gecacht (`HotelProfiles`). Fehlt ein Profil, vergleicht das Modell mit den Fakten des Angebots.
+  - Beschreibungen stammen von den Hotels: das Modell soll sie als Daten behandeln und Anweisungen darin ignorieren.
+- **Was es liefert:** je Hotel-Id `comparable` (ja/nein) und eine Begründung, die vergleichbaren in Rangfolge. Nicht vergleichbare fallen weg, Ids, die nicht unter den Kandidaten sind, verwirft das Backend, vergessene hängt es hinten an. Angezeigt werden höchstens `max-candidates` (20).
+- **Ohne Assistant** (kein OpenAI-Key, Rate-Limit, Fehler): die Suche funktioniert trotzdem, nichts wird ausgeschlossen, Reihenfolge nach Preis, dann Abstand, ohne Begründung. In der Notlage soll die Suche nicht am Modell scheitern.
 - **Ohne LiteAPI-Key:** die Funktion wird nicht angeboten (Status-Endpunkt wie `GET /bookings/assistant`).
 - **Warum nicht `aiSearch` oder der MCP-Server von LiteAPI:** Kriterien müssen nachprüfbar hart gelten, und Buchen ist teuer und nicht umkehrbar. Ablauf, Bestätigung und Speicherung bleiben im Backend.
 
@@ -50,7 +54,8 @@
   - `checkIn`, `checkOut` (`LocalDate`, Ortszeit der Unterkunft).
   - `guests` (Erwachsene), `rooms`. Verteilung auf `occupancies`: Gäste gleichmäßig auf Zimmer (5 Gäste, 2 Zimmer → 3 + 2).
   - `maxPrice` + `currency` (Gesamtpreis des Aufenthalts).
-  - Später optional: Kinder mit Alter, Sterne, Verpflegung, nur stornierbar, Ausschluss von Hotels (z. B. das bisherige).
+  - `minStars` (1–5, optional, seit 2026-11-10): an LiteAPI als Filter `starRating` [minStars..5], zusätzlich in der harten Prüfung; Hotels ohne Sterne erfüllen es nicht. Der Agent (`search_accommodations`) setzt es nicht.
+  - Später optional: Kinder mit Alter, Verpflegung, nur stornierbar, Ausschluss von Hotels (z. B. das bisherige).
 - **Vorbefüllung im Use-Case „Buchung nicht nutzbar“:**
 
   | Kriterium | aus der Buchung | fehlt der Wert |
@@ -60,6 +65,7 @@
   | Gäste | `guests` | Pflichteingabe, vorgeschlagen 2 |
   | Zimmer | `rooms` | 1 |
   | Max. Preis | `price` + `currency` der Buchung, Standard ohne Aufschlag (Nutzer erhöht bei Bedarf); bei verkürztem Zeitraum anteilig pro Nacht | ohne Obergrenze, Nutzer kann eine setzen |
+  | Mindeststerne | Sterne der bisherigen Unterkunft (abgerundet) aus ihrem LiteAPI-Profil, nur wenn `placeRef` eine LiteAPI-Hotel-Id ist; ein Fehler bei LiteAPI lässt das Feld leer | „Egal“, Nutzer kann 2–5 wählen |
 
 - Ausgeschlossen wird die bisherige Unterkunft, wenn ihr `placeRef` eine LiteAPI-Hotel-Id ist; sonst Treffer mit sehr kleinem Abstand (< 50 m) und ähnlichem Namen als „bisherige Unterkunft?“ markieren.
 - Spätere Use-Cases befüllen anders, z. B. „anderer Ort“: Region aus einem anderen Stop oder Ort, übrige Werte aus der Buchung.
@@ -68,9 +74,9 @@
 
 1. **Einstieg:** in den Details einer Unterkunft-Buchung „Alternative suchen“ (optional Grund: falsch gebucht, Hotel hat keine Buchung, sonstiges).
 2. **Kriterien prüfen:** Formular mit den vorbefüllten Werten (Herkunft „aus der Buchung“ gekennzeichnet, fehlende Pflichtwerte markiert). Nutzer kann alles ändern.
-3. **Suche:** Backend ruft `/hotels/rates` mit Koordinaten, Umkreis, Zeitraum, `occupancies`, `currency` = Währung des Max. Preises, `includeHotelData`, `maxRatesPerHotel` klein, `limit` begrenzt.
-4. **Harte Prüfung:** je Hotel das günstigste Angebot, das alle Kriterien erfüllt (Gesamtpreis ≤ Max., Abstand per Haversine ≤ Umkreis, Belegung passt). Hotels ohne passendes Angebot fallen weg.
-5. **Auswahl durch den Assistant** (falls verfügbar) über die Top-N, Ergebnis: empfohlene Alternative plus geordnete weitere Treffer mit Begründung (✦ wie beim Auslesen).
+3. **Suche:** Backend ruft `/hotels/rates` mit Koordinaten, Umkreis, Zeitraum, `occupancies`, `currency` = Währung des Max. Preises, `starRating` bei Mindeststernen, `includeHotelData`, `maxRatesPerHotel` klein, `limit` begrenzt.
+4. **Harte Prüfung:** je Hotel das günstigste Angebot, das alle Kriterien erfüllt (Gesamtpreis ≤ Max., Abstand per Haversine ≤ Umkreis, Belegung passt, Sterne ≥ Mindeststerne). Hotels ohne passendes Angebot fallen weg.
+5. **Vergleich durch den Assistant** (falls verfügbar) über die nächsten 40 mit ihren Profilen: nicht vergleichbare fallen weg, Ergebnis: empfohlene Alternative plus geordnete weitere Treffer mit Begründung (✦ wie beim Auslesen) und Hinweis „N Unterkünfte ausgeblendet“.
 6. **Ergebnis:** Liste und Karte mit der bisherigen Unterkunft als Bezug (Abstand, Preisunterschied). Keine Treffer → Hinweis, welches Kriterium am meisten ausschließt (z. B. „ab 7 km gäbe es 4 Treffer“, durch erneute Suche mit größerem Umkreis, nur auf Wunsch).
 7. **Angebot wählen → Prebook:** `/rates/prebook` (bei PayPal `usePaymentSdk: false`). Neuer Preis wird erneut gegen den Max. Preis geprüft; Preis-, Storno- oder Verpflegungsänderung wird vor der Zahlung angezeigt.
 8. **Bestätigen und zahlen:** Zusammenfassung mit Endpreis (Nettopreis + Provision), Gastdaten (Name, E-Mail aus dem Profil vorbelegt), Zahlung per PayPal, siehe [Zahlung](#zahlung).
@@ -162,12 +168,12 @@
 
 - LiteAPI-Client, `StructuredExtraction` und `PayPalCheckout` in Integrationstests gemockt, `nfv.bookings.alternatives.api-key=` leer in den Test-Properties. Neue PayPal-Aufrufe in `PayPalClientTest` gegen `MockRestServiceServer`.
 - Zahlfälle: Buchung scheitert nach Autorisierung → Void, kein Capture; Abbruch zwischen Buchung und Capture → Poller captured; Capture doppelt → idempotent.
-- Fälle: Vorbefüllung (fehlende Gäste/Koordinaten, laufender Aufenthalt, anteiliger Preis), harte Prüfung verwirft zu teure und zu weit entfernte Angebote, Ranking verwirft fremde Ids, Suche ohne Assistant, Prebook über Max. Preis → `PRICE_EXCEEDED`, `2001` → `OFFER_EXPIRED`, Buchung idempotent über `clientReference`, neue Booking mit `source` `SEARCH`.
+- Fälle: Vorbefüllung (fehlende Gäste/Koordinaten, laufender Aufenthalt, anteiliger Preis), harte Prüfung verwirft zu teure, zu weit entfernte und Angebote unter den Mindeststernen (auch ohne Sterne), `starRating` an LiteAPI, Ranking verwirft fremde Ids, Assistant schließt nicht vergleichbare aus und bekommt die Profile, Suche ohne Assistant, Prebook über Max. Preis → `PRICE_EXCEEDED`, `2001` → `OFFER_EXPIRED`, Buchung idempotent über `clientReference`, neue Booking mit `source` `SEARCH`.
 - Manuell gegen die Sandbox (`sand_`-Key, Testkarten des Payment SDK).
 
 ## Umsetzung (Stand 2026-11-03)
 
-- **Code:** `bookings.logic` `LiteApi` (Client, eigene Records), `AlternativeSearch` (Kriterien, harte Prüfung), `AlternativeRanking` (Assistant), `AlternativeReservations` (Ablauf) mit `ReservationSteps` (eine Transaktion je Schritt), `Pricing`, `SearchLimiter`; `bookings.api.AlternativeController`; `bookings.config.AlternativesProperties` (`nfv.bookings.alternatives.*`); Frontend `src/bookings/AlternativesSheet.tsx`.
+- **Code:** `bookings.logic` `LiteApi` (Client, eigene Records), `AlternativeSearch` (Kriterien, harte Prüfung), `AlternativeRanking` (Assistant: Vergleich, Ausschluss, Rangfolge), `HotelProfiles` (Profile aus `/data/hotel`, Cache), `AlternativeReservations` (Ablauf) mit `ReservationSteps` (eine Transaktion je Schritt), `Pricing`, `SearchLimiter`; `bookings.api.AlternativeController`; `bookings.config.AlternativesProperties` (`nfv.bookings.alternatives.*`); Frontend `src/bookings/AlternativesSheet.tsx`.
 - **Zahlung nur PayPal** (Entscheidung 2026-11-03), kein Payment SDK. Buchung bei LiteAPI immer mit `ACC_CREDIT_CARD`, Rates und Prebook mit `margin: 0`.
 - **Provision:** `fee-percent` (Standard 10 %) auf den Nettopreis, gedeckelt auf den `suggestedSellingPrice`, falls der über dem Nettopreis liegt. Der Max. Preis gilt für den Endpreis.
 - **Status** der Reservierung: `PREBOOKED`, `PAYMENT_PENDING` (Order angelegt), `AUTHORIZED`, `PROVIDER_BOOKED` (bei LiteAPI gebucht, Geld noch nicht eingezogen), `BOOKED`, `FAILED`.

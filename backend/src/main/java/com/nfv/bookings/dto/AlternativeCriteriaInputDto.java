@@ -13,5 +13,8 @@ public record AlternativeCriteriaInputDto(Double latitude, Double longitude, Int
                                           LocalDate checkIn, LocalDate checkOut, Integer guests, Integer rooms,
                                           @Schema(type = "string", format = "decimal", example = "412.50")
                                           @JsonFormat(shape = JsonFormat.Shape.STRING) @Nullable BigDecimal maxPrice,
-                                          String currency, @Nullable String excludeHotelId) {
+                                          String currency, @Nullable String excludeHotelId,
+                                          @Schema(description = "At least these stars (1 to 5), hotels without stars "
+                                                  + "are left out; empty: no limit")
+                                          @Nullable Integer minStars) {
 }

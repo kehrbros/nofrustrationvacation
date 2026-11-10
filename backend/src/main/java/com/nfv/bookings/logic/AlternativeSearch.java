@@ -25,8 +25,9 @@ import java.util.regex.Pattern;
 
 /**
  * Search for alternatives to an accommodation booking: criteria from the booking, offers from LiteAPI, hard check of
- * every offer against all criteria here, ranking by the assistant, see Docs/accommodation-alternatives.md. Runs
- * without transaction, the calls to LiteAPI and the model take seconds.
+ * every offer against all criteria here, comparison with the current accommodation by the assistant (drops those not
+ * comparable, ranks the rest), see Docs/accommodation-alternatives.md. Runs without transaction, the calls to LiteAPI
+ * and the model take seconds.
  */
 @Service
 @RequiredArgsConstructor
@@ -41,6 +42,7 @@ public class AlternativeSearch {
     private final TripLogic tripLogic;
     private final LiteApi liteApi;
     private final AlternativeRanking ranking;
+    private final HotelProfiles profiles;
     private final SearchLimiter limiter;
     private final AlternativesProperties properties;
     private final PayPalCheckout checkout;
@@ -102,23 +104,69 @@ public class AlternativeSearch {
                         .divide(BigDecimal.valueOf(bookedNights), 2, RoundingMode.UP);
             }
         }
-        String placeRef = details.getPlaceRef();
+        String hotelId = liteApiHotelId(details);
         return new CriteriaProposal(latitude, longitude, placeName, properties.defaultRadius(), checkIn, checkOut,
                 details.getGuests(), details.getRooms() == null ? 1 : details.getRooms(), maxPrice,
-                booking.getCurrency() == null ? "EUR" : booking.getCurrency(),
-                placeRef != null && placeRef.startsWith(PLACE_REF_PREFIX) ? placeRef.substring(PLACE_REF_PREFIX.length()) : null,
+                booking.getCurrency() == null ? "EUR" : booking.getCurrency(), hotelId, stars(hotelId),
                 List.copyOf(missing));
     }
 
-    /** Offers that meet all criteria, best first: ranked by the assistant if available, else by price. */
+    /** Stars of the current accommodation, rounded down, if LiteAPI knows the hotel; never fails the proposal. */
+    private @Nullable Integer stars(@Nullable String hotelId) {
+        if (hotelId == null || !liteApi.isAvailable()) {
+            return null;
+        }
+        Double stars = profiles.get(hotelId).map(LiteApi.HotelProfile::stars).orElse(null);
+        return stars == null || stars < 1 ? null : (int) Math.min(5, Math.floor(stars));
+    }
+
+    private static @Nullable String liteApiHotelId(AccommodationDetails details) {
+        String placeRef = details.getPlaceRef();
+        return placeRef != null && placeRef.startsWith(PLACE_REF_PREFIX)
+                ? placeRef.substring(PLACE_REF_PREFIX.length()) : null;
+    }
+
+    /**
+     * Offers that meet all criteria, best first. With the assistant: the nearest {@code ranking-pool} are compared
+     * with the current accommodation, those not comparable are dropped, the rest ranked. Without it (or if it fails):
+     * by price.
+     */
     public SearchResult search(long appUserId, long bookingId, AlternativeCriteria criteria) {
         BookingView view = bookingLogic.accommodation(appUserId, bookingId);
-        Offers found = find(appUserId, criteria, properties.maxCandidates());
-        List<AlternativeCandidate> ranked = ranking.rank(appUserId, view.booking(), view.accommodation(),
-                found.candidates());
-        boolean byAssistant = ranked.stream().anyMatch(candidate -> candidate.reason() != null);
-        return new SearchResult(ranked, byAssistant && !ranked.isEmpty() ? ranked.getFirst().hotelId() : null,
-                byAssistant, found.checked());
+        Offers found = find(appUserId, criteria);
+        if (ranking.isAvailable() && !found.candidates().isEmpty()) {
+            List<AlternativeCandidate> pool = found.candidates().stream()
+                    .sorted(Comparator.comparingInt(AlternativeCandidate::distanceMeters)
+                            .thenComparing(AlternativeCandidate::price))
+                    .limit(properties.rankingPool())
+                    .toList();
+            String currentHotelId = liteApiHotelId(view.accommodation());
+            List<String> ids = new ArrayList<>();
+            if (currentHotelId != null) {
+                ids.add(currentHotelId);
+            }
+            pool.forEach(candidate -> ids.add(candidate.hotelId()));
+            Map<String, LiteApi.HotelProfile> loaded = profiles.all(ids);
+            AlternativeRanking.Result result = ranking.rank(appUserId, view.booking(), view.accommodation(),
+                    currentHotelId == null ? null : loaded.get(currentHotelId), pool, loaded,
+                    ChronoUnit.DAYS.between(criteria.checkIn(), criteria.checkOut()));
+            if (result != null) {
+                List<AlternativeCandidate> ranked = result.candidates().stream()
+                        .limit(properties.maxCandidates()).toList();
+                return new SearchResult(ranked, ranked.isEmpty() ? null : ranked.getFirst().hotelId(), true,
+                        found.checked(), result.excluded());
+            }
+        }
+        return new SearchResult(byPrice(found.candidates(), properties.maxCandidates()), null, false,
+                found.checked(), 0);
+    }
+
+    private static List<AlternativeCandidate> byPrice(List<AlternativeCandidate> candidates, int limit) {
+        return candidates.stream()
+                .sorted(Comparator.comparing(AlternativeCandidate::price)
+                        .thenComparingInt(AlternativeCandidate::distanceMeters))
+                .limit(limit)
+                .toList();
     }
 
     /**
@@ -131,18 +179,19 @@ public class AlternativeSearch {
      * @throws LiteApiUnavailableException  LiteAPI not configured or failing
      */
     public List<AlternativeCandidate> offers(long appUserId, AlternativeCriteria criteria, int maxResults) {
-        return find(appUserId, criteria, Math.min(maxResults, properties.maxCandidates())).candidates();
+        return byPrice(find(appUserId, criteria).candidates(), Math.min(maxResults, properties.maxCandidates()));
     }
 
+    /** @param candidates the cheapest offer of every hotel that meets all criteria, in no particular order */
     private record Offers(List<AlternativeCandidate> candidates, int checked) {
     }
 
-    private Offers find(long appUserId, AlternativeCriteria criteria, int limit) {
+    private Offers find(long appUserId, AlternativeCriteria criteria) {
         validate(criteria);
         limiter.acquire(appUserId);
         List<LiteApi.HotelOffer> offers = liteApi.rates(new LiteApi.RateQuery(criteria.latitude(), criteria.longitude(),
                 criteria.radiusMeters(), criteria.checkIn(), criteria.checkOut(),
-                Pricing.adultsPerRoom(criteria.guests(), criteria.rooms()), criteria.currency()));
+                Pricing.adultsPerRoom(criteria.guests(), criteria.rooms()), criteria.currency(), criteria.minStars()));
 
         Map<String, AlternativeCandidate> cheapest = new LinkedHashMap<>();
         for (LiteApi.HotelOffer offer : offers) {
@@ -153,17 +202,15 @@ public class AlternativeSearch {
             cheapest.merge(candidate.hotelId(), candidate,
                     (existing, other) -> other.price().compareTo(existing.price()) < 0 ? other : existing);
         }
-        List<AlternativeCandidate> candidates = cheapest.values().stream()
-                .sorted(Comparator.comparing(AlternativeCandidate::price)
-                        .thenComparingInt(AlternativeCandidate::distanceMeters))
-                .limit(limit)
-                .toList();
-        return new Offers(candidates, offers.size());
+        return new Offers(List.copyOf(cheapest.values()), offers.size());
     }
 
     /** The hard check: the candidate with our price, or null if any criterion is not met. */
     @Nullable AlternativeCandidate check(LiteApi.HotelOffer offer, AlternativeCriteria criteria) {
         if (!offer.currency().equalsIgnoreCase(criteria.currency()) || offer.hotelId().equals(criteria.excludeHotelId())) {
+            return null;
+        }
+        if (criteria.minStars() != null && (offer.stars() == null || offer.stars() < criteria.minStars())) {
             return null;
         }
         int distance = Pricing.distanceMeters(criteria.latitude(), criteria.longitude(), offer.latitude(), offer.longitude());
@@ -200,6 +247,9 @@ public class AlternativeSearch {
         if (criteria.rooms() < 1 || criteria.rooms() > 9 || criteria.guests() < criteria.rooms() || criteria.guests() > 36) {
             throw new InvalidBookingInputException("1 to 9 rooms with at least one guest each");
         }
+        if (criteria.minStars() != null && (criteria.minStars() < 1 || criteria.minStars() > 5)) {
+            throw new InvalidBookingInputException("minimum stars must be 1 to 5");
+        }
         if (criteria.maxPrice() != null && criteria.maxPrice().signum() <= 0) {
             throw new InvalidBookingInputException("maximum price must be positive");
         }
@@ -218,8 +268,9 @@ public class AlternativeSearch {
     /**
      * @param recommendedHotelId the assistant's pick, null without ranking
      * @param offersChecked      offers LiteAPI returned before the hard check
+     * @param excluded           hotels meeting all criteria that the assistant left out as not comparable
      */
     public record SearchResult(List<AlternativeCandidate> candidates, @Nullable String recommendedHotelId,
-                               boolean ranked, int offersChecked) {
+                               boolean ranked, int offersChecked, int excluded) {
     }
 }

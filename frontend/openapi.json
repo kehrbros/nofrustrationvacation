@@ -200,7 +200,7 @@
     },
     "/api/v1/accommodation-bookings/{bookingId}/alternative-searches" : {
       "post" : {
-        "description" : "Offers from LiteAPI that meet all criteria, ranked by the assistant if available. Takes some seconds. 503 ALTERNATIVES_UNAVAILABLE, 429 ALTERNATIVES_RATE_LIMITED.",
+        "description" : "Offers from LiteAPI that meet all criteria. If available, the assistant leaves out those not comparable to the current accommodation and ranks the rest. Takes some seconds. 503 ALTERNATIVES_UNAVAILABLE, 429 ALTERNATIVES_RATE_LIMITED.",
         "operationId" : "searchAlternatives",
         "parameters" : [ {
           "in" : "path",
@@ -2715,6 +2715,11 @@
             "format" : "decimal",
             "example" : "412.50"
           },
+          "minStars" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "Stars of the current accommodation (rounded down) if LiteAPI knows it, as minimum for the search"
+          },
           "missing" : {
             "type" : "array",
             "items" : {
@@ -2770,6 +2775,11 @@
             "format" : "decimal",
             "example" : "412.50"
           },
+          "minStars" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int32",
+            "description" : "At least these stars (1 to 5), hotels without stars are left out; empty: no limit"
+          },
           "radiusMeters" : {
             "type" : "integer",
             "format" : "int32"
@@ -2782,13 +2792,18 @@
       },
       "AlternativeSearchResultDto" : {
         "type" : "object",
-        "description" : "Candidates best first, ranked by the assistant if ranked is true, else by price",
+        "description" : "Candidates best first, compared and ranked by the assistant if ranked is true, else by price",
         "properties" : {
           "candidates" : {
             "type" : "array",
             "items" : {
               "$ref" : "#/components/schemas/AlternativeCandidateDto"
             }
+          },
+          "excludedByAssistant" : {
+            "type" : "integer",
+            "format" : "int32",
+            "description" : "Hotels meeting all criteria that the assistant left out as not comparable to the current accommodation"
           },
           "offersChecked" : {
             "type" : "integer",

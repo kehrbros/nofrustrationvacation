@@ -57,6 +57,12 @@ public class LiteApi {
         body.put("guestNationality", properties.guestNationality());
         body.put("margin", 0);
         body.put("includeHotelData", true);
+        if (query.minStars() != null) {
+            ArrayNode stars = body.putArray("starRating");
+            for (int star = query.minStars(); star <= 5; star++) {
+                stars.add(star);
+            }
+        }
         body.put("maxRatesPerHotel", 3);
         body.put("limit", 200);
         body.put("timeout", 10);
@@ -141,6 +147,48 @@ public class LiteApi {
                 text(data.path("phone")), text(data.path("email")), https(text(data.path("website"))),
                 time(firstText(times, "checkin_start", "checkin")), time(text(times.path("checkin_end"))),
                 time(text(times.path("checkout"))));
+    }
+
+    /**
+     * Facts of a hotel to compare it with others: stars, kind, description as plain text (shortened), facilities.
+     * Read by {@link HotelProfiles}, which caches them.
+     */
+    public HotelProfile profile(String hotelId) {
+        JsonNode data = get(properties.searchUrl() + "/data/hotel?hotelId={id}", hotelId).path("data");
+        Double stars = number(data.path("starRating"));
+        List<String> facilities = new ArrayList<>();
+        for (JsonNode facility : data.path("hotelFacilities")) {
+            String name = text(facility);
+            if (name != null && facilities.size() < MAX_FACILITIES) {
+                facilities.add(name);
+            }
+        }
+        return new HotelProfile(hotelId, stars == null ? number(data.path("stars")) : stars,
+                text(data.path("hotelType")), plainText(text(data.path("hotelDescription")), MAX_DESCRIPTION),
+                List.copyOf(facilities));
+    }
+
+    private static final int MAX_FACILITIES = 15;
+    private static final int MAX_DESCRIPTION = 600;
+    private static final Pattern TAG = Pattern.compile("<[^>]*>");
+    private static final Pattern SPACE = Pattern.compile("\\s+");
+
+    /** HTML of LiteAPI as plain text, cut after {@code max} characters at a word. */
+    static @Nullable String plainText(@Nullable String html, int max) {
+        if (html == null) {
+            return null;
+        }
+        String text = SPACE.matcher(TAG.matcher(html).replaceAll(" ")
+                .replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
+                .replace("&lt;", "<").replace("&gt;", ">")).replaceAll(" ").strip();
+        if (text.isEmpty()) {
+            return null;
+        }
+        if (text.length() <= max) {
+            return text;
+        }
+        int cut = text.lastIndexOf(' ', max);
+        return text.substring(0, cut > max / 2 ? cut : max) + " …";
     }
 
     /** Locks price and availability of an offer, to be paid by ourselves (no payment SDK). */
@@ -406,9 +454,21 @@ public class LiteApi {
     private record Amount(BigDecimal value, String currency) {
     }
 
-    /** @param adultsPerRoom one entry per room */
+    /**
+     * @param adultsPerRoom one entry per room
+     * @param minStars      only hotels with at least these stars (LiteAPI filter {@code starRating}); null: all
+     */
     public record RateQuery(double latitude, double longitude, int radiusMeters, LocalDate checkIn, LocalDate checkOut,
-                            List<Integer> adultsPerRoom, String currency) {
+                            List<Integer> adultsPerRoom, String currency, @Nullable Integer minStars) {
+    }
+
+    /**
+     * @param hotelType   kind as LiteAPI names it, e.g. hotel, motel, hostel
+     * @param description plain text, shortened
+     * @param facilities  at most 15
+     */
+    public record HotelProfile(String hotelId, @Nullable Double stars, @Nullable String hotelType,
+                               @Nullable String description, List<String> facilities) {
     }
 
     /**

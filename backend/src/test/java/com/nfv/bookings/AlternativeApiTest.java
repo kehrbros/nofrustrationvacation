@@ -1,6 +1,7 @@
 package com.nfv.bookings;
 
 import com.jayway.jsonpath.JsonPath;
+import com.nfv.assistant.logic.ExtractionInput;
 import com.nfv.assistant.logic.StructuredExtraction;
 import com.nfv.bookings.logic.LiteApi;
 import com.nfv.bookings.logic.OfferUnavailableException;
@@ -113,6 +114,7 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.rooms").value(1))
                 .andExpect(jsonPath("$.maxPrice").value("412.50"))
                 .andExpect(jsonPath("$.currency").value("EUR"))
+                .andExpect(jsonPath("$.minStars").isEmpty())
                 .andExpect(jsonPath("$.missing", hasSize(0)));
     }
 
@@ -130,9 +132,9 @@ class AlternativeApiTest {
         when(extraction.isAvailable()).thenReturn(true);
         when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any()))
                 .thenReturn(jsonMapper.readTree("""
-                        {"ranking": [{"hotelId": "good", "reason": "Gleiche Kategorie, ruhig gelegen."},
-                                     {"hotelId": "invented", "reason": "x"},
-                                     {"hotelId": "cheap", "reason": "Günstig, gleich nebenan."}]}"""));
+                        {"ranking": [{"hotelId": "good", "comparable": true, "reason": "Gleiche Kategorie, ruhig gelegen."},
+                                     {"hotelId": "invented", "comparable": true, "reason": "x"},
+                                     {"hotelId": "cheap", "comparable": true, "reason": "Günstig, gleich nebenan."}]}"""));
 
         mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(user)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(CRITERIA))
@@ -144,7 +146,61 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.candidates[1].possiblySame").value(false))
                 .andExpect(jsonPath("$.recommendedHotelId").value("good"))
                 .andExpect(jsonPath("$.ranked").value(true))
-                .andExpect(jsonPath("$.offersChecked").value(6));
+                .andExpect(jsonPath("$.offersChecked").value(6))
+                .andExpect(jsonPath("$.excludedByAssistant").value(0));
+    }
+
+    @Test
+    void assistantLeavesOutHotelsNotComparableToTheCurrentOne() throws Exception {
+        when(liteApi.rates(any())).thenReturn(List.of(offer("hotel", 41.9050, 12.5000, "300.00", "EUR"),
+                offer("hostel", 41.9030, 12.4970, "90.00", "EUR")));
+        when(liteApi.profile("hostel")).thenReturn(new LiteApi.HotelProfile("hostel", null, "Hostel",
+                "Dormitories with shared bathrooms.", List.of("Shared kitchen")));
+        when(extraction.isAvailable()).thenReturn(true);
+        when(extraction.extract(anyLong(), anyString(), eq("alternative_ranking"), any(), any()))
+                .thenReturn(jsonMapper.readTree("""
+                        {"ranking": [{"hotelId": "hotel", "comparable": true, "reason": "Gleiche Kategorie."},
+                                     {"hotelId": "hostel", "comparable": false, "reason": "Hostel mit Mehrbettzimmern."}]}"""));
+
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(CRITERIA))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[*].hotelId", contains("hotel")))
+                .andExpect(jsonPath("$.recommendedHotelId").value("hotel"))
+                .andExpect(jsonPath("$.ranked").value(true))
+                .andExpect(jsonPath("$.excludedByAssistant").value(1));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<ExtractionInput>> input = ArgumentCaptor.forClass(List.class);
+        verify(extraction).extract(anyLong(), anyString(), eq("alternative_ranking"), any(), input.capture());
+        String text = ((ExtractionInput.Text) input.getValue().getFirst()).text();
+        assertThat(text).contains("\"kind\":\"Hostel\"", "Dormitories with shared bathrooms.", "\"pricePerNight\":\"137.50 EUR\"");
+    }
+
+    @Test
+    void minimumStarsLeaveOutHotelsWithFewerOrNoStars() throws Exception {
+        when(liteApi.rates(any())).thenReturn(List.of(offer("four", 41.9050, 12.5000, "300.00", "EUR", 4.0),
+                offer("three", 41.9030, 12.4970, "150.00", "EUR", 3.0),
+                offer("none", 41.9030, 12.4970, "100.00", "EUR", null)));
+
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(CRITERIA.replace("}", ",\"minStars\":4}")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.candidates[*].hotelId", contains("four")));
+
+        ArgumentCaptor<LiteApi.RateQuery> query = ArgumentCaptor.forClass(LiteApi.RateQuery.class);
+        verify(liteApi).rates(query.capture());
+        assertThat(query.getValue().minStars()).isEqualTo(4);
+    }
+
+    @Test
+    void minimumStarsOutOfRangeAreRejected() throws Exception {
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(CRITERIA.replace("}", ",\"minStars\":6}")))
+                .andExpect(status().isBadRequest());
+        verify(liteApi, never()).rates(any());
     }
 
     @Test
@@ -535,7 +591,12 @@ class AlternativeApiTest {
 
     private static LiteApi.HotelOffer offer(String hotelId, double latitude, double longitude, String net,
                                             String currency) {
-        return new LiteApi.HotelOffer(hotelId, "Hotel " + hotelId, "Via " + hotelId, "IT", latitude, longitude, 3.0,
+        return offer(hotelId, latitude, longitude, net, currency, 3.0);
+    }
+
+    private static LiteApi.HotelOffer offer(String hotelId, double latitude, double longitude, String net,
+                                            String currency, Double stars) {
+        return new LiteApi.HotelOffer(hotelId, "Hotel " + hotelId, "Via " + hotelId, "IT", latitude, longitude, stars,
                 8.1, null, "OF-" + hotelId + "-" + net, "Doppelzimmer", "Frühstück", true, null, new BigDecimal(net),
                 currency, null);
     }

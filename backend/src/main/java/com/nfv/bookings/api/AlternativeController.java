@@ -66,19 +66,21 @@ public class AlternativeController {
         CriteriaProposal proposal = search.criteriaFor(user.appUserId(), bookingId);
         return new AlternativeCriteriaDto(proposal.latitude(), proposal.longitude(), proposal.placeName(),
                 proposal.radiusMeters(), proposal.checkIn(), proposal.checkOut(), proposal.guests(), proposal.rooms(),
-                proposal.maxPrice(), proposal.currency(), proposal.excludeHotelId(), proposal.missing());
+                proposal.maxPrice(), proposal.currency(), proposal.excludeHotelId(), proposal.minStars(),
+                proposal.missing());
     }
 
     @Operation(summary = "Search alternatives",
-            description = "Offers from LiteAPI that meet all criteria, ranked by the assistant if available. Takes "
-                    + "some seconds. 503 ALTERNATIVES_UNAVAILABLE, 429 ALTERNATIVES_RATE_LIMITED.")
+            description = "Offers from LiteAPI that meet all criteria. If available, the assistant leaves out those "
+                    + "not comparable to the current accommodation and ranks the rest. Takes some seconds. 503 "
+                    + "ALTERNATIVES_UNAVAILABLE, 429 ALTERNATIVES_RATE_LIMITED.")
     @PostMapping("/accommodation-bookings/{bookingId}/alternative-searches")
     public AlternativeSearchResultDto searchAlternatives(@AuthenticationPrincipal CurrentUser user,
                                                          @PathVariable long bookingId,
                                                          @RequestBody AlternativeCriteriaInputDto criteria) {
         AlternativeSearch.SearchResult result = search.search(user.appUserId(), bookingId, toCriteria(criteria));
         return new AlternativeSearchResultDto(result.candidates().stream().map(AlternativeController::toDto).toList(),
-                result.recommendedHotelId(), result.ranked(), result.offersChecked());
+                result.recommendedHotelId(), result.ranked(), result.offersChecked(), result.excluded());
     }
 
     @Operation(summary = "Reserve an alternative",
@@ -179,7 +181,7 @@ public class AlternativeController {
         }
         return new AlternativeCriteria(dto.latitude(), dto.longitude(), number(dto.radiusMeters(), "radius"),
                 dto.checkIn(), dto.checkOut(), number(dto.guests(), "guests"), number(dto.rooms(), "rooms"),
-                dto.maxPrice(), upper(dto.currency()), dto.excludeHotelId());
+                dto.maxPrice(), upper(dto.currency()), dto.excludeHotelId(), dto.minStars());
     }
 
     private static int number(@Nullable Integer value, String field) {

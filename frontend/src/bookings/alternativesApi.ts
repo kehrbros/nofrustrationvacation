@@ -38,6 +38,8 @@ export interface Criteria {
   maxPrice: string;
   currency: string;
   excludeHotelId: string | null;
+  /** At least these stars (1–5), hotels without stars are left out; null: no limit. */
+  minStars: number | null;
   missing: string[];
 }
 
@@ -68,6 +70,8 @@ export interface SearchResult {
   recommendedHotelId: string | null;
   ranked: boolean;
   offersChecked: number;
+  /** Hotels meeting all criteria that the assistant left out as not comparable to the current accommodation. */
+  excludedByAssistant: number;
 }
 
 export type ReservationStatus = 'PREBOOKED' | 'PAYMENT_PENDING' | 'AUTHORIZED' | 'PROVIDER_BOOKED' | 'BOOKED' | 'FAILED'
@@ -247,6 +251,7 @@ export async function fetchCriteria(bookingId: number): Promise<Criteria> {
     maxPrice: dto.maxPrice ?? '',
     currency: dto.currency ?? 'EUR',
     excludeHotelId: dto.excludeHotelId ?? null,
+    minStars: dto.minStars ?? null,
     missing: dto.missing ?? [],
   };
 }
@@ -263,6 +268,7 @@ function criteriaBody(criteria: Criteria) {
     maxPrice: criteria.maxPrice.trim() ? criteria.maxPrice.trim().replace(',', '.') : undefined,
     currency: criteria.currency,
     excludeHotelId: criteria.excludeHotelId ?? undefined,
+    minStars: criteria.minStars ?? undefined,
   };
 }
 
@@ -274,6 +280,7 @@ export async function searchAlternatives(bookingId: number, criteria: Criteria):
     recommendedHotelId: dto.recommendedHotelId ?? null,
     ranked: dto.ranked ?? false,
     offersChecked: dto.offersChecked ?? 0,
+    excludedByAssistant: dto.excludedByAssistant ?? 0,
   };
 }
 

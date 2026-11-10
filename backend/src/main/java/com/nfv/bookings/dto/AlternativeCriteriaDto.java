@@ -20,5 +20,8 @@ public record AlternativeCriteriaDto(@Nullable Double latitude, @Nullable Double
                                      String currency,
                                      @Schema(description = "LiteAPI id of the current accommodation, if known")
                                      @Nullable String excludeHotelId,
+                                     @Schema(description = "Stars of the current accommodation (rounded down) if "
+                                             + "LiteAPI knows it, as minimum for the search")
+                                     @Nullable Integer minStars,
                                      List<String> missing) {
 }

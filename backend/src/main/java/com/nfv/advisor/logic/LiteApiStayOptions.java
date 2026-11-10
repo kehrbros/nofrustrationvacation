@@ -34,7 +34,7 @@ class LiteApiStayOptions implements StayOptions {
     public List<StayOffer> search(long appUserId, StaySearch search) {
         AlternativeCriteria criteria = new AlternativeCriteria(search.latitude(), search.longitude(),
                 search.radiusMeters(), search.checkIn(), search.checkOut(), search.guests(), search.rooms(),
-                search.maxPrice(), search.currency(), search.excludeHotelId());
+                search.maxPrice(), search.currency(), search.excludeHotelId(), null);
         try {
             return alternativeSearch.offers(appUserId, criteria, search.maxResults()).stream()
                     .map(c -> new StayOffer(c.hotelId(), c.offerId(), c.name(), c.latitude(), c.longitude(),

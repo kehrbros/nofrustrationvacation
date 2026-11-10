@@ -37,7 +37,7 @@ class LiteApiTest {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
         liteApi = new LiteApi(builder.build(), new AlternativesProperties("sand_key", SEARCH, BOOK, BigDecimal.TEN,
-                5000, 20, "DE", "http://localhost:18173", Duration.ofSeconds(5), 30,
+                5000, 20, 40, "DE", "http://localhost:18173", Duration.ofSeconds(5), 30,
                 Duration.ofHours(3), false, Duration.ofMinutes(2)));
     }
 
@@ -49,6 +49,7 @@ class LiteApiTest {
                 .andExpect(jsonPath("$.radius").value(3000))
                 .andExpect(jsonPath("$.occupancies[0].adults").value(3))
                 .andExpect(jsonPath("$.occupancies[1].adults").value(2))
+                .andExpect(jsonPath("$.starRating").doesNotExist())
                 .andRespond(withSuccess("""
                         {"data": [{"hotelId": "lp1", "roomTypes": [{"offerId": "OF-1",
                            "offerRetailRate": {"amount": 163.66, "currency": "EUR"},
@@ -62,7 +63,7 @@ class LiteApiTest {
                         MediaType.APPLICATION_JSON));
 
         List<LiteApi.HotelOffer> offers = liteApi.rates(new LiteApi.RateQuery(41.9, 12.49, 3000,
-                LocalDate.of(2027, 7, 12), LocalDate.of(2027, 7, 15), List.of(3, 2), "EUR"));
+                LocalDate.of(2027, 7, 12), LocalDate.of(2027, 7, 15), List.of(3, 2), "EUR", null));
 
         assertThat(offers).singleElement().satisfies(offer -> {
             assertThat(offer.hotelId()).isEqualTo("lp1");
@@ -74,6 +75,42 @@ class LiteApiTest {
             assertThat(offer.stars()).isEqualTo(4.0);
         });
         server.verify();
+    }
+
+    @Test
+    void minimumStarsAreSentAsStarRatingFilter() {
+        server.expect(requestTo(SEARCH + "/hotels/rates"))
+                .andExpect(jsonPath("$.starRating.length()").value(2))
+                .andExpect(jsonPath("$.starRating[0]").value(4))
+                .andExpect(jsonPath("$.starRating[1]").value(5))
+                .andRespond(withSuccess("{\"data\": [], \"hotels\": []}", MediaType.APPLICATION_JSON));
+
+        assertThat(liteApi.rates(new LiteApi.RateQuery(41.9, 12.49, 3000, LocalDate.of(2027, 7, 12),
+                LocalDate.of(2027, 7, 15), List.of(2), "EUR", 4))).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void profileHasStarsKindPlainDescriptionAndFacilities() {
+        server.expect(requestTo(SEARCH + "/data/hotel?hotelId=lp1"))
+                .andRespond(withSuccess("""
+                        {"data": {"id": "lp1", "name": "Hotel Sole", "starRating": 4, "hotelType": "Hotel",
+                          "hotelDescription": "<p><strong>Quiet</strong> rooms&nbsp;with   ensuite &amp; balcony.</p>",
+                          "hotelFacilities": ["Free WiFi", "Restaurant", ""]}}""",
+                        MediaType.APPLICATION_JSON));
+
+        LiteApi.HotelProfile profile = liteApi.profile("lp1");
+
+        assertThat(profile.stars()).isEqualTo(4.0);
+        assertThat(profile.hotelType()).isEqualTo("Hotel");
+        assertThat(profile.description()).isEqualTo("Quiet rooms with ensuite & balcony.");
+        assertThat(profile.facilities()).containsExactly("Free WiFi", "Restaurant");
+    }
+
+    @Test
+    void longDescriptionsAreCutAtAWord() {
+        assertThat(LiteApi.plainText("one two three four", 10)).isEqualTo("one two …");
+        assertThat(LiteApi.plainText("<br/>", 10)).isNull();
     }
 
     @Test

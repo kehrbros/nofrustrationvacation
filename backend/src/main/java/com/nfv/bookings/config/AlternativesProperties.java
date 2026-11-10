@@ -15,7 +15,9 @@ import java.time.Duration;
  * @param bookUrl          API base for prebook and book, e.g. {@code https://book.liteapi.travel/v3.0}
  * @param feePercent       our commission on top of the net rate, in percent
  * @param defaultRadius    radius around the accommodation in meters if the user does not change it
- * @param maxCandidates    candidates shown and passed to the assistant for ranking
+ * @param maxCandidates    candidates shown at most
+ * @param rankingPool      nearest candidates passed to the assistant, which drops those not comparable to the
+ *                         current accommodation and ranks the rest
  * @param guestNationality ISO 3166-1 alpha-2, LiteAPI prices depend on it
  * @param frontendUrl      base of the PayPal return URLs
  * @param timeout          per request to LiteAPI
@@ -26,7 +28,7 @@ import java.time.Duration;
  */
 @ConfigurationProperties("nfv.bookings.alternatives")
 public record AlternativesProperties(String apiKey, String searchUrl, String bookUrl, BigDecimal feePercent,
-                                     int defaultRadius, int maxCandidates, String guestNationality,
+                                     int defaultRadius, int maxCandidates, int rankingPool, String guestNationality,
                                      String frontendUrl, Duration timeout, int searchesPerHour,
                                      Duration approvalTimeout, boolean recoveryEnabled, Duration recoveryGrace) {
 

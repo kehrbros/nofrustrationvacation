@@ -380,6 +380,14 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
         <input id="alt-radius" type="range" min={500} max={20000} step={500} value={criteria.radiusMeters}
           onChange={(event) => set({ radiusMeters: Number(event.target.value) })} />
       </div>
+      <div className="va-field">
+        <label htmlFor="alt-stars">{t('alternatives.minStars')}</label>
+        <select id="alt-stars" value={criteria.minStars ?? ''}
+          onChange={(event) => set({ minStars: event.target.value ? Number(event.target.value) : null })}>
+          <option value="">{t('alternatives.anyStars')}</option>
+          {[2, 3, 4, 5].map((stars) => <option key={stars} value={stars}>{t('alternatives.fromStars', { stars })}</option>)}
+        </select>
+      </div>
       <div className="va-field-row">
         <div className={mark('checkIn')}>
           <label htmlFor="alt-in">{t('booking.checkIn')}</label>
@@ -433,6 +441,7 @@ function Results({ result, criteria, onPick }: {
             ? t('alternatives.offersChecked', { count: result.offersChecked })
             : t('alternatives.noRooms')}
         </p>
+        {result.excludedByAssistant > 0 && <p className="va-small va-muted">{excludedHint(result.excludedByAssistant)}</p>}
       </div>
     );
   }
@@ -441,6 +450,7 @@ function Results({ result, criteria, onPick }: {
       <p className="va-small va-muted">
         {t('alternatives.found', { count: result.candidates.length, criteria: criteriaSummary(criteria) })}{' '}
         {result.ranked ? t('alternatives.bestFirst') : t('alternatives.cheapestFirst')}
+        {result.excludedByAssistant > 0 && <> {excludedHint(result.excludedByAssistant)}</>}
       </p>
       <ul className="va-plain-list va-alternatives">
         {result.candidates.map((candidate) => (
@@ -726,8 +736,14 @@ function criteriaSummary(criteria: Criteria): string {
       : null,
     criteria.checkIn && criteria.checkOut ? `${date(criteria.checkIn)} – ${date(criteria.checkOut)}` : null,
     t('common.guests', { count: guests }),
+    criteria.minStars ? t('alternatives.fromStars', { stars: criteria.minStars }) : null,
     criteria.maxPrice ? t('alternatives.upTo', { price: money(criteria.maxPrice.replace(',', '.'), criteria.currency) }) : null,
   ].filter(Boolean).join(' · ');
+}
+
+/** The assistant left out hotels it found not comparable (other kind or clearly lower standard). */
+function excludedHint(count: number): string {
+  return t('alternatives.excluded', { count });
 }
 
 function canSearch(criteria: Criteria): boolean {
