@@ -762,9 +762,13 @@ a {
   left: 0;
   right: 0;
   max-height: 92vh;
+  max-height: 92dvh;
   box-shadow: none !important;
 }
 .va-sheet .ant-drawer-content {
+  /* the wrapper's max-height does not reach the content with height "auto", without this the body never scrolls */
+  max-height: 92vh;
+  max-height: 92dvh;
   border: 2px solid var(--ink);
   border-bottom: none;
   border-radius: 20px 20px 0 0;
@@ -1232,6 +1236,7 @@ a.va-button {
   gap: 8px;
 }
 .va-alternative {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 12px;
