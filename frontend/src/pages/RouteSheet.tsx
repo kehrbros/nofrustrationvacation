@@ -5,6 +5,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
+import { HOME_PATH } from '../layout/navigation';
 import { impactLabel, incidentTitle } from '../trips/incidentText';
 import type { PlanOutcome, RouteOption, RouteSuggestions } from '../trips/model';
 import { formatDistance, formatDuration, optionTitle, slowerBy, substituteDeparture } from '../trips/routeOptionText';
@@ -161,7 +162,7 @@ export default function RouteSheet() {
         <ul className="va-plain-list">
           {incidents.map((incident) => (
             <li key={incident.incidentId}>
-              <Link to={`../hinweise/${route.id}/${incident.incidentId}`} relative="path" className="va-incident-row">
+              <Link to={`${HOME_PATH}/${trip.id}/hinweise/${route.id}/${incident.incidentId}`} className="va-incident-row">
                 <WarningOutlined aria-hidden="true" />
                 <span className="va-grow">{incidentTitle(incident)}</span>
                 <span className="va-chip va-chip-soft">{impactLabel(incident.impact)}</span>
