@@ -25,8 +25,14 @@ public class TripEditing {
         return plan(tripLogic.addStop(appUserId, tripId, stop, position));
     }
 
+    /** Change by the app itself (chosen departure, stopover), bookings at the stop are not checked. */
     public Map<Long, PlanResult> updateStop(long appUserId, long tripId, long stopId, NewStop stop) {
-        return plan(tripLogic.updateStop(appUserId, tripId, stopId, stop));
+        return updateStop(appUserId, tripId, stopId, stop, BookingFit.IGNORE);
+    }
+
+    /** @see TripLogic#updateStop */
+    public Map<Long, PlanResult> updateStop(long appUserId, long tripId, long stopId, NewStop stop, BookingFit fit) {
+        return plan(tripLogic.updateStop(appUserId, tripId, stopId, stop, fit));
     }
 
     public Map<Long, PlanResult> moveStop(long appUserId, long tripId, long stopId, int position) {
@@ -59,7 +65,8 @@ public class TripEditing {
         return routePlanning.plan(routeId);
     }
 
-    private Map<Long, PlanResult> plan(TripChange change) {
+    /** Plans the routes of a change made in another transaction, e.g. a stop extended with its booking. */
+    public Map<Long, PlanResult> plan(TripChange change) {
         Map<Long, PlanResult> results = new LinkedHashMap<>();
         for (long routeId : change.routesToPlan()) {
             try {

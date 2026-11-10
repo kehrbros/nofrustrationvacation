@@ -12,6 +12,7 @@ import {
   listTrips,
   dismissResolvedIncident,
   removeStop as removeStopRequest,
+  updateStop as updateStopRequest,
   uploadCoverImage as uploadCoverImageRequest,
 } from '../generated/api';
 import type {
@@ -28,6 +29,8 @@ export class TripsApiError extends Error {
   constructor(
     readonly status: number | undefined,
     readonly code?: string,
+    /** Problem details of the backend, e.g. the bookings of STOP_BOOKINGS_CONFLICT. */
+    readonly body?: Record<string, unknown>,
   ) {
     super(code ?? `request failed${status ? ` (${status})` : ''}`);
   }
@@ -37,7 +40,7 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
   const { data, error, response } = await call;
   if (error !== undefined || !response?.ok) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : undefined;
-    throw new TripsApiError(response?.status, code);
+    throw new TripsApiError(response?.status, code, typeof error === 'object' && error ? (error as Record<string, unknown>) : undefined);
   }
   return data as T;
 }
@@ -150,6 +153,18 @@ export async function createTrip(trip: NewTrip): Promise<TripDetail> {
 /** Appends the stop; the response is the whole trip, since routes are created and planned with it. */
 export async function addStop(tripId: number, stop: NewStop): Promise<TripDetail> {
   return toDetail(await unwrap(addStopRequest({ path: { tripId }, body: stop })));
+}
+
+/**
+ * Changes name, place and times of the stop; the response is the whole trip. Bookings at the stop must lie within its
+ * days, otherwise 409 STOP_BOOKINGS_CONFLICT (see stayConflict.ts); `trimBookings` shortens them instead.
+ */
+export async function updateStop(tripId: number, stopId: number, stop: NewStop, trimBookings = false): Promise<TripDetail> {
+  return toDetail(await unwrap(updateStopRequest({
+    path: { tripId, stopId },
+    query: trimBookings ? { bookingConflict: 'TRIM_BOOKINGS' } : undefined,
+    body: stop,
+  })));
 }
 
 /** Deletes the stop with its bookings; its neighbours get a new route. 409 STOP_IN_USE while a payment runs. */

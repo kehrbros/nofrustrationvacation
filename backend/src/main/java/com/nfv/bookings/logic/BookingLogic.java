@@ -4,8 +4,12 @@ import com.nfv.bookings.data.AccommodationDetailsRepository;
 import com.nfv.bookings.data.BookingRepository;
 import com.nfv.bookings.entities.AccommodationDetails;
 import com.nfv.bookings.entities.Booking;
+import com.nfv.bookings.entities.BookingSource;
+import com.nfv.bookings.entities.BookingStatus;
 import com.nfv.bookings.entities.BookingType;
 import com.nfv.trips.entities.Stop;
+import com.nfv.trips.logic.BookingFit;
+import com.nfv.trips.logic.TripChange;
 import com.nfv.trips.logic.TripLogic;
 import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +25,8 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -67,22 +73,71 @@ public class BookingLogic {
         return new BookingView(booking, details);
     }
 
-    /** Replaces the content of an accommodation booking, source and status stay. */
+    /**
+     * Replaces the content of an accommodation booking, source and status stay. Check-in and check-out must lie
+     * within the days of the stop (Docs/domain.md#bookings), otherwise {@code resolution} decides: extend
+     * the stop (in the same transaction, the routes are planned by the caller) or shorten the booking.
+     *
+     * @param resolution {@code null}: refuse
+     * @throws BookingOutsideStopException outside the days of the stop and not resolved
+     */
     @Transactional
-    public BookingView changeAccommodation(long appUserId, long bookingId, NewAccommodationBooking input) {
+    public ChangedBooking changeAccommodation(long appUserId, long bookingId, NewAccommodationBooking input,
+                                              @Nullable StopConflict resolution) {
         Booking booking = owned(appUserId, bookingId);
         if (booking.getType() != BookingType.ACCOMMODATION) {
             throw new InvalidBookingInputException("booking is no accommodation");
         }
         Valid valid = validate(input);
-        booking.change(valid.content());
+        Stop stop = tripLogic.stop(appUserId, booking.getStopId())
+                .orElseThrow(() -> BookingNotFoundException.booking(bookingId));
+        Booking.BookingContent content = valid.content();
+        StayFit.Stay stay = new StayFit.Stay(content.startsAt(), content.endsAt());
+        OffsetDateTime arrivalAt = stop.getArrivalAt();
+        OffsetDateTime departureAt = stop.getDepartureAt();
+        boolean extend = false;
+        if (booking.getStatus() != BookingStatus.CANCELLED && StayFit.outside(stay, arrivalAt, departureAt)) {
+            Optional<StayFit.Stay> trimmed = booking.getSource() == BookingSource.SEARCH ? Optional.empty()
+                    : StayFit.trim(stay, valid.place().timeZone(), arrivalAt, departureAt);
+            OffsetDateTime extendedArrival = StayFit.startsTooEarly(stay, arrivalAt)
+                    ? arrivalAt.with(stay.startsAt().toLocalDate()) : null;
+            OffsetDateTime extendedDeparture = StayFit.endsTooLate(stay, departureAt)
+                    ? departureAt.with(stay.endsAt().toLocalDate()) : null;
+            if (resolution == StopConflict.TRIM_BOOKING && trimmed.isPresent()) {
+                content = withStay(content, trimmed.get());
+            } else if (resolution == StopConflict.EXTEND_STOP) {
+                extend = true;
+                arrivalAt = extendedArrival == null ? arrivalAt : extendedArrival;
+                departureAt = extendedDeparture == null ? departureAt : extendedDeparture;
+            } else {
+                throw new BookingOutsideStopException(stop.getArrivalAt(), stop.getDepartureAt(), extendedArrival,
+                        extendedDeparture, trimmed.isPresent());
+            }
+        }
+        booking.change(content);
         AccommodationDetails details = accommodationRepository.findByBookingId(bookingId)
                 .map(existing -> {
                     existing.change(valid.place(), valid.rules());
                     return existing;
                 })
                 .orElseGet(() -> accommodationRepository.save(new AccommodationDetails(booking, valid.place(), valid.rules())));
-        return new BookingView(booking, details);
+        TripChange change = new TripChange(stop.getTrip().getId(), Set.of());
+        if (extend) {
+            // the other bookings lay within the old days, so they fit the longer stay as well
+            bookingRepository.flush();
+            change = tripLogic.rescheduleStop(appUserId, stop.getId(), arrivalAt, departureAt, BookingFit.CHECK);
+        }
+        return new ChangedBooking(new BookingView(booking, details), change);
+    }
+
+    /** Changed booking and the routes to plan after commit if its stop was extended. */
+    public record ChangedBooking(BookingView view, TripChange change) {
+    }
+
+    private static Booking.BookingContent withStay(Booking.BookingContent content, StayFit.Stay stay) {
+        return new Booking.BookingContent(content.title(), content.provider(), content.reference(),
+                content.manageUrl(), stay.startsAt(), stay.endsAt(), content.price(), content.currency(),
+                content.cancellationDeadline(), content.notes());
     }
 
     /** An accommodation booking of the user with its details. */

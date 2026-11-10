@@ -85,6 +85,12 @@ public class Booking extends AbstractEntity {
         this.notes = content.notes();
     }
 
+    /** New check-in and check-out, e.g. shortened to the days of the stop. */
+    public void reschedule(@Nullable OffsetDateTime startsAt, @Nullable OffsetDateTime endsAt) {
+        this.startsAt = startsAt;
+        this.endsAt = endsAt;
+    }
+
     public void cancel() {
         this.status = BookingStatus.CANCELLED;
     }

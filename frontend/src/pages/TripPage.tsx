@@ -1,4 +1,4 @@
-import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined } from '@ant-design/icons';
+import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined } from '@ant-design/icons';
 import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
@@ -277,6 +277,9 @@ export default function TripPage() {
                           {stop.latitude == null && ` · ${t('trip.notOnMap')}`}
                         </span>
                       </span>
+                      <Link to={`stops/${stop.id}/bearbeiten`} className="va-icon-button va-plain" aria-label={t('trip.editStopLabel', { name: stop.name })}>
+                        <EditOutlined />
+                      </Link>
                       <Popconfirm
                         title={t('trip.deleteStop', { name: stop.name })}
                         description={stopDeletionText(trip, stop.id, bookingsByStop.get(stop.id) ?? [])}

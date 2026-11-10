@@ -3,6 +3,7 @@ package com.nfv.bookings.api;
 import com.nfv.assistant.logic.AssistantRateLimitedException;
 import com.nfv.assistant.logic.AssistantUnavailableException;
 import com.nfv.bookings.logic.BookingNotFoundException;
+import com.nfv.bookings.logic.BookingOutsideStopException;
 import com.nfv.bookings.logic.CancellationNotPossibleException;
 import com.nfv.bookings.logic.InvalidBookingInputException;
 import com.nfv.bookings.logic.LiteApiUnavailableException;
@@ -13,6 +14,7 @@ import com.nfv.bookings.logic.ReservationNotFoundException;
 import com.nfv.bookings.logic.SearchRateLimitedException;
 import com.nfv.paypal.PayPalNotConfiguredException;
 import com.nfv.paypal.PayPalUnavailableException;
+import com.nfv.trips.logic.StopBookingsConflictException;
 import com.nfv.trips.logic.TripNotFoundException;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -42,6 +44,25 @@ public class BookingExceptionHandler {
     @ExceptionHandler(InvalidBookingInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidBookingInputException exception) {
         return problem(HttpStatus.BAD_REQUEST, "INVALID_BOOKING_INPUT", exception.getMessage());
+    }
+
+    /** The frontend offers to extend the stop or shorten the booking. */
+    @ExceptionHandler(BookingOutsideStopException.class)
+    public ResponseEntity<ProblemDetail> handleOutsideStop(BookingOutsideStopException exception) {
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.CONFLICT, "BOOKING_OUTSIDE_STOP",
+                exception.getMessage());
+        ProblemDetail problem = response.getBody();
+        problem.setProperty("stopArrivalAt", exception.getStopArrivalAt());
+        problem.setProperty("stopDepartureAt", exception.getStopDepartureAt());
+        problem.setProperty("extendedArrivalAt", exception.getExtendedArrivalAt());
+        problem.setProperty("extendedDepartureAt", exception.getExtendedDepartureAt());
+        problem.setProperty("trimmable", exception.isTrimmable());
+        return response;
+    }
+
+    @ExceptionHandler(StopBookingsConflictException.class)
+    public ResponseEntity<ProblemDetail> handleStopConflict(StopBookingsConflictException exception) {
+        return problem(HttpStatus.CONFLICT, "STOP_BOOKINGS_CONFLICT", exception.getMessage());
     }
 
     @ExceptionHandler(AssistantUnavailableException.class)

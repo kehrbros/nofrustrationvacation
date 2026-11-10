@@ -6,13 +6,17 @@ import { Link, useParams } from 'react-router';
 import Sheet from '../components/Sheet';
 import { formatMoney, t } from '../i18n';
 import { useTripContext } from '../trips/tripContext';
-import AddBookingSheet from './AddBookingSheet';
+import StayConflictDialog from '../trips/StayConflictDialog';
+import { bookingOutsideStop, stopDaysLabel, type BookingOutsideStop } from '../trips/stayConflict';
+import AddBookingSheet, { SubmitCancelled } from './AddBookingSheet';
 import { cancelWithRefund, fetchAlternativesStatus } from './alternativesApi';
 import { changeAccommodationBooking, deleteBooking } from './bookingsApi';
 import { formFromBooking, toInput } from './form';
 import { stopPoint } from './stayDefaults';
-import { formatLocalDateTime, shortTime } from './localTime';
+import { formatLocalDateTime, formatStay, shortTime } from './localTime';
 import { checkInLabel, checkOutLabel, directionsUrl, priceLabel, stayLabel } from './text';
+
+type StopConflictChoice = 'EXTEND_STOP' | 'TRIM_BOOKING';
 
 /** Booking as overlay dialog: stay, number to copy, link to the provider, route, edit and delete. */
 export default function BookingSheet() {
@@ -25,6 +29,12 @@ export default function BookingSheet() {
   const [alternativesAvailable, setAlternativesAvailable] = useState(false);
   const [refund, setRefund] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [conflict, setConflict] = useState<{
+    outside: BookingOutsideStop;
+    /** Check-in and check-out as entered, local at the place. */
+    stay: { startsAt: string; endsAt: string };
+    resolve: (choice: StopConflictChoice | null) => void;
+  } | null>(null);
 
   useEffect(() => {
     fetchAlternativesStatus().then((status) => setAlternativesAvailable(status.searchAvailable));
@@ -42,18 +52,61 @@ export default function BookingSheet() {
 
   if (editing) {
     return (
-      <AddBookingSheet
-        onClose={() => setEditing(false)}
-        context={stop ? t('booking.stop', { name: stop.name }) : undefined}
-        initialForm={formFromBooking(booking)}
-        near={stopPoint(stop)}
-        submitLabel={t('booking.saveChanges')}
-        onSubmit={async (form) => {
-          await changeAccommodationBooking(booking.id, toInput(form, booking.source));
-          reload();
-          setEditing(false);
-        }}
-      />
+      <>
+        <AddBookingSheet
+          onClose={() => setEditing(false)}
+          context={stop ? t('booking.stop', { name: stop.name }) : undefined}
+          initialForm={formFromBooking(booking)}
+          near={stopPoint(stop)}
+          submitLabel={t('booking.saveChanges')}
+          onSubmit={async (form) => {
+            const input = toInput(form, booking.source);
+            try {
+              await changeAccommodationBooking(booking.id, input);
+            } catch (failure) {
+              const outside = bookingOutsideStop(failure);
+              if (!outside) {
+                throw failure;
+              }
+              // outside the days of the stop: the user extends the stop, shortens the booking or cancels
+              const choice = await new Promise<StopConflictChoice | null>((resolve) =>
+                setConflict({ outside, stay: { startsAt: input.checkIn, endsAt: input.checkOut }, resolve }),
+              );
+              setConflict(null);
+              if (!choice) {
+                throw new SubmitCancelled();
+              }
+              await changeAccommodationBooking(booking.id, input, choice);
+            }
+            reload();
+            setEditing(false);
+          }}
+        />
+        {conflict && (
+          <StayConflictDialog
+            title={t('stayConflict.bookingTitle')}
+            text={t('stayConflict.bookingText', {
+              stay: formatStay(conflict.stay.startsAt, conflict.stay.endsAt),
+              name: stop?.name ?? '',
+              days: stopDaysLabel(conflict.outside.stopArrivalAt, conflict.outside.stopDepartureAt),
+            })}
+            extendLabel={t('stayConflict.extendStop')}
+            extendDetail={t('stayConflict.extendDetail', {
+              days: stopDaysLabel(
+                conflict.outside.extendedArrivalAt ?? conflict.outside.stopArrivalAt,
+                conflict.outside.extendedDepartureAt ?? conflict.outside.stopDepartureAt,
+              ),
+            })}
+            trimLabel={t('stayConflict.trimBooking')}
+            trimDisabled={!conflict.outside.trimmable}
+            busy={false}
+            error={null}
+            onCancel={() => conflict.resolve(null)}
+            onExtend={() => conflict.resolve('EXTEND_STOP')}
+            onTrim={() => conflict.resolve('TRIM_BOOKING')}
+          />
+        )}
+      </>
     );
   }
 

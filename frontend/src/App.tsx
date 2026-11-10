@@ -52,6 +52,7 @@ export default function App() {
         }
       >
         <Route path="stops/neu" element={<StopSheet />} />
+        <Route path="stops/:stopId/bearbeiten" element={<StopSheet />} />
         <Route path="stops/:stopId/buchung" element={<StopBookingSheet />} />
         <Route path="stops/:stopId/unterkunft" element={<StayBookingSheet />} />
 

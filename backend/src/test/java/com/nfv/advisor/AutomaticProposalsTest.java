@@ -288,7 +288,7 @@ class AutomaticProposalsTest {
 
     private void arriveAt(OffsetDateTime arrival) {
         inTransaction(() -> tripLogic.updateStop(userId, tripId, targetStopId, new NewStop("Thorndon", THORNDON[0],
-                THORNDON[1], arrival, null)));
+                THORNDON[1], arrival, null), com.nfv.trips.logic.BookingFit.IGNORE));
     }
 
     private RouteTooLate lastEvent() {
