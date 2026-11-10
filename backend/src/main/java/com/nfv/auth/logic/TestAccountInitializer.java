@@ -15,8 +15,11 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Creates the account "test" with password "test" and the role {@code tester} (test endpoints, see
  * Docs/traffic-feed.md#testquelle-manual) on startup if no account exists yet. Only the login account is created; the
- * {@code AppUser} follows on the first authenticated request like for any other account. The role is only granted here,
- * not to an existing account of that name: anyone can register, so the name alone proves nothing.
+ * {@code AppUser} follows on the first authenticated request like for any other account.
+ * <p>
+ * An existing account "test" created before the role existed gets the role on startup too, but only if it is the oldest
+ * account (lowest id): that is the account this initializer created on the empty database. Anyone can register, so the
+ * name alone proves nothing; a later registered "test" is never promoted.
  * Disable with {@code nfv.auth.test-account.enabled=false}.
  */
 @Slf4j
@@ -35,11 +38,22 @@ public class TestAccountInitializer implements ApplicationRunner {
     @Transactional
     public void run(@NonNull ApplicationArguments args) {
         if (accountRepository.count() > 0) {
+            grantTesterRoleToSeededAccount();
             return;
         }
         AuthAccount account = new AuthAccount(USERNAME, passwordEncoder.encode(PASSWORD), null);
         account.grant(TESTER_ROLE);
         accountRepository.save(account);
         log.info("No account found, created test account '{}'.", USERNAME);
+    }
+
+    private void grantTesterRoleToSeededAccount() {
+        accountRepository.findFirstByOrderByIdAsc()
+                .filter(account -> USERNAME.equals(account.getUsername()))
+                .filter(account -> !account.getRoles().contains(TESTER_ROLE))
+                .ifPresent(account -> {
+                    account.grant(TESTER_ROLE);
+                    log.info("Granted role '{}' to the existing test account '{}'.", TESTER_ROLE, USERNAME);
+                });
     }
 }
