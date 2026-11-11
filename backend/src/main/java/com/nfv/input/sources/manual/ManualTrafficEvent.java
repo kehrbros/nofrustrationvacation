@@ -28,7 +28,10 @@ public record ManualTrafficEvent(
         @Schema(description = "Periods within the validity, as the enrichment would give them") @Nullable List<Window> windows,
         @Schema(description = "As the enrichment would give it, null: all vehicles") @Nullable VehicleScope vehicleScope,
         @Schema(description = "Only a ramp or link, not the road itself, default false") Boolean linkOnly,
-        @Schema(description = "The event has ended, default false") Boolean resolved) {
+        @Schema(description = "The event has ended, default false") Boolean resolved,
+        @Schema(description = "Place the point onto this planned route of the caller first (nearest point, at most "
+                + "5 km away), so the incident lies on the segment the route drives; null: the point as given")
+        @Nullable OnRoute onRoute) {
 
     public ManualTrafficEvent {
         linkOnly = Boolean.TRUE.equals(linkOnly);
@@ -39,6 +42,15 @@ public record ManualTrafficEvent(
     }
 
     public record Window(OffsetDateTime start, OffsetDateTime end) {
+    }
+
+    public record OnRoute(long tripId, long routeId) {
+    }
+
+    /** The same event at another point, without {@code onRoute}: placed already. */
+    public ManualTrafficEvent at(Position placed) {
+        return new ManualTrafficEvent(id, type, placed, null, roadRef, direction, validFrom, validTo, delayMinutes,
+                assumedDelayMinutes, text, windows, vehicleScope, linkOnly, resolved, null);
     }
 
     /** @return what is wrong with the event, {@code null} if it can be reported */
@@ -57,6 +69,9 @@ public record ManualTrafficEvent(
         }
         if ((point == null) == (line == null)) {
             return "exactly one of point and line is required";
+        }
+        if (onRoute != null && point == null) {
+            return "onRoute needs a point";
         }
         if (line != null && line.size() < 2) {
             return "line needs at least 2 positions";

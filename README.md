@@ -1,4 +1,4 @@
-![](icon_nfv.jpg)
+![](icon_nfv.svg)
 
 # Nfv
 

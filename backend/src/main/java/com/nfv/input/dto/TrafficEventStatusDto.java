@@ -6,6 +6,7 @@ import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.entities.MatchKind;
 import com.nfv.incidents.entities.VehicleScope;
 import com.nfv.incidents.logic.IncidentOverview;
+import com.nfv.incidents.logic.RoutePlacement;
 import com.nfv.incidents.logic.TimeWindow;
 import com.nfv.input.logic.TrafficEventInspection;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -23,7 +24,9 @@ public record TrafficEventStatusDto(
         @Schema(description = "PENDING, INCIDENT or the reason without incident, e.g. NO_SEGMENTS") String outcome,
         @Schema(description = "Note on the processing, e.g. TIMES_IN_TEXT") @Nullable String note,
         @Nullable OffsetDateTime processedAt,
-        @Schema(description = "null if this version led to no incident") @Nullable IncidentDto incident) {
+        @Schema(description = "null if this version led to no incident") @Nullable IncidentDto incident,
+        @Schema(description = "Where the point was placed onto the route (onRoute), null otherwise")
+        @Nullable PlacementDto placement) {
 
     public record IncidentDto(long id, IncidentType type, Impact impact, @Nullable String description,
                               OffsetDateTime validFrom, @Nullable OffsetDateTime validTo,
@@ -47,9 +50,29 @@ public record TrafficEventStatusDto(
                                  @Nullable OffsetDateTime windowEnd) {
     }
 
+    @Schema(description = "A tapped point placed onto a planned route")
+    public record PlacementDto(long routeId, double lat, double lon,
+                               @Schema(description = "From the tapped point") long distanceMeters,
+                               @Schema(description = "Road number there, null if none") @Nullable String roadRef,
+                               @Nullable String roadName,
+                               @Schema(description = "Planned passage of the route there") OffsetDateTime passageStart,
+                               OffsetDateTime passageEnd) {
+        public static PlacementDto of(RoutePlacement.Placement placement) {
+            return new PlacementDto(placement.routeId(), placement.point().lat(), placement.point().lon(),
+                    Math.round(placement.distanceMeters()), placement.roadRef(), placement.roadName(),
+                    placement.passageStart(), placement.passageEnd());
+        }
+    }
+
     public static TrafficEventStatusDto of(TrafficEventInspection.EventStatus status) {
+        return of(status, null);
+    }
+
+    public static TrafficEventStatusDto of(TrafficEventInspection.EventStatus status,
+                                           @Nullable RoutePlacement.Placement placement) {
         return new TrafficEventStatusDto(status.source(), status.subjectId(), status.externalId(), status.outcome(),
-                status.note(), status.processedAt(), status.incident() == null ? null : incident(status.incident()));
+                status.note(), status.processedAt(), status.incident() == null ? null : incident(status.incident()),
+                placement == null ? null : PlacementDto.of(placement));
     }
 
     private static IncidentDto incident(IncidentOverview incident) {
