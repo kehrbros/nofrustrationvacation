@@ -63,6 +63,7 @@ flowchart LR
 
 - **Fest je Lauf:** Nutzer, Route und Consequence setzt das Backend (`RunContext`). Sie sind nie Parameter des Modells.
 - **Kennungen:** Tools liefern eine `option_id`, die nur im Lauf gilt, die Daten dahinter hält der `RunContext` im Speicher. `submit_proposals` darf nur Kennungen aus diesem Lauf nennen, unbekannte und doppelte verwirft das Backend, wie `AlternativeRanking` fremde Hotel-Ids. Sind alle unbekannt, gilt der Lauf als ohne Modell.
+- **Pläne:** `compose_plan` und `find_other_targets` bauen aus diesen Kennungen Pläne (`plan_<n>`, `place_<n>`), siehe [incident-plans.md](incident-plans.md#bausteine-und-tools).
 - **Keine Tools zum Ändern:** Route übernehmen, Stops ändern, reservieren, zahlen und stornieren bleiben hinter der Bestätigung des Nutzers.
 
 ### Erste Stufe
@@ -277,8 +278,10 @@ public class Stopovers {
 ## Konfiguration
 
 ```properties
-nfv.advisor.max-turns=8
+nfv.advisor.max-turns=16
 nfv.advisor.max-proposals=3
+nfv.advisor.plans-enabled=true
+nfv.advisor.parallel-tool-calls=true
 nfv.advisor.run-timeout=15m
 nfv.advisor.auto-enabled=false
 nfv.advisor.stopover-enabled=true
@@ -290,6 +293,7 @@ nfv.recommendations.stopover.default-areas=3
 nfv.recommendations.stopover.max-areas=5
 ```
 
+- `plans-enabled`: Bietet `compose_plan` und `find_other_targets` an (nur zusammen mit `stopover-enabled`), siehe [incident-plans.md](incident-plans.md). `parallel-tool-calls`: Das Modell darf mehrere Tools in einer Runde aufrufen, `max-turns` 16 für 2–3 Pläne (2026-11-11).
 - `stopover-enabled`: Bietet dem Modell `find_overnight_areas` und `search_accommodations` an (das zweite nur mit LiteAPI-Key). Standard `true` seit `search_accommodations` da ist (2026-11-07). In den Test-Properties `false`, nur die Tests der Unterkunfts-Tools schalten es ein.
 - `auto-enabled`: Schaltet nur die Läufe durch `RouteTooLate`, die des Nutzers gehen immer. **Standard vorerst `false` (Lukas, 2026-11-07):** Eingeschaltet gehen Routen und Zeiten ohne Zutun des Nutzers an OpenAI. Einschalten erst nach dem Lauf gegen die echte API und mit dem Hinweis in App und Datenschutzerklärung. Solange gibt es trotz `TOO_LATE` keinen Lauf ohne Anfrage des Nutzers.
 - In den Test-Properties steht es ausdrücklich auf `false`, sonst würde jeder Test mit `TOO_LATE` einen Lauf im Hintergrund starten, auch nach einem Wechsel des Standards. Nur `RouteTooLateListenerTest` schaltet es ein.
@@ -323,4 +327,4 @@ nfv.recommendations.stopover.max-areas=5
 - **Texte des Modells:** `summary` und `reason` sind Englisch und werden nicht gezeigt. Sollen sie sichtbar werden, braucht es Deutsch bzw. eine Sprache je Nutzer.
 - **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).
-- **Pläne aus mehreren Schritten** (Übernachtung + Weiterfahrt + Ziel umbuchen, ein Klick): Zielbild in [incident-plans.md](incident-plans.md).
+- **Pläne aus mehreren Schritten** (Übernachtung + Weiterfahrt + Ziel umbuchen, ein Klick): umgesetzt 2026-11-11, siehe [incident-plans.md](incident-plans.md), dort auch die offenen Grenzen.

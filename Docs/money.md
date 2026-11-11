@@ -16,7 +16,8 @@
 - `Booking.price` + `currency` (Modul `bookings`) ist der Preis, wie er in der Bestätigung steht (z. B. 412,50 EUR), in beliebiger Währung, `NUMERIC(12, 2)`. Er ist nur Information für den Nutzer, die App rechnet und rechnet nicht um. Eine Umrechnung in die Basiswährung würde den gebuchten Betrag verfälschen.
 - Ebenso `BookingReservation` (Tabelle `booking_reservation`, Buchung einer Alternative über LiteAPI): Nettopreis, Provision und Endpreis in der Währung des Angebots, so an PayPal übergeben, keine Umrechnung, siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung). Gerechnet wird nur Nettopreis + Provision (`Pricing`).
 - Ebenso das Angebot eines Vorschlags des Agenten (`advisor_proposal.stay_price`, `ProposalStay`): der Preis, den die Suche geliefert hat, in der Währung des Angebots, beim Buchen wird er neu geprüft, siehe [advisor.md](advisor.md#search_accommodations).
-- `MoneyArchitectureTest` und `MoneyPersistenceTest` nehmen `Booking.price`, `BookingReservation` bzw. die Tabellen `booking`, `booking_aud`, `booking_reservation`, `advisor_proposal` ausdrücklich aus (`ProposalStay` ist kein `@Entity`, fällt also nicht unter `MoneyArchitectureTest`).
+- Ebenso Pläne (`V50`): Angebote der Schritte (`advisor_proposal_step.stay_price`), Mehrkosten des Plans (`advisor_proposal.extra_cost`) und die gemeinsame Zahlung (`PlanPayment.total`, Tabelle `plan_payment`, Summe der Reservierungen in ihrer einen Währung), siehe [incident-plans.md](incident-plans.md).
+- `MoneyArchitectureTest` und `MoneyPersistenceTest` nehmen `Booking.price`, `BookingReservation`, `PlanPayment` bzw. die Tabellen `booking`, `booking_aud`, `booking_reservation`, `advisor_proposal`, `advisor_proposal_step`, `plan_payment` ausdrücklich aus (`ProposalStay` ist kein `@Entity`, fällt also nicht unter `MoneyArchitectureTest`).
 
 ## Persistenz
 

@@ -15,12 +15,17 @@ import java.time.Duration;
  *                     tested against the real API and the privacy notice exists
  * @param stopoverEnabled the model is offered {@code find_overnight_areas} and {@code search_accommodations} (the
  *                     latter only with LiteAPI configured)
+ * @param plansEnabled the model is offered {@code compose_plan} and {@code find_other_targets}, see
+ *                     Docs/incident-plans.md
+ * @param parallelToolCalls the model may call several tools per turn
  */
 @ConfigurationProperties("nfv.advisor")
 public record AdvisorProperties(
-        @DefaultValue("8") int maxTurns,
+        @DefaultValue("16") int maxTurns,
         @DefaultValue("3") int maxProposals,
         @DefaultValue("15m") Duration runTimeout,
         @DefaultValue("false") boolean autoEnabled,
-        @DefaultValue("true") boolean stopoverEnabled) {
+        @DefaultValue("true") boolean stopoverEnabled,
+        @DefaultValue("true") boolean plansEnabled,
+        @DefaultValue("true") boolean parallelToolCalls) {
 }

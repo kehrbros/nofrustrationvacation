@@ -14,4 +14,6 @@ public interface BookingReservationRepository extends JpaRepository<BookingReser
     Optional<BookingReservation> findByBookingId(long bookingId);
 
     List<BookingReservation> findByStatusIn(Collection<ReservationStatus> statuses);
+
+    List<BookingReservation> findByPlanPaymentIdOrderById(long planPaymentId);
 }

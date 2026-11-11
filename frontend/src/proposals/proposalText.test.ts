@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatShortDate, proposalTexts } from './proposalText';
+import { formatShortDate, planStepTexts, proposalTexts } from './proposalText';
 import type { Proposal } from './proposalsApi';
 
 const setting = { fromName: 'Newtown', targetName: 'Thorndon', targetStayTitle: 'Hotel Adler' };
@@ -18,6 +18,8 @@ function proposal(patch: Partial<Proposal>): Proposal {
     meetsDeadline: null,
     conflictCount: 0,
     stay: null,
+    plan: null,
+    steps: [],
     ...patch,
   };
 }
@@ -60,5 +62,43 @@ describe('proposalTexts', () => {
 
   it('formats short dates', () => {
     expect(formatShortDate('2027-07-05')).toBe('05.07.');
+  });
+});
+
+describe('plans', () => {
+  const night = { ...stay, hotelName: 'Geraldine Motel', place: 'Geraldine', price: '128.00', currency: 'NZD',
+    replacesBookingId: null };
+  const plan = proposal({
+    kind: 'PLAN',
+    arrivalAt: '2027-07-13T12:30:00+12:00',
+    plan: { deadline: null, reachesTarget: true, extraNights: 1, extraCost: '128.00', costCurrency: 'NZD',
+      affectsFollowing: false, newTargetName: null },
+    steps: [
+      { kind: 'DRIVE', routeKind: 'KEEP_ROUTE', via: null, departureAt: '2027-07-12T08:00:00+12:00',
+        arrivalAt: '2027-07-12T19:00:00+12:00', waitedFor: null, distanceMeters: null, placeName: 'Geraldine',
+        arrivalOn: null, stay: null },
+      { kind: 'OVERNIGHT', routeKind: null, via: null, departureAt: null, arrivalAt: null, waitedFor: null,
+        distanceMeters: null, placeName: 'Geraldine', arrivalOn: null, stay: night },
+      { kind: 'CONTINUE', routeKind: 'REROUTE', via: 'SH 8', departureAt: '2027-07-13T09:00:00+12:00',
+        arrivalAt: '2027-07-13T12:30:00+12:00', waitedFor: null, distanceMeters: null, placeName: null,
+        arrivalOn: null, stay: null },
+      { kind: 'KEEP_BOOKING', routeKind: null, via: null, departureAt: null, arrivalAt: null, waitedFor: null,
+        distanceMeters: null, placeName: null, arrivalOn: '2027-07-13', stay: null },
+    ],
+  });
+
+  it('names the night and the price', () => {
+    const texts = proposalTexts(plan, setting);
+    expect(texts.title).toContain('Geraldine');
+    expect(texts.detail).toContain('128');
+    expect(texts.effect).toContain('PayPal');
+  });
+
+  it('lists every step in order', () => {
+    const lines = planStepTexts(plan, setting);
+    expect(lines).toHaveLength(4);
+    expect(lines[0]).toContain('Geraldine');
+    expect(lines[1]).toContain('Geraldine Motel');
+    expect(lines[3]).toContain('Hotel Adler');
   });
 });

@@ -88,6 +88,78 @@ public class PayPalCheckout {
     }
 
     /**
+     * One order for several payments, each its own purchase unit with its own authorization: one approval of the payer
+     * for e.g. all hotels of a plan, see Docs/incident-plans.md#ausführen-mit-einem-klick. Intent {@code AUTHORIZE}.
+     * All units must have the same currency.
+     *
+     * @param reference our id of the whole payment, for idempotency
+     */
+    public CheckoutOrder createOrder(String reference, List<Unit> units, URI returnUrl, URI cancelUrl) {
+        http.requireConfigured();
+        if (units.isEmpty() || units.stream().map(u -> u.amount().currency()).distinct().count() != 1) {
+            throw new IllegalArgumentException("one currency and at least one unit");
+        }
+        var body = Map.of(
+                "intent", Intent.AUTHORIZE.name(),
+                "purchase_units", units.stream().map(unit -> Map.of(
+                        "reference_id", unit.reference(),
+                        "custom_id", unit.reference(),
+                        "description", unit.description(),
+                        "amount", new OrderAmount(unit.amount().currency(), unit.amount().formattedValue()))).toList(),
+                "payment_source", Map.of("paypal", Map.of("experience_context", Map.of(
+                        "brand_name", properties.brandName(),
+                        "user_action", "PAY_NOW",
+                        "shipping_preference", "NO_SHIPPING",
+                        "return_url", returnUrl.toString(),
+                        "cancel_url", cancelUrl.toString()))));
+        OrderResponse order = http.post("/v2/checkout/orders", body, OrderResponse.class, "create-" + reference);
+        String approveUrl = PayPalHttp.Link.find(order.links(), "payer-action");
+        if (approveUrl == null) {
+            approveUrl = PayPalHttp.Link.find(order.links(), "approve");
+        }
+        if (approveUrl == null) {
+            throw new PayPalUnavailableException("PayPal order " + order.id() + " has no approval link");
+        }
+        return new CheckoutOrder(order.id(), approveUrl);
+    }
+
+    /**
+     * Authorizes an approved order with several purchase units, an order authorized before is read instead.
+     *
+     * @return the authorization of each unit by its {@code reference_id}
+     * @throws PayPalRejectedException e.g. {@code ORDER_NOT_APPROVED} or {@code INSTRUMENT_DECLINED}
+     */
+    public Map<String, Payment> authorizeUnits(String orderId, String requestId) {
+        http.requireConfigured();
+        OrderResponse order;
+        try {
+            order = http.post("/v2/checkout/orders/" + orderId + "/authorize", Map.of(), OrderResponse.class, requestId);
+        } catch (PayPalRejectedException e) {
+            if (!"ORDER_ALREADY_AUTHORIZED".equals(e.getIssue())) {
+                throw e;
+            }
+            order = http.get("/v2/checkout/orders/" + orderId, OrderResponse.class);
+        }
+        Map<String, Payment> authorizations = new java.util.LinkedHashMap<>();
+        if (order.purchaseUnits() != null) {
+            for (PurchaseUnit unit : order.purchaseUnits()) {
+                if (unit.referenceId() != null && unit.payments() != null && unit.payments().authorizations() != null
+                        && !unit.payments().authorizations().isEmpty()) {
+                    authorizations.put(unit.referenceId(), unit.payments().authorizations().getFirst().toPayment());
+                }
+            }
+        }
+        if (authorizations.isEmpty()) {
+            throw new PayPalUnavailableException("PayPal order " + orderId + " has no authorization");
+        }
+        return authorizations;
+    }
+
+    /** A payment within an order of several, e.g. one hotel. */
+    public record Unit(String reference, PayPalAmount amount, String description) {
+    }
+
+    /**
      * Captures an approved order. Repeating with the same {@code requestId} returns the first result, an order
      * captured before is read instead.
      *
@@ -256,7 +328,7 @@ public class PayPalCheckout {
         }
     }
 
-    record PurchaseUnit(@Nullable Payments payments) {
+    record PurchaseUnit(@JsonProperty("reference_id") @Nullable String referenceId, @Nullable Payments payments) {
     }
 
     record Payments(@Nullable List<Capture> captures, @Nullable List<PaymentResponse> authorizations) {

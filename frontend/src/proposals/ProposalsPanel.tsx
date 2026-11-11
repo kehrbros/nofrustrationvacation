@@ -7,13 +7,15 @@ import { t } from '../i18n';
 import type { StayBookingState } from '../bookings/StayBookingSheet';
 import { TripsApiError } from '../trips/tripsApi';
 import { formatAgo } from '../trips/time';
-import { proposalTexts, type ProposalSetting } from './proposalText';
+import { formatMoney, planStepTexts, proposalTexts, type ProposalSetting } from './proposalText';
+import type { PlanBookingState } from './PlanBookingSheet';
 import {
   acceptProposal,
   dismissProposals,
   fetchRouteRun,
   fetchRun,
   isRunning,
+  planStays,
   startRun,
   type Proposal,
   type ProposalKind,
@@ -84,6 +86,11 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
 
   const take = async (proposal: Proposal) => {
     if (!run) return;
+    if (proposal.kind === 'PLAN' && planStays(proposal).length > 0) {
+      const state: PlanBookingState = { runId: run.runId, proposal, setting };
+      navigate(`/reisen/${tripId}/plan`, { state });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -199,10 +206,11 @@ function ProposalCard({ proposal, setting, chosen, open, busy, onOpen, onTake }:
   onTake: () => void;
 }) {
   const texts = proposalTexts(proposal, setting);
+  const steps = proposal.kind === 'PLAN' ? planStepTexts(proposal, setting) : [];
   return (
     <div className={`va-proposal ${open ? 'va-proposal-open' : ''}`}>
       <button type="button" className="va-alternative va-proposal-head" aria-expanded={open} onClick={onOpen}>
-        <span className="va-booking-icon" aria-hidden="true">{icon(proposal.kind)}</span>
+        <span className="va-booking-icon" aria-hidden="true">{icon(proposal)}</span>
         <span className="va-column va-grow">
           <span className="va-strong">{texts.title}</span>
           <span className="va-small va-muted">{texts.detail}</span>
@@ -212,9 +220,14 @@ function ProposalCard({ proposal, setting, chosen, open, busy, onOpen, onTake }:
       </button>
       {open && (
         <div className="va-proposal-confirm">
+          {steps.length > 0 && (
+            <ol className="va-plan-steps">
+              {steps.map((line, index) => <li key={index}>{line}</li>)}
+            </ol>
+          )}
           <p>{texts.effect}</p>
           <button type="button" className="va-button va-block" disabled={busy} onClick={onTake}>
-            {busy ? t('proposals.taking') : takeLabel(proposal.kind)}
+            {busy ? t('proposals.taking') : takeLabel(proposal)}
           </button>
         </div>
       )}
@@ -222,8 +235,11 @@ function ProposalCard({ proposal, setting, chosen, open, busy, onOpen, onTake }:
   );
 }
 
-function icon(kind: ProposalKind) {
-  switch (kind) {
+function icon(proposal: Proposal) {
+  if (proposal.kind === 'PLAN') {
+    return planStays(proposal).length > 0 ? <HomeOutlined /> : <NodeIndexOutlined />;
+  }
+  switch (proposal.kind) {
     case 'STOPOVER':
     case 'TARGET_STAY':
       return <HomeOutlined />;
@@ -234,8 +250,14 @@ function icon(kind: ProposalKind) {
   }
 }
 
-function takeLabel(kind: ProposalKind): string {
-  switch (kind) {
+function takeLabel(proposal: Proposal): string {
+  const plan = proposal.plan;
+  if (proposal.kind === 'PLAN') {
+    return plan && plan.costCurrency && Number(plan.extraCost) > 0
+      ? t('proposals.take.PLAN_paid', { amount: formatMoney(plan.extraCost, plan.costCurrency) })
+      : t('proposals.take.PLAN');
+  }
+  switch (proposal.kind) {
     case 'STOPOVER':
       return t('proposals.take.STOPOVER');
     case 'TARGET_STAY':
@@ -253,6 +275,8 @@ function doneText(kind: ProposalKind): string {
       return t('proposals.done.REROUTE');
     case 'SHIFT_DEPARTURE':
       return t('proposals.done.SHIFT_DEPARTURE');
+    case 'PLAN':
+      return t('proposals.done.PLAN');
     default:
       return t('proposals.done.other');
   }

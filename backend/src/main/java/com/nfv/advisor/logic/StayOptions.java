@@ -5,6 +5,7 @@ import jakarta.annotation.Nullable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,10 +50,21 @@ public interface StayOptions {
                      @Nullable LocalDateTime freeCancellationUntil) {
     }
 
-    /** The values are what the booking provides, null if it does not. */
+    /**
+     * The values are what the booking provides, null if it does not.
+     *
+     * @param checkInUntil latest check-in, local at the accommodation; before 06:00 it means the night after
+     */
     record BookedStay(long bookingId, @Nullable Double latitude, @Nullable Double longitude,
                       @Nullable LocalDate checkIn, @Nullable LocalDate checkOut, @Nullable Integer guests, int rooms,
-                      @Nullable BigDecimal maxPrice, String currency, @Nullable String hotelId) {
+                      @Nullable BigDecimal maxPrice, String currency, @Nullable String hotelId,
+                      @Nullable LocalTime checkInUntil, String name) {
+        public BookedStay(long bookingId, @Nullable Double latitude, @Nullable Double longitude,
+                          @Nullable LocalDate checkIn, @Nullable LocalDate checkOut, @Nullable Integer guests, int rooms,
+                          @Nullable BigDecimal maxPrice, String currency, @Nullable String hotelId) {
+            this(bookingId, latitude, longitude, checkIn, checkOut, guests, rooms, maxPrice, currency, hotelId, null,
+                    "");
+        }
     }
 
     class InvalidStaySearchException extends RuntimeException {

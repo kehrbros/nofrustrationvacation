@@ -37,13 +37,21 @@ public class ToolConversation {
      * @param finish   the model ends the conversation with this tool, its handler is not called
      * @param maxTurns requests to the model at most; in the last one it has to call {@code finish}
      */
+    /**
+     * @param parallelToolCalls the model may call several tools in one turn, all are answered before the next
+     */
     public record Request(String instructions, String input, List<ConversationTool> tools, ConversationTool finish,
-                          int maxTurns) {
+                          int maxTurns, boolean parallelToolCalls) {
         public Request {
             tools = List.copyOf(tools);
             if (maxTurns < 1) {
                 throw new IllegalArgumentException("at least one turn");
             }
+        }
+
+        public Request(String instructions, String input, List<ConversationTool> tools, ConversationTool finish,
+                       int maxTurns) {
+            this(instructions, input, tools, finish, maxTurns, false);
         }
     }
 
@@ -97,7 +105,7 @@ public class ToolConversation {
         body.put("model", properties.model());
         body.put("store", false);
         body.put("instructions", request.instructions());
-        body.put("parallel_tool_calls", false);
+        body.put("parallel_tool_calls", request.parallelToolCalls());
         body.put("tool_choice", "required");
         ArrayNode tools = body.putArray("tools");
         request.tools().forEach(tool -> addTool(tools, tool));

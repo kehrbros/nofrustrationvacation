@@ -3,7 +3,10 @@ package com.nfv.advisor;
 import com.jayway.jsonpath.JsonPath;
 import com.nfv.advisor.data.AdvisorRunRepository;
 import com.nfv.advisor.entities.AdvisorProposal;
+import com.nfv.advisor.entities.AdvisorProposalStep;
 import com.nfv.advisor.entities.AdvisorRun;
+import com.nfv.advisor.entities.PlanResult;
+import com.nfv.advisor.entities.PlanStepKind;
 import com.nfv.advisor.entities.ProposalGoal;
 import com.nfv.advisor.entities.ProposalKind;
 import com.nfv.advisor.entities.ProposalPoint;
@@ -11,6 +14,9 @@ import com.nfv.advisor.entities.ProposalStay;
 import com.nfv.advisor.entities.RunStatus;
 import com.nfv.advisor.entities.RunTrigger;
 import com.nfv.assistant.logic.ToolConversation;
+import com.nfv.bookings.logic.LiteApi;
+import com.nfv.paypal.PayPalAmount;
+import com.nfv.paypal.PayPalCheckout;
 import com.nfv.incidents.entities.IncidentType;
 import com.nfv.incidents.logic.ActiveIncidents;
 import com.nfv.incidents.logic.IncidentLogic;
@@ -48,17 +54,25 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
@@ -79,6 +93,10 @@ class ProposalDecisionsTest {
 
     @MockitoBean
     private ToolConversation conversation;
+    @MockitoBean
+    private LiteApi liteApi;
+    @MockitoBean
+    private PayPalCheckout checkout;
     @Autowired
     private MockMvc mockMvc;
     @Autowired
@@ -304,6 +322,116 @@ class ProposalDecisionsTest {
                 && inTransaction(() -> runRepository.findById(runId).orElseThrow().isUnfinished())) {
             Thread.sleep(50);
         }
+    }
+
+    @Test
+    void planWithANightOnTheWayIsPaidOnceAndThenSplitsTheRoute() throws Exception {
+        long bookingId = booking(targetId, planned.toLocalDate());
+        LocalDate checkIn = planned.toLocalDate();
+        OffsetDateTime onwards = OffsetDateTime.of(checkIn.plusDays(1), LocalTime.of(9, 0), ZoneOffset.UTC);
+        long runId = run(RunStatus.COMPLETED, plan(List.of(
+                step(0, PlanStepKind.DRIVE, ProposalKind.KEEP_ROUTE, planned, planned.plusMinutes(30), "Te Aro",
+                        null, null, null),
+                step(1, PlanStepKind.OVERNIGHT, null, null, null, "Te Aro", null, null, stay(checkIn, null)),
+                step(2, PlanStepKind.CONTINUE, ProposalKind.REROUTE, onwards, onwards.plusMinutes(20), null, null,
+                        null, null),
+                step(3, PlanStepKind.KEEP_BOOKING, null, null, onwards.plusMinutes(20), null, bookingId,
+                        checkIn.plusDays(1), null))));
+        when(liteApi.prebook("offer-1")).thenReturn(new LiteApi.Prebook("P-1", new BigDecimal("130.00"), "EUR", null,
+                false, true, LocalDateTime.of(2030, 1, 1, 12, 0)));
+        when(liteApi.hotel("lp1")).thenReturn(new LiteApi.HotelDetails("lp1", "Te Aro Lodge", "Cuba Street 1",
+                "Wellington", "NZ", TE_ARO[0], TE_ARO[1], null, null, null, LocalTime.of(14, 0), null,
+                LocalTime.of(10, 0)));
+        AtomicReference<String> unit = new AtomicReference<>();
+        when(checkout.createOrder(anyString(), any(List.class), any(), any())).thenAnswer(call -> {
+            List<PayPalCheckout.Unit> units = call.getArgument(1);
+            unit.set(units.getFirst().reference());
+            return new PayPalCheckout.CheckoutOrder("O-7", "https://paypal.test/O-7");
+        });
+
+        // a plan with hotels is not taken without paying
+        mockMvc.perform(post("/api/v1/alternative-proposals/{id}/proposals/{rank}/acceptance", runId, 1)
+                        .with(user).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("PROPOSAL_NOT_APPLICABLE"));
+        String started = mockMvc.perform(post("/api/v1/alternative-proposals/{id}/proposals/{rank}/plan-checkout",
+                        runId, 1).with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"firstName\":\"Erika\",\"lastName\":\"Muster\",\"email\":\"erika@example.org\","
+                                + "\"phone\":\"+49 170 1234567\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AWAITING_PAYMENT"))
+                .andExpect(jsonPath("$.orderId").value("O-7"))
+                .andExpect(jsonPath("$.total").value("143.00"))
+                .andExpect(jsonPath("$.hotels[0].hotelName").value("Te Aro Lodge"))
+                .andReturn().getResponse().getContentAsString();
+        long executionId = ((Number) JsonPath.read(started, "$.executionId")).longValue();
+        when(checkout.authorizeUnits(eq("O-7"), anyString())).thenAnswer(call -> Map.of(unit.get(),
+                new PayPalCheckout.Payment("A-7", "CREATED", new PayPalAmount("EUR", new BigDecimal("143.00")))));
+        when(liteApi.book(eq("P-1"), any(), anyInt(), anyString()))
+                .thenReturn(new LiteApi.ProviderBooking("LB-7", "HC-7", "CONFIRMED"));
+        when(checkout.captureAuthorization(eq("A-7"), anyString()))
+                .thenReturn(new PayPalCheckout.Payment("C-7", "COMPLETED", null));
+
+        mockMvc.perform(post("/api/v1/plan-executions/{id}/completion", executionId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("APPLIED"))
+                .andExpect(jsonPath("$.paymentStatus").value("SETTLED"))
+                .andExpect(jsonPath("$.hotels[0].status").value("BOOKED"))
+                .andExpect(jsonPath("$.todosAdded").value(1));
+
+        List<Stop> stops = inTransaction(() -> stopRepository.findByTripIdOrderByPosition(tripId));
+        assertThat(stops).extracting(Stop::getName).containsExactly("Newtown", "Te Aro", "Thorndon");
+        assertThat(stops.get(1).getDepartureAt()).isEqualTo(onwards);
+        assertThat(stops.get(2).getArrivalAt()).isEqualTo(onwards.plusMinutes(20));
+        // the hotel is booked at the new stop, the booked accommodation is told about the later arrival
+        mockMvc.perform(get("/api/v1/trips/{id}/bookings", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(2)));
+        mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].kind").value("NOTIFY_LATE_ARRIVAL"))
+                .andExpect(jsonPath("$[0].bookingId").value(bookingId));
+    }
+
+    @Test
+    void planWithoutHotelsIsTakenRightAway() throws Exception {
+        long bookingId = booking(targetId, planned.toLocalDate());
+        AdvisorProposalStep drive = new AdvisorProposalStep(0, PlanStepKind.DRIVE, ProposalKind.REROUTE, "Taranaki St",
+                planned, planned.plusHours(2), null, 4000.0, Duration.ofMinutes(20), null, null, null, null, null,
+                List.of(new ProposalPoint(TE_ARO[0], TE_ARO[1], "Taranaki St", null)), null);
+        long runId = run(RunStatus.COMPLETED, plan(List.of(drive, step(1, PlanStepKind.KEEP_BOOKING, null, null,
+                planned.plusHours(2), null, bookingId, null, null))));
+
+        mockMvc.perform(post("/api/v1/alternative-proposals/{id}/proposals/{rank}/acceptance", runId, 1)
+                        .with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.kind").value("PLAN"))
+                .andExpect(jsonPath("$.plannedRouteIds", hasSize(1)));
+
+        assertThat(inTransaction(() -> waypointRepository.findByRouteIdOrderByPosition(routeId)))
+                .extracting(Waypoint::getLatitude).containsExactly(TE_ARO[0]);
+        mockMvc.perform(get("/api/v1/alternative-proposals/{id}", runId).with(user))
+                .andExpect(jsonPath("$.decision").value("ACCEPTED"))
+                .andExpect(jsonPath("$.proposals[0].kind").value("PLAN"))
+                .andExpect(jsonPath("$.proposals[0].steps", hasSize(2)))
+                .andExpect(jsonPath("$.proposals[0].steps[0].via").value("Taranaki St"))
+                .andExpect(jsonPath("$.proposals[0].plan.extraCost").value("0.00"));
+    }
+
+    private static AdvisorProposal plan(List<AdvisorProposalStep> steps) {
+        AdvisorProposalStep last = steps.getLast();
+        return new AdvisorProposal(0, "reason", steps.getFirst().getDepartureAt(), last.getArrivalAt(),
+                Duration.ofMinutes(30), false, List.of(), new PlanResult(null, true,
+                (int) steps.stream().filter(s -> s.getKind() == PlanStepKind.OVERNIGHT).count(),
+                steps.stream().filter(s -> s.getStay() != null).map(s -> s.getStay().price())
+                        .reduce(BigDecimal.ZERO, BigDecimal::add), "EUR", false, null), steps);
+    }
+
+    private static AdvisorProposalStep step(int position, PlanStepKind kind, @Nullable ProposalKind routeKind,
+                                            @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
+                                            @Nullable String placeName, @Nullable Long bookingId,
+                                            @Nullable LocalDate arrivalOn, @Nullable ProposalStay stay) {
+        return new AdvisorProposalStep(position, kind, routeKind, null, departureAt, arrivalAt, null, null, null,
+                placeName, null, null, bookingId, arrivalOn, List.of(), stay);
     }
 
     private long run(RunStatus status, AdvisorProposal... proposals) {

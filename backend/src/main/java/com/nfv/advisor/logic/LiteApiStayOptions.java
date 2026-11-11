@@ -62,7 +62,8 @@ class LiteApiStayOptions implements StayOptions {
                     CriteriaProposal criteria = alternativeSearch.criteriaFor(appUserId, bookingId);
                     return new BookedStay(bookingId, criteria.latitude(), criteria.longitude(), criteria.checkIn(),
                             criteria.checkOut(), criteria.guests(), criteria.rooms(), criteria.maxPrice(),
-                            criteria.currency(), criteria.excludeHotelId());
+                            criteria.currency(), criteria.excludeHotelId(), view.accommodation().getCheckInUntil(),
+                            view.accommodation().getName());
                 });
     }
 }
