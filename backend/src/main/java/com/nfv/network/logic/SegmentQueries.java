@@ -13,6 +13,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** Details of road segments for other modules, see Docs/network.md#schnittstellen-networklogic. */
 @Service
@@ -111,5 +112,44 @@ public class SegmentQueries {
             return statement;
         }, rs -> rs.next() && rs.getBoolean(1));
         return Boolean.TRUE.equals(any);
+    }
+
+    /**
+     * Point on the parts nearest to {@code point}, e.g. a spot tapped next to a planned route.
+     *
+     * @param index          position of the part in {@code parts}
+     * @param point          nearest point on that part, cut to its fractions
+     * @param distanceMeters from {@code point} to it
+     */
+    public record ClosestPoint(int index, GeoPoint point, double distanceMeters) {
+    }
+
+    /** Nearest point on the parts (each cut to its fractions), empty without parts or known segments. */
+    @Transactional(readOnly = true)
+    public Optional<ClosestPoint> closest(List<SectionPart> parts, GeoPoint point) {
+        if (parts.isEmpty()) {
+            return Optional.empty();
+        }
+        Long[] ids = parts.stream().map(SectionPart::segmentId).toArray(Long[]::new);
+        Double[] from = parts.stream().map(SectionPart::fromFraction).toArray(Double[]::new);
+        Double[] to = parts.stream().map(SectionPart::toFraction).toArray(Double[]::new);
+        return jdbc.query(connection -> {
+            PreparedStatement statement = connection.prepareStatement("""
+                    SELECT c.ord, ST_Y(c.nearest), ST_X(c.nearest), ST_Distance(c.nearest::geography, c.tap::geography)
+                    FROM (SELECT p.ord, t.tap, ST_ClosestPoint(ST_LineSubstring(s.geometry, p.from_fraction,
+                                 p.to_fraction), t.tap) AS nearest
+                          FROM unnest(?, ?, ?) WITH ORDINALITY AS p(id, from_fraction, to_fraction, ord)
+                          JOIN road_segment s ON s.id = p.id
+                          CROSS JOIN (SELECT ST_SetSRID(ST_MakePoint(?, ?), 4326) AS tap) t) c
+                    ORDER BY 4, 1
+                    LIMIT 1""");
+            statement.setArray(1, connection.createArrayOf("bigint", ids));
+            statement.setArray(2, connection.createArrayOf("float8", from));
+            statement.setArray(3, connection.createArrayOf("float8", to));
+            statement.setDouble(4, point.lon());
+            statement.setDouble(5, point.lat());
+            return statement;
+        }, (rs, row) -> new ClosestPoint(rs.getInt(1) - 1, new GeoPoint(rs.getDouble(2), rs.getDouble(3)),
+                rs.getDouble(4))).stream().findFirst();
     }
 }

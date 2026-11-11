@@ -12,9 +12,11 @@ import {
   DIRECTIONS,
   INCIDENT_TYPES,
   newTestIncidentId,
+  placeOnRoute,
   reportTestIncident,
   TestIncidentError,
   type IncidentType,
+  type RoutePlacement,
   type TestIncident,
   type TestIncidentResult,
   type TravelDirection,
@@ -24,8 +26,8 @@ import { forgetTestIncident, storedTestIncidents, storeTestIncident, type Stored
 type Step = 'type' | 'place' | 'details' | 'result';
 
 /**
- * Test tool "Störung melden" (role tester): kind, a point tapped on the map (snapped onto a route of the trip if
- * close), times, delay and text; posted to the manual test source, which runs it through the normal flow (match,
+ * Test tool "Störung melden" (role tester): kind, a point tapped on the map (near a route of the trip: placed onto
+ * that route by the backend, so the incident hits it), times, delay and text; posted to the manual test source, which runs it through the normal flow (match,
  * incident, assessment), see Docs/traffic-feed.md#testquelle-manual. Reports from this device are listed in the
  * first step and can be changed (same id) or ended. Shows what became of it; the trip reloads when closing.
  */
@@ -37,7 +39,9 @@ export default function TestIncidentSheet() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [type, setType] = useState<IncidentType | null>(null);
   const [point, setPoint] = useState<LinePoint | null>(null);
-  const [snapped, setSnapped] = useState(false);
+  // route the spot was tapped next to, the backend places it onto that route; null: as tapped
+  const [onRoute, setOnRoute] = useState<number | null>(null);
+  const [placement, setPlacement] = useState<RoutePlacement | null>(null);
   const [picking, setPicking] = useState(false);
   const [roadRef, setRoadRef] = useState('');
   const [direction, setDirection] = useState<TravelDirection | ''>('');
@@ -56,16 +60,30 @@ export default function TestIncidentSheet() {
     setPickedPoint(null);
   }, [setPointPicker, setPickedPoint]);
 
-  const choosePoint = (chosen: LinePoint, onRoute: boolean) => {
+  const choosePoint = (chosen: LinePoint, routeId: number | null) => {
     setPoint(chosen);
-    setSnapped(onRoute);
+    setOnRoute(routeId);
+    setPlacement(null);
     setPickedPoint(chosen);
+    if (routeId == null) {
+      return;
+    }
+    // the backend places it exactly onto the segment the route drives and names the road there
+    placeOnRoute(trip.id, routeId, chosen).then((placed) => {
+      const exact = { latitude: placed.lat, longitude: placed.lon };
+      setPoint(exact);
+      setPickedPoint(exact);
+      setPlacement(placed);
+      setRoadRef((current) => current.trim() ? current : placed.roadRef ?? '');
+    }, () => {
+      // the frontend snap stays, reporting places it again
+    });
   };
   const startPicking = () => {
     setPicking(true);
     setPointPicker((tapped, metersPerPixel) => {
-      const onRoute = snapToLines(tapped, [...routeLines.values()], SNAP_PIXELS * metersPerPixel);
-      choosePoint(onRoute?.point ?? tapped, !!onRoute);
+      const near = snapToLines(tapped, [...routeLines.values()], SNAP_PIXELS * metersPerPixel);
+      choosePoint(near?.point ?? tapped, near?.routeId ?? null);
       setPicking(false);
       setPointPicker(null);
     });
@@ -85,7 +103,7 @@ export default function TestIncidentSheet() {
     const input = entry.input;
     setEditingId(entry.id);
     setType(input.type);
-    choosePoint(input.point, false);
+    choosePoint(input.point, input.onRoute?.routeId ?? null);
     setRoadRef(input.roadRef ?? '');
     setDirection(input.direction ?? '');
     setValidFrom(toDateTimeInput(input.validFrom));
@@ -128,6 +146,7 @@ export default function TestIncidentSheet() {
         validTo: to,
         delayMinutes,
         text: text.trim() || null,
+        onRoute: onRoute == null ? null : { tripId: trip.id, routeId: onRoute },
       }, false);
     }
   };
@@ -224,7 +243,8 @@ export default function TestIncidentSheet() {
                   lat: formatNumber(point.latitude, { maximumFractionDigits: 5 }),
                   lon: formatNumber(point.longitude, { maximumFractionDigits: 5 }),
                 })}
-                {' '}{snapped ? t('testIncident.snapped') : t('testIncident.notSnapped')}
+                {' '}{onRoute != null ? t('testIncident.snapped') : t('testIncident.notSnapped')}
+                {placement && <>{' '}{t('testIncident.passage', { time: formatDateTime(placement.passageStart) })}</>}
               </p>
             )}
             <div className="va-field-row">
@@ -337,9 +357,30 @@ function ResultView({ result, tripRouteIds }: { result: TestIncidentResult; trip
           onTrip > 0 ? t('testIncident.affects', { count: onTrip }) : t('testIncident.notOnTrip')]
           .filter(Boolean).join(' · ')}
       </p>
+      <RouteVerdict result={result} />
       {result.note && <p className="va-small va-muted">{t('testIncident.note', { note: result.note })}</p>}
     </div>
   );
+}
+
+/** Whether the route the spot was placed onto got the incident, and if not, why that is likely. */
+function RouteVerdict({ result }: { result: TestIncidentResult }) {
+  const { incident, placement } = result;
+  if (!incident || !placement) {
+    return null;
+  }
+  if (incident.consequences.some((c) => c.routeId === placement.routeId)) {
+    return <Alert type="success" showIcon message={t('testIncident.onMap')} />;
+  }
+  const time = formatDateTime(placement.passageStart);
+  const passageStart = new Date(placement.passageStart).getTime();
+  const passageEnd = new Date(placement.passageEnd).getTime();
+  const reason = passageEnd < Date.now() ? t('testIncident.routePassed', { time })
+    : new Date(incident.validFrom).getTime() > passageEnd
+      || (incident.validTo !== null && new Date(incident.validTo).getTime() < passageStart)
+      ? t('testIncident.outsideTime', { time })
+      : t('testIncident.notOnRoute');
+  return <Alert type="warning" showIcon message={reason} />;
 }
 
 function errorText(failure: unknown): string {
@@ -347,6 +388,7 @@ function errorText(failure: unknown): string {
     if (failure.status === 403) return t('testIncident.forbidden');
     if (failure.status === 404) return t('testIncident.disabled');
     if (failure.status === 400 && failure.detail) return t('testIncident.invalid', { detail: failure.detail });
+    if (failure.status === 422) return t('testIncident.routeGone');
   }
   return t('common.failedTryAgain');
 }
