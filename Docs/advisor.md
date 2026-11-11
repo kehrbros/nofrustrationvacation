@@ -239,6 +239,7 @@ public class Stopovers {
 - `advisor_proposal_point`: `proposal`, `position`, `latitude`, `longitude`, `road_hint`, `waypoint_id` (`ON DELETE SET NULL`). Reproduziert die Strecke beim Wählen.
 - `advisor_proposal_conflict`: `proposal`, `incident_id` (`ON DELETE CASCADE`), `impact`, `delay`.
 - `V46`: Angebot von `STOPOVER`/`TARGET_STAY` in `advisor_proposal`, Spalten `stay_hotel_id`, `stay_offer_id`, `stay_hotel_name`, `stay_latitude`, `stay_longitude`, `stay_place`, `stay_distance_meters`, `stay_check_in`, `stay_check_out`, `stay_guests`, `stay_rooms`, `stay_price` (`NUMERIC(12, 2)` in der Währung des Angebots, Ausnahme wie `booking_reservation`, siehe [money.md](money.md)), `stay_currency`, `stay_refundable`, `stay_free_cancellation_until`, `stay_replaces_booking_id` (`ON DELETE SET NULL`).
+- `V51`: `stay_offer_id` (auch in `advisor_proposal_step`) und `booking_reservation.offer_id` als `TEXT`, Angebots-Ids von LiteAPI sind teils länger als 1000 Zeichen und werden zum Buchen ungekürzt gebraucht.
 - Texte als `VARCHAR(n)`, Dauern über `DurationConverter`, siehe [architecture.md](architecture.md#persistence).
 
 ### Veraltete Vorschläge

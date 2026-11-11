@@ -37,7 +37,7 @@ public class BookingReservation extends AbstractEntity {
 
     @Column(nullable = false, length = 64)
     private String hotelId;
-    @Column(nullable = false, length = 1000)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String offerId;
     @Column(nullable = false)
     private String prebookId;
