@@ -1,6 +1,6 @@
 import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, NodeIndexOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
 import { Alert, Spin } from 'antd';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import KiwiLoader from '../components/KiwiLoader';
@@ -20,8 +20,6 @@ import {
   fetchReservation,
   fetchRouteCheck,
   markBookingCancelled,
-  rememberedHolder,
-  rememberHolder,
   reserveAlternative,
   searchAlternatives,
   type AlternativesStatus,
@@ -34,6 +32,7 @@ import {
 } from './alternativesApi';
 import { formatLocalDateTime } from './localTime';
 import { routeCheckText } from './routeCheckText';
+import { failedHolderField, holderComplete, useHolder, type HolderField, type HolderState } from './holder';
 import { directionsUrl } from './text';
 
 type Step =
@@ -48,7 +47,6 @@ type Step =
   | { kind: 'booked'; reservation: Reservation }
   | { kind: 'attention'; reservation: Reservation };
 
-const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: '' };
 
 /**
  * Alternative to an accommodation booking that cannot be used: criteria from the booking (searched right away when
@@ -71,7 +69,8 @@ export default function AlternativesSheet() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [holder, setHolder] = useState<Holder>(() => rememberedHolder() ?? EMPTY_HOLDER);
+  const guest = useHolder(trip, reload);
+  const holder = guest.holder;
   const [oldMarked, setOldMarked] = useState(false);
   const completing = useRef(false);
   const autoSearched = useRef(false);
@@ -172,11 +171,11 @@ export default function AlternativesSheet() {
     setStep({ kind: 'reserving', candidate });
     try {
       const reservation = await reserveAlternative(booking.id, criteria, candidate, holder);
-      rememberHolder(holder);
+      guest.saved();
       setStep({ kind: 'pay', reservation, result });
     } catch (failure) {
       setError(errorText(failure));
-      setStep({ kind: 'results', result });
+      setStep(guest.refused(failure) ? { kind: 'holder', result, candidate } : { kind: 'results', result });
     } finally {
       setBusy(false);
     }
@@ -218,7 +217,7 @@ export default function AlternativesSheet() {
         <Results result={step.result} criteria={criteria!} onPick={(candidate) => pick(candidate, step.result)} />
       )}
       {step.kind === 'holder' && (
-        <HolderForm candidate={step.candidate} holder={holder} onChange={setHolder} />
+        <HolderForm candidate={step.candidate} state={guest} />
       )}
       {step.kind === 'reserving' && (
         <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('payment.securingPrice', { hotel: step.candidate.name })}</span></div>
@@ -265,8 +264,8 @@ export default function AlternativesSheet() {
             <button type="button" className="va-button va-button-outline" onClick={() => setStep({ kind: 'results', result: step.result })}>
               {t('alternatives.back')}
             </button>
-            <button type="button" className="va-button va-grow" disabled={busy || !holderComplete(holder) || !status?.bookingAvailable}
-              onClick={() => void reserve(step.candidate, step.result)}>
+            <button type="button" className="va-button va-grow" disabled={busy || !status?.bookingAvailable}
+              onClick={() => guest.check() && void reserve(step.candidate, step.result)}>
               {t('payment.continue')}
             </button>
           </div>
@@ -494,8 +493,22 @@ export interface HolderOffer {
   roomName?: string | null;
 }
 
-export function HolderForm({ candidate, holder, onChange }: { candidate: HolderOffer; holder: Holder; onChange: (holder: Holder) => void }) {
-  const set = (patch: Partial<Holder>) => onChange({ ...holder, ...patch });
+export function HolderForm({ candidate, state }: { candidate: HolderOffer; state: HolderState }) {
+  const { holder, errors } = state;
+  const set = (patch: Partial<Holder>) => state.setHolder({ ...holder, ...patch });
+  const field = (name: HolderField, label: string, input: Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'value'>) => {
+    const id = `alt-${name}`;
+    const error = errors[name];
+    return (
+      <div className={error ? 'va-field va-field-invalid' : 'va-field'}>
+        <label htmlFor={id}>{label}</label>
+        <input id={id} value={holder[name]} aria-invalid={error ? true : undefined}
+          aria-describedby={error ? `${id}-error` : undefined}
+          onChange={(event) => set({ [name]: event.target.value })} onBlur={() => state.touch(name)} {...input} />
+        {error && <p id={`${id}-error`} className="va-field-error" role="alert">{error}</p>}
+      </div>
+    );
+  };
   return (
     <div className="va-form">
       <div className="va-impact">
@@ -506,23 +519,18 @@ export function HolderForm({ candidate, holder, onChange }: { candidate: HolderO
         {t('alternatives.holderIntro')}
       </p>
       <div className="va-field-row">
-        <div className="va-field">
-          <label htmlFor="alt-first">{t('alternatives.firstName')}</label>
-          <input id="alt-first" autoComplete="given-name" value={holder.firstName} onChange={(event) => set({ firstName: event.target.value })} />
-        </div>
-        <div className="va-field">
-          <label htmlFor="alt-last">{t('alternatives.lastName')}</label>
-          <input id="alt-last" autoComplete="family-name" value={holder.lastName} onChange={(event) => set({ lastName: event.target.value })} />
-        </div>
+        {field('firstName', t('alternatives.firstName'), { autoComplete: 'given-name' })}
+        {field('lastName', t('alternatives.lastName'), { autoComplete: 'family-name' })}
       </div>
-      <div className="va-field">
-        <label htmlFor="alt-email">{t('booking.email')}</label>
-        <input id="alt-email" type="email" autoComplete="email" value={holder.email} onChange={(event) => set({ email: event.target.value })} />
-      </div>
-      <div className="va-field">
-        <label htmlFor="alt-phone">{t('booking.phone')}</label>
-        <input id="alt-phone" type="tel" autoComplete="tel" value={holder.phone} onChange={(event) => set({ phone: event.target.value })} />
-      </div>
+      {field('email', t('booking.email'), { type: 'email', autoComplete: 'email', inputMode: 'email' })}
+      {field('phone', t('booking.phone'), { type: 'tel', autoComplete: 'tel', inputMode: 'tel' })}
+      <label className="va-row va-gap va-remember">
+        <input type="checkbox" checked={state.rememberForTrip} onChange={(event) => state.setRememberForTrip(event.target.checked)} />
+        <span className="va-column">
+          <span className="va-strong">{t('alternatives.rememberForTrip')}</span>
+          <span className="va-small va-muted">{t('alternatives.rememberForTripHint')}</span>
+        </span>
+      </label>
     </div>
   );
 }
@@ -753,11 +761,6 @@ function canSearch(criteria: Criteria): boolean {
     && (!criteria.maxPrice.trim() || Number(criteria.maxPrice.replace(',', '.')) > 0);
 }
 
-export function holderComplete(holder: Holder): boolean {
-  return !!holder.firstName.trim() && !!holder.lastName.trim() && /\S+@\S+\.\S+/.test(holder.email)
-    && /^\+?[0-9 ()/-]{6,30}$/.test(holder.phone.trim());
-}
-
 export const money = formatMoney;
 
 function distance(meters: number): string {
@@ -795,7 +798,8 @@ export function errorText(failure: unknown): string {
     case 'PAYPAL_ERROR':
       return t('payment.error.PAYPAL_ERROR');
     case 'INVALID_BOOKING_INPUT':
-      return t('payment.error.INVALID_BOOKING_INPUT');
+    case 'INVALID_TRIP_INPUT':
+      return failedHolderField(failure) ? t('payment.error.INVALID_GUEST') : t('payment.error.INVALID_BOOKING_INPUT');
     default:
       return t('common.failedTryAgain');
   }

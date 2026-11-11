@@ -2,6 +2,7 @@ import {
   addStop as addStopRequest,
   createTrip as createTripRequest,
   deleteTrip as deleteTripRequest,
+  forgetGuest as forgetGuestRequest,
   generateCoverImage as generateCoverImageRequest,
   getCoverImage,
   getCoverThumbnail,
@@ -11,6 +12,7 @@ import {
   getTripIncidents,
   listTrips,
   dismissResolvedIncident,
+  rememberGuest as rememberGuestRequest,
   removeStop as removeStopRequest,
   updateStop as updateStopRequest,
   uploadCoverImage as uploadCoverImageRequest,
@@ -22,7 +24,7 @@ import type {
   TripIncidentDto,
   TripSummaryDto,
 } from '../generated/api';
-import type { NewStop, NewTrip, Route, RouteIncidentSummary, Stop, TripDetail, TripIncident, TripSummary } from './model';
+import type { NewStop, NewTrip, Route, RouteIncidentSummary, Stop, TripDetail, TripGuest, TripIncident, TripSummary } from './model';
 
 /** Error of a trips API call, with the problem code of the backend if there is one. */
 export class TripsApiError extends Error {
@@ -76,6 +78,10 @@ function toDetail(dto: TripDetailDto): TripDetail {
     endAt: dto.endAt!,
     phase: dto.phase ?? 'UPCOMING',
     travelers: dto.travelers ?? null,
+    guest: dto.guest ? {
+      firstName: dto.guest.firstName ?? '', lastName: dto.guest.lastName ?? '', email: dto.guest.email ?? '',
+      phone: dto.guest.phone ?? '',
+    } : null,
     hasCoverImage: dto.hasCoverImage ?? false,
     stops: (dto.stops ?? []).map(toStop).sort((a, b) => a.position - b.position),
     routes: (dto.routes ?? []).map(toRoute),
@@ -144,6 +150,15 @@ export async function fetchRouteSummaries(tripId: number): Promise<RouteIncident
     unpassable: dto.unpassable ?? false,
     plannedTooLate: dto.plannedTooLate ?? false,
   }));
+}
+
+/** Remembers the guest for every booking of the trip; 400 INVALID_TRIP_INPUT with the field at fault. */
+export async function rememberTripGuest(tripId: number, guest: TripGuest): Promise<TripDetail> {
+  return toDetail(await unwrap(rememberGuestRequest({ path: { tripId }, body: guest })));
+}
+
+export async function forgetTripGuest(tripId: number): Promise<TripDetail> {
+  return toDetail(await unwrap(forgetGuestRequest({ path: { tripId } })));
 }
 
 export async function createTrip(trip: NewTrip): Promise<TripDetail> {

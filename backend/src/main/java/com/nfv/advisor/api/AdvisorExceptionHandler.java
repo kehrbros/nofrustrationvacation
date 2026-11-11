@@ -62,7 +62,13 @@ public class AdvisorExceptionHandler {
 
     @ExceptionHandler(InvalidBookingInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalidBooking(InvalidBookingInputException exception) {
-        return problem(HttpStatus.BAD_REQUEST, "INVALID_BOOKING_INPUT", exception.getMessage());
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.BAD_REQUEST, "INVALID_BOOKING_INPUT",
+                exception.getMessage());
+        if (exception.getField() != null) {
+            // the frontend marks the guest field
+            response.getBody().setProperty("field", exception.getField());
+        }
+        return response;
     }
 
     @ExceptionHandler(OfferUnavailableException.class)

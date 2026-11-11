@@ -40,7 +40,11 @@ public class TripExceptionHandler {
     @ExceptionHandler(InvalidTripInputException.class)
     public ResponseEntity<ProblemDetail> handleInvalid(InvalidTripInputException exception) {
         String code = exception instanceof LocationOutsideRegionsException ? "LOCATION_OUTSIDE_REGIONS" : "INVALID_TRIP_INPUT";
-        return problem(HttpStatus.BAD_REQUEST, code, exception.getMessage());
+        ResponseEntity<ProblemDetail> response = problem(HttpStatus.BAD_REQUEST, code, exception.getMessage());
+        if (exception.getField() != null) {
+            response.getBody().setProperty("field", exception.getField());
+        }
+        return response;
     }
 
     @ExceptionHandler(StopInUseException.class)

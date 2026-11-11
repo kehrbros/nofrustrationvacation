@@ -5,12 +5,14 @@ import com.nfv.trips.dto.CreateTripDto;
 import com.nfv.trips.dto.MoveStopDto;
 import com.nfv.trips.dto.RouteLineDto;
 import com.nfv.trips.dto.TripDetailDto;
+import com.nfv.trips.dto.TripGuestDto;
 import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.BookingConflict;
 import com.nfv.trips.dto.UpdateStopDto;
 import com.nfv.trips.dto.UpdateTripDto;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.TripCoverImage;
+import com.nfv.trips.entities.TripGuest;
 import com.nfv.trips.logic.CoverImageGeneration;
 import com.nfv.trips.logic.InvalidTripInputException;
 import com.nfv.trips.logic.BookingFit;
@@ -92,6 +94,24 @@ public class TripController {
     public TripDetailDto updateTrip(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
                                     @RequestBody UpdateTripDto trip) {
         tripLogic.update(user.appUserId(), tripId, trip.name(), trip.startAt(), trip.endAt(), trip.travelers());
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Remember the guest for the bookings of the trip", description = "Suggested for every "
+            + "booking of the trip until it is forgotten. 400 INVALID_TRIP_INPUT with field (firstName, lastName, email, "
+            + "phone).")
+    @PutMapping("/{tripId}/guest")
+    public TripDetailDto rememberGuest(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId,
+                                       @RequestBody TripGuestDto guest) {
+        tripLogic.rememberGuest(user.appUserId(), tripId,
+                new TripGuest(guest.firstName(), guest.lastName(), guest.email(), guest.phone()));
+        return tripDtos.detail(user.appUserId(), tripId);
+    }
+
+    @Operation(summary = "Forget the guest of the trip")
+    @DeleteMapping("/{tripId}/guest")
+    public TripDetailDto forgetGuest(@AuthenticationPrincipal CurrentUser user, @PathVariable long tripId) {
+        tripLogic.rememberGuest(user.appUserId(), tripId, null);
         return tripDtos.detail(user.appUserId(), tripId);
     }
 

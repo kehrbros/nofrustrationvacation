@@ -4,13 +4,16 @@ import com.nfv.trips.dto.RouteDetailDto;
 import com.nfv.trips.dto.RouteDto;
 import com.nfv.trips.dto.StopDto;
 import com.nfv.trips.dto.TripDetailDto;
+import com.nfv.trips.dto.TripGuestDto;
 import com.nfv.trips.dto.TripSummaryDto;
 import com.nfv.trips.dto.WaypointDto;
 import com.nfv.trips.entities.Route;
 import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
+import com.nfv.trips.entities.TripGuest;
 import com.nfv.trips.entities.Waypoint;
 import com.nfv.trips.logic.TripLogic;
+import jakarta.annotation.Nullable;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -36,9 +39,13 @@ class TripDtos {
     TripDetailDto detail(long appUserId, long tripId) {
         Trip trip = tripLogic.get(appUserId, tripId);
         return new TripDetailDto(trip.getId(), trip.getName(), trip.getStartAt(), trip.getEndAt(),
-                trip.phaseAt(OffsetDateTime.now(clock)), trip.getTravelers(), tripLogic.coverImage(appUserId, tripId).isPresent(),
+                trip.phaseAt(OffsetDateTime.now(clock)), trip.getTravelers(), guest(trip.getGuest()), tripLogic.coverImage(appUserId, tripId).isPresent(),
                 tripLogic.stops(appUserId, tripId).stream().map(TripDtos::stop).toList(),
                 tripLogic.routes(appUserId, tripId).stream().map(TripDtos::route).toList());
+    }
+
+    private static @Nullable TripGuestDto guest(@Nullable TripGuest guest) {
+        return guest == null ? null : new TripGuestDto(guest.firstName(), guest.lastName(), guest.email(), guest.phone());
     }
 
     RouteDetailDto routeDetail(long appUserId, long tripId, long routeId) {

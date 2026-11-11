@@ -43,6 +43,13 @@ export interface Route {
   planReason: string | null;
 }
 
+export interface TripGuest {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+}
+
 export interface TripDetail {
   id: number;
   name: string;
@@ -51,6 +58,8 @@ export interface TripDetail {
   phase: TripPhase;
   /** Number of travelers, suggested as guests of bookings. */
   travelers: number | null;
+  /** Person hotels of the trip are booked for, remembered at the user's wish; null if none. */
+  guest: TripGuest | null;
   hasCoverImage: boolean;
   stops: Stop[];
   routes: Route[];
