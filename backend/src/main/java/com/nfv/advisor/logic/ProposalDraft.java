@@ -50,14 +50,16 @@ record ProposalDraft(ProposalKind kind, @Nullable String via, @Nullable OffsetDa
      * include the wait at a closure. No arrival if a closure cannot be passed.
      *
      * @param counting the consequences that count on the route
+     * @param deadline see {@link RunContext#latestArrival()}
      */
-    static ProposalDraft keepRoute(RouteSchedule schedule, List<RouteConsequence> counting) {
+    static ProposalDraft keepRoute(RouteSchedule schedule, List<RouteConsequence> counting,
+                                   @Nullable OffsetDateTime deadline) {
         boolean unpassable = counting.stream().anyMatch(c -> c.impact() == Impact.BLOCKED && c.delay() == null);
         OffsetDateTime arrival = unpassable ? null : counting.stream().map(RouteConsequence::expectedArrival)
                 .filter(Objects::nonNull).max(OffsetDateTime::compareTo).orElse(schedule.plannedArrival());
         Duration delay = arrival == null || schedule.plannedArrival() == null ? null
                 : Duration.between(schedule.plannedArrival(), arrival);
-        Boolean meets = schedule.deadline() == null ? null : arrival != null && !arrival.isAfter(schedule.deadline());
+        Boolean meets = deadline == null ? null : arrival != null && !arrival.isAfter(deadline);
         return new ProposalDraft(ProposalKind.KEEP_ROUTE, null, schedule.departure(), arrival, null, null, delay, null,
                 meets, List.of(), counting.stream()
                 .map(c -> new ProposalConflict(c.incidentId(), c.impact(), c.delay())).toList(), List.of(), null);

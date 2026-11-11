@@ -3,6 +3,8 @@ package com.nfv.advisor.logic;
 import com.nfv.advisor.entities.ProposalKind;
 import jakarta.annotation.Nullable;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -39,9 +41,12 @@ public final class RunContext {
     private @Nullable Optional<StayOptions.BookedStay> bookedStay;
     private @Nullable OffsetDateTime plannedArrival;
     private @Nullable NextStop nextStop;
+    private @Nullable OffsetDateTime latestArrival;
 
     /** Origin of a stay at the target stop. */
     static final String TARGET = "target";
+    /** A latest check-in before this time means the night after. */
+    static final LocalTime NIGHT_ENDS = LocalTime.of(6, 0);
 
     /**
      * Another target the route can reach, input for {@code search_accommodations} and {@code compose_plan}.
@@ -82,6 +87,7 @@ public final class RunContext {
         this.deadline = deadline;
         this.overnightRelevant = overnightRelevant;
         this.target = target;
+        this.latestArrival = deadline;
         options.put(KEEP_ROUTE, keepRoute);
     }
 
@@ -98,8 +104,39 @@ public final class RunContext {
         return underway;
     }
 
+    /** Arrival time of the target stop ({@code Stop.arrivalAt}), see {@link #latestArrival()} for the deadline. */
     public @Nullable OffsetDateTime deadline() {
         return deadline;
+    }
+
+    /**
+     * What {@code meets_deadline} is measured against, the same for every option and plan of the run, see
+     * Docs/incident-plans.md#rules: the latest check-in of the booked accommodation, else {@link #deadline()}.
+     */
+    public @Nullable OffsetDateTime latestArrival() {
+        return latestArrival;
+    }
+
+    RunContext latestArrival(@Nullable OffsetDateTime latestArrival) {
+        this.latestArrival = latestArrival;
+        return this;
+    }
+
+    /**
+     * The latest check-in of the booked accommodation on its first day (before {@code NIGHT_ENDS}: the night after),
+     * else the arrival time of the target stop.
+     */
+    static @Nullable OffsetDateTime latestArrival(@Nullable OffsetDateTime stopArrival,
+                                                  @Nullable StayOptions.BookedStay booked, ZoneOffset offset) {
+        if (booked != null && booked.checkInUntil() != null) {
+            LocalDate day = booked.checkIn() != null ? booked.checkIn()
+                    : stopArrival != null ? stopArrival.atZoneSameInstant(offset).toLocalDate() : null;
+            if (day != null) {
+                LocalDate until = booked.checkInUntil().isBefore(NIGHT_ENDS) ? day.plusDays(1) : day;
+                return OffsetDateTime.of(until, booked.checkInUntil(), offset);
+            }
+        }
+        return stopArrival;
     }
 
     /** The route is too late or cannot be passed, also without a deadline: a stay along the way can be the answer. */
@@ -205,13 +242,17 @@ public final class RunContext {
 
     /** Local offset at the target: of its arrival, else of the deadline, else of the planned route. */
     ZoneOffset targetOffset() {
+        return offset(target, deadline, keepRoute().departureAt());
+    }
+
+    static ZoneOffset offset(@Nullable Target target, @Nullable OffsetDateTime deadline,
+                             @Nullable OffsetDateTime departure) {
         if (target != null && target.arrivalAt() != null) {
             return target.arrivalAt().getOffset();
         }
         if (deadline != null) {
             return deadline.getOffset();
         }
-        OffsetDateTime departure = keepRoute().departureAt();
         return departure != null ? departure.getOffset() : ZoneOffset.UTC;
     }
 

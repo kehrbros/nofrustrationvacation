@@ -74,6 +74,8 @@ flowchart LR
 | `find_departure_shifts` | none, always on the planned route | at most one option per direction, fields as above | `Suggestions.forConsequence` with `DEPARTURE_SHIFT` |
 | `submit_proposals` | `summary`, `proposals[]` with `option_id` and `reason`, best first | ends the run | `advisor` |
 
+- **`meets_deadline`** is measured against the same deadline for every option, `keep_route` and every plan of a run (`RunContext.latestArrival`): the latest check-in of the booked accommodation, else `Stop.arrivalAt`, see [incident-plans.md](incident-plans.md#rules). The run reads the booked accommodation once at the start; the deadline in the request to the model is this one too. Before 2026-11-11 options used `Stop.arrivalAt` and plans the check-in, so the same arrival could be on time in a plan and too late as an option.
+
 - The user's waypoints stay, all active incidents of the route are blocked or delayed. This is decided by the scenario, not by the model ([recommendations.md](recommendations.md#scenario-recommendationslogic)). Hence no parameters for waypoints or segments.
 - `find_departure_shifts` is omitted if the user is already under way.
 - **No other departure for route options:** `find_alternative_routes` always calculates with the planned departure. `choice` sets either waypoints or a departure, a proposal with both could not be chosen as displayed.

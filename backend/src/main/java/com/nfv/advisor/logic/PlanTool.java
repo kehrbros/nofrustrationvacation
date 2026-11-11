@@ -39,8 +39,6 @@ class PlanTool implements AdvisorTool {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     /** Departure after a night on the way, local, unless a closure ends later. */
     static final LocalTime CONTINUE_AT = ProposalDecisions.STOPOVER_DEPARTURE;
-    /** A latest check-in before this time means the night after. */
-    static final LocalTime NIGHT_ENDS = LocalTime.of(6, 0);
     static final String KEEP_BOOKING = "keep_booking";
     private static final String SCHEMA = """
             {"type":"object","properties":{
@@ -243,20 +241,9 @@ class PlanTool implements AdvisorTool {
         return new Costs(total, currency);
     }
 
-    /**
-     * The latest check-in of the booked accommodation on its first day (before {@link #NIGHT_ENDS}: the night after),
-     * else the arrival time of the target stop.
-     */
+    /** See {@link RunContext#latestArrival(OffsetDateTime, BookedStay, ZoneOffset)}. */
     static @Nullable OffsetDateTime deadline(RunContext run, @Nullable BookedStay booked, ZoneOffset offset) {
-        if (booked != null && booked.checkInUntil() != null) {
-            LocalDate day = booked.checkIn() != null ? booked.checkIn()
-                    : run.deadline() != null ? run.deadline().atZoneSameInstant(offset).toLocalDate() : null;
-            if (day != null) {
-                LocalDate until = booked.checkInUntil().isBefore(NIGHT_ENDS) ? day.plusDays(1) : day;
-                return OffsetDateTime.of(until, booked.checkInUntil(), offset);
-            }
-        }
-        return run.deadline();
+        return RunContext.latestArrival(run.deadline(), booked, offset);
     }
 
     private static ProposalDraft drive(RunContext run, @Nullable String id) {
