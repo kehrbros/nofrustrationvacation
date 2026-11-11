@@ -114,9 +114,15 @@ class AlternativesAndViaPointsTest {
             points.forEach(p -> route.add(new RoutePoint(new GeoPoint(p.latitude(), p.longitude()),
                     RoutePoint.Kind.VIA, p.roadHint())));
             route.add(scenario.end());
+            List<RoutedSegment> planned = routing.route(route, RouteOptions.none()).segments();
             Set<Long> replanned = new HashSet<>();
-            routing.route(route, RouteOptions.none()).segments().forEach(s -> replanned.add(s.segmentId()));
+            planned.forEach(s -> replanned.add(s.segmentId()));
             assertThat(CandidateEvaluator.sharedRatio(ViaPointExtractor.steps(candidate.segments()), replanned))
+                    .isGreaterThanOrEqualTo(0.9);
+            // and no way to a point and back: what is planned lies on the suggestion
+            Set<Long> suggested = new HashSet<>();
+            candidate.segments().forEach(s -> suggested.add(s.segmentId()));
+            assertThat(CandidateEvaluator.sharedRatio(ViaPointExtractor.steps(planned), suggested))
                     .isGreaterThanOrEqualTo(0.9);
         }
     }

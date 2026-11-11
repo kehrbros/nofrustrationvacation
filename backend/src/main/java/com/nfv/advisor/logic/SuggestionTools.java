@@ -67,7 +67,7 @@ class SuggestionTools {
             answer.put("problem", result.problem() == null ? null : result.problem().name());
             ArrayNode options = answer.putArray("options");
             result.options().forEach(option -> {
-                ProposalDraft draft = ProposalDraft.of(option, run.deadline());
+                ProposalDraft draft = ProposalDraft.of(option, run.latestArrival());
                 options.add(draft.describe(JSON, run.register(draft)));
             });
             return answer;

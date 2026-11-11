@@ -96,6 +96,7 @@ class AlternativeAgent {
     private final RouteSnapshots routeSnapshots;
     private final RouteSchedules routeSchedules;
     private final TripLogic tripLogic;
+    private final StayOptions stayOptions;
     private final AdvisorRunRepository runRepository;
     private final AdvisorProperties properties;
     private final TransactionTemplate transactionTemplate;
@@ -152,16 +153,23 @@ class AlternativeAgent {
         List<RouteConsequence> counting = all.stream().filter(c -> c.id() == consequenceId || c.counts()).toList();
         OffsetDateTime now = OffsetDateTime.now(clock);
         boolean underway = schedule.departure() != null && !schedule.departure().isAfter(now);
-        ProposalDraft keepRoute = ProposalDraft.keepRoute(schedule, counting);
         boolean overnightRelevant = counting.stream().anyMatch(c -> c.category() != null
                 && (c.category() == Category.TOO_LATE || c.delay() == null));
         RunContext.Target target = new RunContext.Target(route.tripId(), route.to().id(), route.to().name(),
                 route.to().latitude(), route.to().longitude(), route.to().arrivalAt(), route.to().departureAt(),
                 tripLogic.get(appUserId, route.tripId()).getTravelers());
+        // every option and plan is measured against the same deadline, the latest check-in if there is one
+        Optional<StayOptions.BookedStay> booked = bookedStay(appUserId, target);
+        OffsetDateTime deadline = RunContext.latestArrival(schedule.deadline(), booked.orElse(null),
+                RunContext.offset(target, schedule.deadline(), schedule.departure()));
+        ProposalDraft keepRoute = ProposalDraft.keepRoute(schedule, counting, deadline);
         RunContext run = new RunContext(appUserId, consequenceId, underway, schedule.deadline(), overnightRelevant,
-                keepRoute, target).plannedArrival(schedule.plannedArrival(), nextStop(appUserId, route));
+                keepRoute, target).plannedArrival(schedule.plannedArrival(), nextStop(appUserId, route))
+                .latestArrival(deadline);
+        run.bookedStay(() -> booked);
         try {
-            return ask(start, run, input(start, route, schedule, counting, keepRoute, underway, now, appUserId));
+            return ask(start, run, input(start, route, schedule, deadline, counting, keepRoute, underway, now,
+                    appUserId));
         } catch (AssistantUnavailableException | AssistantRateLimitedException e) {
             log.info("Advisor continues without the model: {}", e.getMessage());
             return withoutModel(run, keepRoute);
@@ -208,7 +216,7 @@ class AlternativeAgent {
             options.addAll(options(run, OptionKind.DEPARTURE_SHIFT));
         }
         List<ProposalDraft> drafts = options.stream().sorted(Comparator.comparing(SuggestedOption::arrivalAt))
-                .limit(properties.maxProposals()).map(option -> ProposalDraft.of(option, run.deadline())).toList();
+                .limit(properties.maxProposals()).map(option -> ProposalDraft.of(option, run.latestArrival())).toList();
         List<AdvisorProposal> proposals = new ArrayList<>();
         (drafts.isEmpty() ? List.of(keepRoute) : drafts)
                 .forEach(draft -> proposals.add(draft.toProposal(proposals.size(), null)));
@@ -219,6 +227,16 @@ class AlternativeAgent {
         SuggestionResult result = suggestions.forConsequence(run.appUserId(), run.consequenceId(), Set.of(kind),
                 properties.maxProposals(), null);
         return result.options();
+    }
+
+    /** The accommodation booked at the target stop; a failing lookup only costs the latest check-in. */
+    private Optional<StayOptions.BookedStay> bookedStay(long appUserId, RunContext.Target target) {
+        try {
+            return stayOptions.bookedStay(appUserId, target.tripId(), target.stopId());
+        } catch (RuntimeException e) {
+            log.warn("Advisor: booked accommodation of stop {} not read: {}", target.stopId(), e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /** The stop after the target of the route, with a position. */
@@ -235,8 +253,9 @@ class AlternativeAgent {
     }
 
     /** The situation as the model reads it: no names or contacts of travellers, no bookings. */
-    private String input(Start start, RouteSnapshot route, RouteSchedule schedule, List<RouteConsequence> counting,
-                         ProposalDraft keepRoute, boolean underway, OffsetDateTime now, long appUserId) {
+    private String input(Start start, RouteSnapshot route, RouteSchedule schedule, @Nullable OffsetDateTime deadline,
+                         List<RouteConsequence> counting, ProposalDraft keepRoute, boolean underway,
+                         OffsetDateTime now, long appUserId) {
         ObjectNode situation = JSON.createObjectNode();
         situation.put("now", now.toString());
         situation.put("goal", start.goal().name());
@@ -246,7 +265,7 @@ class AlternativeAgent {
         leg.put("to", route.to().name());
         leg.put("planned_departure", text(schedule.departure()));
         leg.put("planned_arrival", text(schedule.plannedArrival()));
-        leg.put("deadline", text(schedule.deadline()));
+        leg.put("deadline", text(deadline));
         ArrayNode waypoints = leg.putArray("waypoints");
         route.waypoints().stream().filter(w -> w.name() != null).forEach(w -> waypoints.add(w.name()));
         ArrayNode incidents = situation.putArray("incidents");

@@ -16,8 +16,12 @@ import java.time.LocalTime;
  * @param maxShareFactor         GraphHopper {@code alternative_route.max_share_factor}
  * @param maxSharedRatio         combined legs: more shared distance with a better ranked suggestion → dropped
  * @param currentSharedRatio     at least this much shared distance with the planned route → label {@code CURRENT}
- * @param viaReproduceRatio      via points must reproduce at least this part of the suggestion
- * @param maxViaPointsPerSection most via points per section that differs from the fastest way
+ * @param viaReproduceRatio      via points must reproduce at least this part of the suggestion, and the way over them
+ *                               must lie on the suggestion for at least this part
+ * @param viaMaxGapMeters        longest stretch of the suggestion the way over the via points may miss, and longest
+ *                               stretch it may take off the suggestion (e.g. out to a via point and back)
+ * @param maxViaPointsPerSection segments tried for one via point before giving up on that stretch
+ * @param maxViaPoints           most via points added to one suggestion (besides the waypoints of the user)
  * @param maxChosenPoints        most points of a chosen suggestion, see {@code RouteChoice}
  * @param departureShiftBuffer   distance of a shifted departure to the start or end of an incident
  * @param departureShiftMax      a later departure further away than this is not suggested
@@ -32,7 +36,9 @@ public record RecommendationProperties(
         @DefaultValue("0.6") double maxSharedRatio,
         @DefaultValue("0.95") double currentSharedRatio,
         @DefaultValue("0.9") double viaReproduceRatio,
+        @DefaultValue("2000") double viaMaxGapMeters,
         @DefaultValue("3") int maxViaPointsPerSection,
+        @DefaultValue("12") int maxViaPoints,
         @DefaultValue("25") int maxChosenPoints,
         @DefaultValue("15m") Duration departureShiftBuffer,
         @DefaultValue("24h") Duration departureShiftMax,

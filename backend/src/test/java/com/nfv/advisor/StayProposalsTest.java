@@ -2,6 +2,7 @@ package com.nfv.advisor;
 
 import com.jayway.jsonpath.JsonPath;
 import com.nfv.advisor.logic.StayOptions;
+import com.nfv.advisor.logic.StayOptions.BookedStay;
 import com.nfv.advisor.logic.StayOptions.StayOffer;
 import com.nfv.advisor.logic.StayOptions.StaySearch;
 import com.nfv.assistant.logic.ConversationTool;
@@ -22,6 +23,7 @@ import com.nfv.trips.logic.RoutePlanning;
 import com.nfv.user.logic.AppUserProvisioning;
 import com.nfv.user.security.AppUserAuthentication;
 import com.nfv.user.security.CurrentUser;
+import jakarta.annotation.Nullable;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -40,6 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -156,6 +159,37 @@ class StayProposalsTest {
         assertThat(search.getValue().maxPrice()).isEqualByComparingTo("200");
     }
 
+    @Test
+    void optionsAreMeasuredAgainstTheLatestCheckInLikePlans() throws Exception {
+        // arrival time at the stop: one minute after leaving, no detour makes it; the hotel takes guests until 05:59
+        long routeId = plannedRoute(planned.plusMinutes(1));
+        closure(middleSegment(routeId), planned.plusDays(5));
+        when(stayOptions.bookedStay(anyLong(), anyLong(), anyLong())).thenReturn(Optional.of(new BookedStay(9L,
+                THORNDON[0], THORNDON[1], planned.toLocalDate(), planned.toLocalDate().plusDays(2), 3, 1, null, "EUR",
+                null, LocalTime.of(5, 59), "Thorndon Lodge")));
+        when(conversation.run(anyLong(), any())).thenAnswer(call -> {
+            ToolConversation.Request request = call.getArgument(1);
+            assertThat(JSON.readTree(request.input()).path("route").path("deadline").asString())
+                    .isEqualTo(OffsetDateTime.of(planned.toLocalDate().plusDays(1), LocalTime.of(5, 59),
+                            ZoneOffset.UTC).toString());
+            JsonNode routes = request.tools().stream().filter(t -> t.name().equals("find_alternative_routes"))
+                    .findFirst().orElseThrow().handler().apply(JSON.readTree("{\"count\":1}"));
+            JsonNode option = routes.path("options").get(0);
+            assertThat(option.path("meets_deadline").asBoolean()).isTrue();
+            return JSON.readTree("""
+                    {"summary":"Closed.","proposals":[{"option_id":"%s","reason":"Around it."},
+                    {"option_id":"keep_route","reason":"Wait."}]}""".formatted(option.path("option_id").asString()));
+        });
+
+        String body = finishedRun(routeId);
+
+        assertThat((String) JsonPath.read(body, "$.proposals[0].kind")).isEqualTo("REROUTE");
+        assertThat((Boolean) JsonPath.read(body, "$.proposals[0].meetsDeadline")).isTrue();
+        assertThat((String) JsonPath.read(body, "$.proposals[1].kind")).isEqualTo("KEEP_ROUTE");
+        // the closure lasts for days: staying on the route does not get there in time either way
+        assertThat((Boolean) JsonPath.read(body, "$.proposals[1].meetsDeadline")).isFalse();
+    }
+
     private String finishedRun(long routeId) throws Exception {
         RequestPostProcessor user = authentication(new AppUserAuthentication(
                 new CurrentUser(userId, username),
@@ -178,13 +212,18 @@ class StayProposalsTest {
     }
 
     private long plannedRoute() {
+        return plannedRoute(null);
+    }
+
+    private long plannedRoute(@Nullable OffsetDateTime arrivalAt) {
         long routeId = inTransaction(() -> {
             Trip trip = new Trip(userId, "Wellington", planned.minusDays(1), planned.plusDays(7),
                     planned.minusDays(2));
             trip.changeTravelers(3);
             trip = tripRepository.save(trip);
             Stop start = stopRepository.save(new Stop(trip, 0, "Newtown", NEWTOWN[0], NEWTOWN[1], null, planned));
-            Stop end = stopRepository.save(new Stop(trip, 1, "Thorndon", THORNDON[0], THORNDON[1], null, null));
+            Stop end = stopRepository.save(new Stop(trip, 1, "Thorndon", THORNDON[0], THORNDON[1], arrivalAt,
+                    null));
             return routeRepository.save(new Route(trip, start, end)).getId();
         });
         routePlanning.plan(routeId);
