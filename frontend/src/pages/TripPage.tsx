@@ -16,12 +16,12 @@ import { useCurrentPosition } from '../map/useCurrentPosition';
 import ProposalsBanner from '../proposals/ProposalsBanner';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
-import { impactLabel, incidentTitle } from '../trips/incidentText';
+import { impactLabel, incidentTypeLabel } from '../trips/incidentText';
 import type { LinePoint, RouteLine, TripIncident } from '../trips/model';
 import { formatDuration } from '../trips/routeOptionText';
 import { fetchRouteLines } from '../trips/routesApi';
 import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
-import { formatDateTime, formatPeriod, stopDays } from '../trips/time';
+import { formatPeriod, stopDays } from '../trips/time';
 import { deleteTrip, fetchTrip, fetchTripIncidents, removeStop, TripsApiError } from '../trips/tripsApi';
 
 // MapLibre needs the browser (WebGL), load it only there
@@ -351,7 +351,6 @@ function StopBookings({ bookings, stopId }: { bookings: Booking[]; stopId: numbe
 
 function RouteRow({ context, routeId }: { context: TripContext; routeId: number }) {
   const route = context.trip.routes.find((candidate) => candidate.id === routeId)!;
-  const from = context.stopById.get(route.fromStopId);
   const incident = context.incidentsByRoute.get(route.id)?.[0];
   const line = context.routeLines.get(route.id);
   return (
@@ -362,14 +361,17 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
           {[
             line?.via && t('trip.via', { via: line.via }),
             line && formatDuration(line.durationSeconds),
-            from?.departureAt ? t('trip.departure', { time: formatDateTime(from.departureAt) }) : t('trip.departureOpen'),
-            incident && incidentTitle(incident),
           ]
             .filter(Boolean)
             .join(' · ')}
         </span>
       </span>
-      {incident && <span className="va-chip va-chip-soft">{impactLabel(incident.impact)}</span>}
+      {incident && (
+        <span className="va-route-chips">
+          <span className="va-chip va-chip-soft">{impactLabel(incident.impact)}</span>
+          <span className="va-chip va-chip-soft">{incidentTypeLabel(incident.type)}</span>
+        </span>
+      )}
     </Link>
   );
 }
