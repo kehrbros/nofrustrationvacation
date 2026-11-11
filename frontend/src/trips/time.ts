@@ -79,6 +79,27 @@ export function formatPeriod(startIso: string, endIso: string): string {
   return plainSpaces(format({ day: 'numeric', month: 'long', year: 'numeric' }).formatRange(new Date(startIso), new Date(endIso)));
 }
 
+/** "9.–11. Nov." or "30. Nov. – 2. Dez.": days of a stop without times and year, in the system time zone. */
+export function formatDays(startIso: string, endIso: string): string {
+  return plainSpaces(format({ day: 'numeric', month: 'short' }).formatRange(new Date(startIso), new Date(endIso)));
+}
+
+/** "14. Juli" or "14 Jul": one day without time and year. */
+export function formatShortDay(iso: string): string {
+  return format({ day: 'numeric', month: 'short' }).format(new Date(iso));
+}
+
+/** Days of a stop: a range if both are known, otherwise "ab 9. Nov." or "bis 11. Nov."; null without times. */
+export function stopDays(arrivalIso: string | null | undefined, departureIso: string | null | undefined): string | null {
+  if (arrivalIso && departureIso) {
+    return formatDays(arrivalIso, departureIso);
+  }
+  if (arrivalIso) {
+    return t('trip.arrives', { day: formatShortDay(arrivalIso) });
+  }
+  return departureIso ? t('trip.departs', { day: formatShortDay(departureIso) }) : null;
+}
+
 /** "Sa., 14. Juli, 09:00" */
 export function formatDateTime(iso: string): string {
   return format({ weekday: 'short', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }).format(new Date(iso));
