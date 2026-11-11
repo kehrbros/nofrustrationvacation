@@ -124,8 +124,8 @@ class ManualSourceApiTest {
     void pointNextToTheRouteIsPlacedOntoIt() throws Exception {
         long tripId = tripOf(testerId);
         long routeId = plannedRoute(tripId, DEPARTURE.plusHours(3));
-        // about 150 m west of the tunnel, farther than the point radius
-        String tap = "\"point\": {\"lat\": -41.289262576382875, \"lon\": 174.7698}";
+        // about 150 m west of the tunnel, farther than the point radius; SH 1 only, as the other events here
+        String tap = "\"point\": {\"lat\": -41.289262576382875, \"lon\": 174.7698}, \"roadRef\": \"01N\"";
         String onRoute = ", \"onRoute\": {\"tripId\": " + tripId + ", \"routeId\": " + routeId + "}";
 
         report(event("\"type\": \"CLOSURE\", " + tap + ", \"validFrom\": \"" + DEPARTURE.minusHours(1) + "\", "
@@ -143,6 +143,10 @@ class ManualSourceApiTest {
                 .andExpect(jsonPath("$.routeId").value(routeId))
                 .andExpect(jsonPath("$.lat").isNumber())
                 .andExpect(jsonPath("$.distanceMeters").value(greaterThan(50)));
+
+        // ended, so it does not stay on the routes of other test classes
+        report(event("\"type\": \"CLOSURE\", " + tap + ", \"validFrom\": \"" + DEPARTURE.minusHours(1) + "\", "
+                + "\"resolved\": true")).andExpect(status().isOk());
     }
 
     @Test
