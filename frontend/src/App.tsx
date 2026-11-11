@@ -5,6 +5,7 @@ import AlternativesSheet from './bookings/AlternativesSheet';
 import BookingSheet from './bookings/BookingSheet';
 import ShareTargetPage from './bookings/ShareTargetPage';
 import StayBookingSheet from './bookings/StayBookingSheet';
+import PlanBookingSheet from './proposals/PlanBookingSheet';
 import StopBookingSheet from './bookings/StopBookingSheet';
 
 import { CALLBACK_PATH } from './auth/paths';
@@ -56,6 +57,8 @@ export default function App() {
         <Route path="stops/:stopId/bearbeiten" element={<StopSheet />} />
         <Route path="stops/:stopId/buchung" element={<StopBookingSheet />} />
         <Route path="stops/:stopId/unterkunft" element={<StayBookingSheet />} />
+        <Route path="plan" element={<PlanBookingSheet />} />
+        <Route path="plan/:executionId" element={<PlanBookingSheet />} />
 
         <Route path="buchungen/:bookingId" element={<BookingSheet />} />
         <Route path="buchungen/:bookingId/alternativen" element={<AlternativesSheet />} />

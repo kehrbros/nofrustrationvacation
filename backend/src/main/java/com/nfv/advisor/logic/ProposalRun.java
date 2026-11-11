@@ -2,6 +2,8 @@ package com.nfv.advisor.logic;
 
 import com.nfv.advisor.entities.AdvisorProposal;
 import com.nfv.advisor.entities.AdvisorRun;
+import com.nfv.advisor.entities.PlanResult;
+import com.nfv.advisor.entities.PlanStepKind;
 import com.nfv.advisor.entities.ProposalGoal;
 import com.nfv.advisor.entities.ProposalKind;
 import com.nfv.advisor.entities.ProposalStay;
@@ -13,6 +15,7 @@ import com.nfv.incidents.entities.Impact;
 import jakarta.annotation.Nullable;
 
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -31,7 +34,17 @@ public record ProposalRun(long runId, long routeId, @Nullable Long consequenceId
                            @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
                            @Nullable Double distanceMeters, @Nullable Duration duration, @Nullable Duration delay,
                            @Nullable Double sharedRatio, @Nullable Boolean meetsDeadline, List<Point> points,
-                           List<Conflict> conflicts, @Nullable ProposalStay stay) {
+                           List<Conflict> conflicts, @Nullable ProposalStay stay, @Nullable PlanResult result,
+                           List<PlanStep> steps) {
+    }
+
+    /** A step of a {@code PLAN}, see {@code AdvisorProposalStep}. */
+    public record PlanStep(PlanStepKind kind, @Nullable ProposalKind routeKind, @Nullable String via,
+                           @Nullable OffsetDateTime departureAt, @Nullable OffsetDateTime arrivalAt,
+                           @Nullable OffsetDateTime waitedFor, @Nullable Double distanceMeters,
+                           @Nullable Duration duration, @Nullable String placeName, @Nullable Double latitude,
+                           @Nullable Double longitude, @Nullable Long bookingId, @Nullable LocalDate arrivalOn,
+                           List<Point> points, @Nullable ProposalStay stay) {
     }
 
     public record Point(double latitude, double longitude, @Nullable String roadHint, @Nullable Long waypointId) {
@@ -57,6 +70,10 @@ public record ProposalRun(long runId, long routeId, @Nullable Long consequenceId
                         q.getWaypointId())).toList(),
                 p.getConflicts().stream().map(c -> new Conflict(c.getIncidentId(), c.getImpact(), c.getDelay()))
                         .toList(),
-                p.getStay());
+                p.getStay(), p.getPlan(), p.getSteps().stream().map(s -> new PlanStep(s.getKind(), s.getRouteKind(),
+                        s.getVia(), s.getDepartureAt(), s.getArrivalAt(), s.getWaitedFor(), s.getDistanceMeters(),
+                        s.getDuration(), s.getPlaceName(), s.getLatitude(), s.getLongitude(), s.getBookingId(),
+                        s.getArrivalOn(), s.getPoints().stream().map(q -> new Point(q.getLatitude(), q.getLongitude(),
+                        q.getRoadHint(), q.getWaypointId())).toList(), s.getStay())).toList());
     }
 }

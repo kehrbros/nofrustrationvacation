@@ -45,7 +45,7 @@ class AccommodationSearchTool implements AdvisorTool {
     private static final String SCHEMA = """
             {"type":"object","properties":{
             "area_id":{"type":["string","null"],
-            "description":"An area_ from find_overnight_areas, null for the target stop of the route"},
+            "description":"An area_ from find_overnight_areas, a place_ from find_other_targets, null for the target stop of the route"},
             "radius_km":{"type":["number","null"],"description":"Around the area or stop, 0.5 to 50, null for 5"},
             "check_in":{"type":["string","null"],
             "description":"ISO date, null for the day of arrival at the area, or the booked or planned stay at the target stop"},
@@ -67,10 +67,11 @@ class AccommodationSearchTool implements AdvisorTool {
 
     @Override
     public String description() {
-        return "Hotels with a bookable offer for a night along the way (around an area_ of find_overnight_areas) or at "
-                + "the target stop (area_id null, e.g. when the booked accommodation cannot be reached in time). Each "
-                + "offer is a stay_ option that can be proposed. Prices are totals for the stay. Every call costs, "
-                + "search only where a stay makes sense.";
+        return "Hotels with a bookable offer for a night along the way (around an area_ of find_overnight_areas), at "
+                + "another target (around a place_ of find_other_targets) or at the target stop (area_id null, e.g. "
+                + "when the booked accommodation cannot be reached in time or is lost). Each offer is a stay_ option for "
+                + "compose_plan; those along the way or at the target can also be proposed alone. Prices are totals "
+                + "for the stay. Every call costs, search only where a stay makes sense.";
     }
 
     @Override
@@ -86,7 +87,8 @@ class AccommodationSearchTool implements AdvisorTool {
     @Override
     public JsonNode call(RunContext run, JsonNode arguments) {
         String areaId = text(arguments, "area_id");
-        Where where = areaId == null ? target(run) : area(run, areaId);
+        Where where = areaId == null ? target(run) : areaId.startsWith("place_") ? place(run, areaId)
+                : area(run, areaId);
         ObjectNode answer = JSON.createObjectNode();
         answer.put("area_id", areaId);
         answer.put("place", where.place());
@@ -105,7 +107,10 @@ class AccommodationSearchTool implements AdvisorTool {
         int guests = booked != null && booked.guests() != null ? booked.guests()
                 : run.target() != null && run.target().travelers() != null ? run.target().travelers() : DEFAULT_GUESTS;
         int rooms = booked != null ? Math.max(1, Math.min(booked.rooms(), guests)) : rooms(guests);
-        String currency = booked != null ? booked.currency() : DEFAULT_CURRENCY;
+        // one currency for all hotels of a plan: one PayPal order
+        String currency = booked != null ? booked.currency() : run.target() == null ? DEFAULT_CURRENCY
+                : run.bookedStay(() -> stayOptions.bookedStay(run.appUserId(), run.target().tripId(),
+                run.target().stopId())).map(BookedStay::currency).orElse(DEFAULT_CURRENCY);
         BigDecimal maxPrice = maxPrice(arguments, booked != null && areaId == null ? booked.maxPrice() : null);
         int results = results(arguments);
         answer.put("check_in", checkIn.toString());
@@ -129,14 +134,17 @@ class AccommodationSearchTool implements AdvisorTool {
             return answer;
         }
         answer.put("problem", found.isEmpty() ? "NO_OFFERS" : null);
-        Long replaces = areaId == null && booked != null ? booked.bookingId() : null;
+        Long replaces = areaId == null && booked != null ? Long.valueOf(booked.bookingId())
+                : where.planOnly() ? bookedAtTarget(run).map(BookedStay::bookingId).orElse(null) : null;
         for (StayOffer offer : found) {
             ProposalStay stay = new ProposalStay(offer.hotelId(), offer.offerId(), offer.name(), offer.latitude(),
                     offer.longitude(), where.place(), offer.distanceMeters(), checkIn, checkOut, guests, rooms,
                     offer.price(), offer.currency(), offer.refundable(), offer.freeCancellationUntil(), replaces);
-            ProposalDraft draft = where.arrivalAt() == null ? ProposalDraft.targetStay(where.route(), stay)
+            ProposalDraft draft = where.arrivalAt() == null || where.planOnly()
+                    ? ProposalDraft.targetStay(where.route(), stay)
                     : ProposalDraft.stopover(where.route(), where.arrivalAt(), stay);
-            ObjectNode option = draft.describe(JSON, run.register(draft));
+            ObjectNode option = draft.describe(JSON, run.registerStay(draft, where.origin(), where.planOnly()));
+            option.put("only_in_plan", where.planOnly());
             ObjectNode hotel = (ObjectNode) option.path("stay");
             hotel.put("stars", offer.stars());
             hotel.put("rating", offer.rating());
@@ -154,7 +162,25 @@ class AccommodationSearchTool implements AdvisorTool {
      */
     private record Where(String place, @Nullable Double latitude, @Nullable Double longitude,
                          @Nullable OffsetDateTime arrivalAt, ProposalDraft route, @Nullable LocalDate checkIn,
-                         @Nullable LocalDate checkOut, Optional<BookedStay> booked) {
+                         @Nullable LocalDate checkOut, Optional<BookedStay> booked, String origin, boolean planOnly) {
+    }
+
+    /** Another target: the way there is the drive of the place, a stay there only works in a plan. */
+    private Where place(RunContext run, String placeId) {
+        RunContext.Place place = run.place(placeId)
+                .orElseThrow(() -> new ToolInputException("unknown area_id " + placeId));
+        OffsetDateTime arrival = place.drive().arrivalAt();
+        LocalDate day = arrival == null ? null : arrival.atZoneSameInstant(run.targetOffset()).toLocalDate();
+        LocalDate checkOut = bookedAtTarget(run).map(BookedStay::checkOut)
+                .filter(out -> day != null && out.isAfter(day)).orElse(day == null ? null : day.plusDays(1));
+        return new Where(place.name(), place.latitude(), place.longitude(), arrival, place.drive(), day, checkOut,
+                Optional.empty(), placeId, true);
+    }
+
+    private Optional<BookedStay> bookedAtTarget(RunContext run) {
+        RunContext.Target target = run.target();
+        return target == null ? Optional.empty()
+                : run.bookedStay(() -> stayOptions.bookedStay(run.appUserId(), target.tripId(), target.stopId()));
     }
 
     private static Where area(RunContext run, String areaId) {
@@ -164,7 +190,7 @@ class AccommodationSearchTool implements AdvisorTool {
                 : run.option(area.routeOptionId()).orElseThrow();
         LocalDate day = area.arrivalAt().toLocalDate();
         return new Where(area.name(), area.latitude(), area.longitude(), area.arrivalAt(), route, day,
-                day.plusDays(1), Optional.empty());
+                day.plusDays(1), Optional.empty(), areaId, false);
     }
 
     private Where target(RunContext run) {
@@ -172,7 +198,8 @@ class AccommodationSearchTool implements AdvisorTool {
         if (target == null) {
             throw new ToolInputException("the route has no target stop");
         }
-        Optional<BookedStay> booked = stayOptions.bookedStay(run.appUserId(), target.tripId(), target.stopId());
+        Optional<BookedStay> booked = run.bookedStay(() -> stayOptions.bookedStay(run.appUserId(), target.tripId(),
+                target.stopId()));
         Double latitude = booked.map(BookedStay::latitude).orElse(target.latitude());
         Double longitude = booked.map(BookedStay::longitude).orElse(target.longitude());
         if (latitude == null || longitude == null) {
@@ -183,7 +210,8 @@ class AccommodationSearchTool implements AdvisorTool {
                 .orElse(target.arrivalAt() == null ? null : target.arrivalAt().toLocalDate());
         LocalDate checkOut = booked.map(BookedStay::checkOut)
                 .orElse(target.departureAt() == null ? null : target.departureAt().toLocalDate());
-        return new Where(target.name(), latitude, longitude, null, run.keepRoute(), checkIn, checkOut, booked);
+        return new Where(target.name(), latitude, longitude, null, run.keepRoute(), checkIn, checkOut, booked,
+                RunContext.TARGET, false);
     }
 
     /** One room for two, as in a double room: LiteAPI prices per occupancy, the user can search again when booking. */

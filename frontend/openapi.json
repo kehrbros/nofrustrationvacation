@@ -630,7 +630,7 @@
     },
     "/api/v1/alternative-proposals/{runId}/proposals/{rank}/acceptance" : {
       "post" : {
-        "description" : "Changes the trip: REROUTE and SHIFT_DEPARTURE like PUT /routes/{routeId}/choice, STOPOVER adds a stop at the hotel before the target stop (the route is split), KEEP_ROUTE and TARGET_STAY change nothing. Hotels are booked afterwards, see the answer. Replaces an earlier decision. 409 PROPOSAL_NOT_APPLICABLE (run not finished, trip changed), 400 INVALID_PROPOSAL_INPUT (no such rank).",
+        "description" : "Changes the trip: REROUTE and SHIFT_DEPARTURE like PUT /routes/{routeId}/choice, STOPOVER adds a stop at the hotel before the target stop (the route is split), KEEP_ROUTE and TARGET_STAY change nothing, a PLAN without hotels applies its steps (with hotels: plan-checkout). Hotels are booked afterwards, see the answer. Replaces an earlier decision. 409 PROPOSAL_NOT_APPLICABLE (run not finished, trip changed), 400 INVALID_PROPOSAL_INPUT (no such rank).",
         "operationId" : "accept",
         "parameters" : [ {
           "in" : "path",
@@ -662,6 +662,53 @@
           }
         },
         "summary" : "Take a proposal",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
+    "/api/v1/alternative-proposals/{runId}/proposals/{rank}/plan-checkout" : {
+      "post" : {
+        "description" : "Prebooks every hotel of the PLAN and creates one PayPal order for all of them; nothing is paid or changed yet. Approve the order, then completion. 409 OFFER_UNAVAILABLE or PRICE_EXCEEDED (ask for new proposals), PROPOSAL_NOT_APPLICABLE (no plan with hotels), 400 INVALID_BOOKING_INPUT (guest data).",
+        "operationId" : "checkout",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "runId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }, {
+          "in" : "path",
+          "name" : "rank",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int32"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/PlanCheckoutRequestDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlanExecutionDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Take a plan with hotels",
         "tags" : [ "Alternative proposals" ]
       }
     },
@@ -1111,6 +1158,92 @@
         },
         "summary" : "Provider onboarding checklist",
         "tags" : [ "Onboarding" ]
+      }
+    },
+    "/api/v1/plan-executions/{executionId}" : {
+      "get" : {
+        "operationId" : "execution",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "executionId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlanExecutionDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Where taking a plan stands",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
+    "/api/v1/plan-executions/{executionId}/cancellation" : {
+      "post" : {
+        "description" : "Before the approval: nothing is paid or changed.",
+        "operationId" : "abort",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "executionId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlanExecutionDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Cancel taking a plan",
+        "tags" : [ "Alternative proposals" ]
+      }
+    },
+    "/api/v1/plan-executions/{executionId}/completion" : {
+      "post" : {
+        "description" : "Books every hotel, changes the trip and pays. Safe to repeat. 422 PAYMENT_NOT_APPROVED / PAYMENT_DECLINED, 409 OFFER_UNAVAILABLE (a hotel refused, nothing is paid).",
+        "operationId" : "complete",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "executionId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/PlanExecutionDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Finish taking a plan after the PayPal approval",
+        "tags" : [ "Alternative proposals" ]
       }
     },
     "/api/v1/routes/{routeId}/alternative-proposals" : {
@@ -2222,7 +2355,7 @@
         "properties" : {
           "kind" : {
             "type" : "string",
-            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY" ]
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY", "PLAN" ]
           },
           "plannedRouteIds" : {
             "type" : "array",
@@ -3317,6 +3450,212 @@
         },
         "required" : [ "currency" ]
       },
+      "PlanCheckoutRequestDto" : {
+        "type" : "object",
+        "description" : "The person the hotels of the plan are booked for",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "firstName" : {
+            "type" : "string"
+          },
+          "lastName" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : "string"
+          }
+        }
+      },
+      "PlanExecutionDto" : {
+        "type" : "object",
+        "description" : "Taking a plan with hotels: approve orderId with the PayPal button (or open approveUrl), then POST /plan-executions/{executionId}/completion. AWAITING_PAYMENT → APPLIED (trip changed, hotels paid), FAILED (nothing paid, trip unchanged) or APPLIED_PARTLY (hotels paid, trip not changed, see failure).",
+        "properties" : {
+          "approveUrl" : {
+            "type" : [ "string", "null" ],
+            "description" : "Only right after the checkout, for the redirect fallback"
+          },
+          "currency" : {
+            "type" : [ "string", "null" ]
+          },
+          "executionId" : {
+            "type" : "integer",
+            "format" : "int64"
+          },
+          "failure" : {
+            "type" : [ "string", "null" ]
+          },
+          "hotels" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/PlanHotel"
+            }
+          },
+          "orderId" : {
+            "type" : [ "string", "null" ],
+            "description" : "PayPal order for the button"
+          },
+          "paymentStatus" : {
+            "type" : [ "string", "null" ],
+            "enum" : [ "PREBOOKED", "PAYMENT_PENDING", "SECURED", "SETTLED", "FAILED" ]
+          },
+          "plannedRouteIds" : {
+            "type" : "array",
+            "items" : {
+              "type" : "integer",
+              "format" : "int64"
+            }
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "AWAITING_PAYMENT", "APPLYING", "APPLIED", "FAILED", "APPLIED_PARTLY" ]
+          },
+          "todosAdded" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "total" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "example" : "128.00"
+          },
+          "tripId" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        }
+      },
+      "PlanHotel" : {
+        "type" : "object",
+        "properties" : {
+          "bookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "currency" : {
+            "type" : "string"
+          },
+          "hotelName" : {
+            "type" : "string"
+          },
+          "price" : {
+            "type" : "string",
+            "format" : "decimal",
+            "example" : "128.00"
+          },
+          "status" : {
+            "type" : "string",
+            "enum" : [ "PREBOOKED", "PAYMENT_PENDING", "AUTHORIZED", "PROVIDER_BOOKED", "BOOKED", "FAILED", "NEEDS_ATTENTION", "CANCELLED" ]
+          }
+        }
+      },
+      "PlanResultDto" : {
+        "type" : "object",
+        "description" : "What a PLAN leads to, as the backend computed it",
+        "properties" : {
+          "affectsFollowing" : {
+            "type" : "boolean",
+            "description" : "The arrival is after the planned departure at the target, later stops move"
+          },
+          "costCurrency" : {
+            "type" : [ "string", "null" ]
+          },
+          "deadline" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "Latest check-in of the booked accommodation, else the arrival time of the stop"
+          },
+          "extraCost" : {
+            "type" : "string",
+            "format" : "decimal",
+            "description" : "Total of the hotels to pay",
+            "example" : "128.00"
+          },
+          "extraNights" : {
+            "type" : "integer",
+            "format" : "int32"
+          },
+          "newTargetName" : {
+            "type" : [ "string", "null" ]
+          },
+          "reachesTarget" : {
+            "type" : "boolean",
+            "description" : "False: the plan moves the target to newTargetName"
+          }
+        }
+      },
+      "PlanStepDto" : {
+        "type" : "object",
+        "description" : "A step of a PLAN in order. DRIVE: the way (to the night, to the target or to another target). OVERNIGHT: a night at the hotel in stay, a stop there before the target. CONTINUE: the way on the next morning, checked. KEEP_BOOKING: the booked accommodation stays, it is told about the arrival. REPLACE_STAY: another accommodation at the target. NEW_TARGET: the target stop moves to the hotel in stay.",
+        "properties" : {
+          "arrivalAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "arrivalOn" : {
+            "type" : [ "string", "null" ],
+            "format" : "date",
+            "description" : "KEEP_BOOKING: tell the accommodation the guests arrive on this day, null if only late"
+          },
+          "bookingId" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64",
+            "description" : "KEEP_BOOKING: the booking that stays"
+          },
+          "departureAt" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time"
+          },
+          "distanceMeters" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "durationSeconds" : {
+            "type" : [ "integer", "null" ],
+            "format" : "int64"
+          },
+          "kind" : {
+            "type" : "string",
+            "enum" : [ "DRIVE", "OVERNIGHT", "CONTINUE", "KEEP_BOOKING", "REPLACE_STAY", "NEW_TARGET" ]
+          },
+          "latitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "longitude" : {
+            "type" : [ "number", "null" ],
+            "format" : "double"
+          },
+          "placeName" : {
+            "type" : [ "string", "null" ],
+            "description" : "Area or other target of the step"
+          },
+          "routeKind" : {
+            "type" : [ "string", "null" ],
+            "description" : "DRIVE and CONTINUE: REROUTE, SHIFT_DEPARTURE or KEEP_ROUTE",
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY", "PLAN" ]
+          },
+          "stay" : {
+            "$ref" : "#/components/schemas/ProposalStayDto",
+            "description" : "OVERNIGHT, REPLACE_STAY and NEW_TARGET only, absent otherwise"
+          },
+          "via" : {
+            "type" : [ "string", "null" ]
+          },
+          "waitedFor" : {
+            "type" : [ "string", "null" ],
+            "format" : "date-time",
+            "description" : "CONTINUE: leaves when a closure ends, later than usual"
+          },
+          "waypoints" : {
+            "type" : "array",
+            "items" : {
+              "$ref" : "#/components/schemas/ChoicePointDto"
+            }
+          }
+        }
+      },
       "PreferredCurrencyDto" : {
         "type" : "object",
         "properties" : {
@@ -3328,7 +3667,7 @@
       },
       "ProposalDto" : {
         "type" : "object",
-        "description" : "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose. STOPOVER: a night at the hotel in stay, on the way given by waypoints (empty: the planned route), arrivalAt is approximate at the place. TARGET_STAY: another accommodation at the target stop, the route stays.",
+        "description" : "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose. STOPOVER: a night at the hotel in stay, on the way given by waypoints (empty: the planned route), arrivalAt is approximate at the place. TARGET_STAY: another accommodation at the target stop, the route stays. PLAN: several steps, see steps and plan; without hotels take it with acceptance, with hotels with plan-checkout.",
         "properties" : {
           "arrivalAt" : {
             "type" : [ "string", "null" ],
@@ -3360,11 +3699,15 @@
           },
           "kind" : {
             "type" : "string",
-            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY" ]
+            "enum" : [ "REROUTE", "SHIFT_DEPARTURE", "KEEP_ROUTE", "STOPOVER", "TARGET_STAY", "PLAN" ]
           },
           "meetsDeadline" : {
             "type" : [ "boolean", "null" ],
             "description" : "Reaches the arrival time of the target stop, null if it has none"
+          },
+          "plan" : {
+            "$ref" : "#/components/schemas/PlanResultDto",
+            "description" : "PLAN only, absent otherwise"
           },
           "rank" : {
             "type" : "integer",
@@ -3383,6 +3726,13 @@
           "stay" : {
             "$ref" : "#/components/schemas/ProposalStayDto",
             "description" : "STOPOVER and TARGET_STAY only, absent otherwise"
+          },
+          "steps" : {
+            "type" : "array",
+            "description" : "PLAN: its steps in order, empty otherwise",
+            "items" : {
+              "$ref" : "#/components/schemas/PlanStepDto"
+            }
           },
           "via" : {
             "type" : [ "string", "null" ],

@@ -58,4 +58,30 @@ public class Places {
         }, (rs, row) -> new PlaceNearRoute(rs.getString(1), PlaceKind.valueOf(rs.getString(2)),
                 new GeoPoint(rs.getDouble(3), rs.getDouble(4)), rs.getInt(5), rs.getDouble(6), rs.getDouble(7)));
     }
+
+    /**
+     * A place around a point.
+     *
+     * @param distanceMeters straight line from the point
+     */
+    public record PlaceAround(String name, PlaceKind kind, GeoPoint point, double distanceMeters) {
+    }
+
+    /** Places within {@code maxDistanceMeters} of a point, closest first, at most {@code limit}. */
+    @Transactional(readOnly = true)
+    public List<PlaceAround> around(GeoPoint center, int maxDistanceMeters, int limit) {
+        double cos = Math.max(Math.cos(Math.toRadians(center.lat())), 0.1);
+        return jdbc.query("""
+                        SELECT p.name, p.kind, ST_Y(p.geometry), ST_X(p.geometry),
+                               ST_Distance(p.geometry::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography) AS d
+                        FROM place p
+                        WHERE ST_DWithin(p.geometry, ST_SetSRID(ST_MakePoint(?, ?), 4326), ?)
+                          AND ST_DWithin(p.geometry::geography, ST_SetSRID(ST_MakePoint(?, ?), 4326)::geography, ?)
+                        ORDER BY d
+                        LIMIT ?""",
+                (rs, row) -> new PlaceAround(rs.getString(1), PlaceKind.valueOf(rs.getString(2)),
+                        new GeoPoint(rs.getDouble(3), rs.getDouble(4)), rs.getDouble(5)),
+                center.lon(), center.lat(), center.lon(), center.lat(), maxDistanceMeters / METERS_PER_DEGREE / cos,
+                center.lon(), center.lat(), (double) maxDistanceMeters, limit);
+    }
 }

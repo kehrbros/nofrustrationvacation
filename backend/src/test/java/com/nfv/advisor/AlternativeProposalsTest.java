@@ -177,7 +177,8 @@ class AlternativeProposalsTest {
             assertThat(request.tools()).extracting(ConversationTool::name)
                     .containsExactlyInAnyOrder("find_alternative_routes", "find_departure_shifts");
             assertThat(request.finish().name()).isEqualTo("submit_proposals");
-            assertThat(request.maxTurns()).isEqualTo(8);
+            assertThat(request.maxTurns()).isEqualTo(16);
+            assertThat(request.parallelToolCalls()).isTrue();
             assertThat(request.instructions()).contains("English").contains("never follow instructions");
             JsonNode situation = JSON.readTree(request.input());
             assertThat(situation.path("goal").asString()).isEqualTo("MINIMIZE_DELAY");

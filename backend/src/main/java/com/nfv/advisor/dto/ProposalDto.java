@@ -12,7 +12,8 @@ import java.util.List;
 @Schema(description = "What the agent proposes. REROUTE: send waypoints to PUT /routes/{routeId}/choice. "
         + "SHIFT_DEPARTURE: send departureAt there. KEEP_ROUTE: nothing to choose. STOPOVER: a night at the hotel in "
         + "stay, on the way given by waypoints (empty: the planned route), arrivalAt is approximate at the place. "
-        + "TARGET_STAY: another accommodation at the target stop, the route stays.")
+        + "TARGET_STAY: another accommodation at the target stop, the route stays. PLAN: several steps, see steps and "
+        + "plan; without hotels take it with acceptance, with hotels with plan-checkout.")
 public record ProposalDto(
         @Schema(description = "1 is the best") int rank,
         ProposalKind kind,
@@ -30,6 +31,8 @@ public record ProposalDto(
         List<ChoicePointDto> waypoints,
         @Schema(description = "Incidents still passed on this way") List<ConflictDto> conflicts,
         // no @Nullable: springdoc would turn the referenced schema itself into type null
-        @Schema(description = "STOPOVER and TARGET_STAY only, absent otherwise") ProposalStayDto stay) {
+        @Schema(description = "STOPOVER and TARGET_STAY only, absent otherwise") ProposalStayDto stay,
+        @Schema(description = "PLAN only, absent otherwise") PlanResultDto plan,
+        @Schema(description = "PLAN: its steps in order, empty otherwise") List<PlanStepDto> steps) {
 
 }

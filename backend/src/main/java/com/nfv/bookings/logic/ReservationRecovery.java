@@ -21,6 +21,7 @@ import java.time.OffsetDateTime;
 public class ReservationRecovery {
     private final ReservationSteps steps;
     private final AlternativeReservations reservations;
+    private final PlanPayments planPayments;
     private final AlternativesProperties properties;
     private final Clock clock;
 
@@ -40,6 +41,12 @@ public class ReservationRecovery {
                     : reservation.getCreatedAt();
             if (last.isBefore(limit)) {
                 reservations.recover(reservation.getId());
+            }
+        }
+        for (com.nfv.bookings.entities.PlanPayment payment : planPayments.unfinished()) {
+            OffsetDateTime last = payment.getAttemptedAt() != null ? payment.getAttemptedAt() : payment.getCreatedAt();
+            if (last.isBefore(limit)) {
+                planPayments.recover(payment.getId());
             }
         }
     }
