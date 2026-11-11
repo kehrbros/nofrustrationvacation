@@ -153,6 +153,11 @@ flowchart LR
 - Links neben dem Plus-Button zwei kleine Kartenbuttons (ohne Schatten): „Ganze Reiseroute zeigen“ (alle Stops über dem Sheet) und „Zu meiner Position“ (Zoom 14, etwa 2 km Breite auf dem Handy: Straße, nächste Kreuzungen und Orte bleiben erkennbar; wartet bei Bedarf auf die erste Position).
 - Ortssuche für Stops: Photon (OpenStreetMap, `VITE_GEOCODING_URL`), direkt aus dem Browser. Nur Orte in Neuseeland (`bbox` und `countrycode`, auch für die Unterkunftssuche), ein Stop braucht einen gewählten Vorschlag, siehe [domain.md](domain.md#trips).
 - **Sprachen:** Deutsch und Englisch per i18next (`src/i18n/`), alle UI-Texte als Schlüssel in `de.ts` und `en.ts`, Umschalter im Profilmenü, siehe [i18n.md](i18n.md).
+- **Ladeanzeige:** Dauert etwas länger, zeigt die App das Kiwi-Logo aus der README klein und pulsierend (`src/components/KiwiLoader.tsx`, Bild `src/assets/kiwi.svg`, ohne Schatten, ohne Animation bei `prefers-reduced-motion`).
+  - Ist über `ConfigProvider` (`main.tsx`) Indikator jedes antd-`Spin`, also auch ganzseitig (`Spin fullscreen`).
+  - Sonst direkt einsetzen: Größe `small` neben einem Text (z. B. in Buttons während „Wird gespeichert …“, dann `decorative`), `medium` in Boxen, `large` für leere Flächen (Reiseliste, Karte beim Laden).
+  - Keine eigenen Spinner (`LoadingOutlined`, Skeletons) mehr für Wartezeiten.
+- **Optimistisch:** Was fast immer klappt und sich leicht zurücknehmen lässt, zeigt das Frontend sofort und nimmt es bei einem Fehler zurück, z. B. „Hinweis von der Karte entfernen“ (siehe [domain.md](domain.md)).
 - Zeitpunkte gehen mit dem Offset der Zeitzone des Systems ans Backend und werden in dieser Zeitzone angezeigt (`src/trips/time.ts`).
 - **Installierbar (PWA):** `vite-plugin-pwa` erzeugt Manifest (`start_url` `/reisen`, `display` `standalone`, Icons in `public/`) und Service Worker (Workbox).
   - Der Service Worker cached die App-Hülle, Kartenkacheln (OpenFreeMap) und Schriften. API-Antworten werden nicht gecached. Pfade von Backend und IdP (`/api`, `/oauth2`, `/login`, …) bekommen nie die gecachte `index.html`.

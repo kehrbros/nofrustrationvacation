@@ -1,7 +1,8 @@
-import { LoadingOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { SafetyCertificateOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import type { Booking } from './model';
 import { fetchUnfinishedReservations, type Reservation } from './alternativesApi';
@@ -56,7 +57,7 @@ export default function OpenReservations({ tripId, bookings, onFinished }: {
       : t('reservation.running', { hotel: reservation.hotelName });
   const content = (
     <>
-      {attention ? <SafetyCertificateOutlined aria-hidden="true" /> : pending ? <SafetyCertificateOutlined aria-hidden="true" /> : <LoadingOutlined aria-hidden="true" />}
+      {attention ? <SafetyCertificateOutlined aria-hidden="true" /> : pending ? <SafetyCertificateOutlined aria-hidden="true" /> : <KiwiLoader size="small" decorative />}
       <span className="va-column">
         <span className="va-strong">{text}</span>
         <span className="va-small">

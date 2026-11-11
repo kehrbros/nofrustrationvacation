@@ -1,8 +1,9 @@
-import { CheckCircleOutlined, CheckOutlined, HomeOutlined, LoadingOutlined, NodeIndexOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CheckOutlined, HomeOutlined, NodeIndexOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import type { StayBookingState } from '../bookings/StayBookingSheet';
 import { TripsApiError } from '../trips/tripsApi';
@@ -124,7 +125,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
   };
 
   if (run === undefined) {
-    return <div className="va-empty"><LoadingOutlined aria-hidden="true" /> {t('proposals.loading')}</div>;
+    return <div className="va-empty"><KiwiLoader size="small" decorative /> {t('proposals.loading')}</div>;
   }
 
   const result = run && (run.status === 'COMPLETED' || run.status === 'COMPLETED_WITHOUT_MODEL') ? run : null;
@@ -138,7 +139,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       )}
       {isRunning(run) && (
         <div className="va-note va-row va-gap" role="status" aria-live="polite">
-          <LoadingOutlined aria-hidden="true" />
+          <KiwiLoader size="small" decorative />
           <span className="va-column">
             <span className="va-strong">{t('proposals.searching')}</span>
             <span className="va-small">{t('proposals.searchingHint')}</span>
@@ -214,7 +215,7 @@ function ProposalCard({ proposal, setting, chosen, open, busy, onOpen, onTake }:
         <div className="va-proposal-confirm">
           <p>{texts.effect}</p>
           <button type="button" className="va-button va-block" disabled={busy} onClick={onTake}>
-            {busy ? t('proposals.taking') : takeLabel(proposal.kind)}
+            {busy && <><KiwiLoader size="small" decorative />{' '}</>}{busy ? t('proposals.taking') : takeLabel(proposal.kind)}
           </button>
         </div>
       )}

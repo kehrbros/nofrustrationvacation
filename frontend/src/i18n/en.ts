@@ -12,6 +12,7 @@ export const en: Messages<typeof de> = {
     rooms_one: '1 room',
     rooms_other: '{{count}} rooms',
     saving: 'Saving …',
+    loading: 'Loading …',
     retry: 'Try again',
     cancel: 'Cancel',
     close: 'Close',

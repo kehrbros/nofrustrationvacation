@@ -11,6 +11,11 @@ export interface TripContext {
   incidentsByRoute: Map<number, TripIncident[]>;
   /** Incidents that have ended, shown on the map with a green check until removed. */
   resolvedIncidents: TripIncident[];
+  /**
+   * Removes a resolved incident from the map: it disappears at once, the request runs in the background; if it fails
+   * the incident comes back with a short note next to the map buttons.
+   */
+  removeResolvedIncident: (incident: TripIncident) => void;
   stopById: Map<number, Stop>;
   /** Bookings at the stops of the trip, ascending by check-in. */
   bookings: Booking[];

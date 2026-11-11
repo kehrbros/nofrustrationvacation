@@ -1,6 +1,7 @@
-import { EnvironmentOutlined, HomeOutlined, LoadingOutlined } from '@ant-design/icons';
+import { EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
 import { lookUpAccommodation, suggestAccommodations } from './bookingsApi';
@@ -259,7 +260,7 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
         {uncertain?.has('name') && <span className="va-small va-check-hint">{t('accommodation.check')}</span>}
         {(searching || !lookup) && (
           <span id="acc-name-hint" className="va-small va-muted">
-            {searching ? t('accommodation.searching') : t('accommodation.nameHint')}
+            {searching && <><KiwiLoader size="small" decorative />{' '}</>}{searching ? t('accommodation.searching') : t('accommodation.nameHint')}
           </span>
         )}
         {suggesting && suggestions.length > 0 && (
@@ -337,7 +338,7 @@ function LookupNote({ lookup, fromLiteApi, fromAssistant }: { lookup: Lookup; fr
   if (lookup.state === 'loading') {
     return (
       <span className="va-small va-muted" role="status">
-        <LoadingOutlined aria-hidden="true" /> {t('accommodation.lookingUp')}
+        <KiwiLoader size="small" decorative /> {t('accommodation.lookingUp')}
       </span>
     );
   }

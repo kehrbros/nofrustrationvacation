@@ -3,6 +3,7 @@ import { Alert, Spin } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import type { TripDetail, TripSummary } from '../trips/model';
 import { localDateTimeIso, toDayInput } from '../trips/time';
 import { addStop, fetchTrip, fetchTrips } from '../trips/tripsApi';
@@ -243,7 +244,7 @@ export default function ShareTargetPage() {
           />
           {error && <Alert type="error" showIcon message={error} />}
           <button type="button" className="va-button va-button-accent va-block" disabled={saving || tripId == null} onClick={() => void save()}>
-            {saving ? t('common.saving') : t('addBooking.save')}
+            {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('common.saving') : t('addBooking.save')}
           </button>
         </>
       )}

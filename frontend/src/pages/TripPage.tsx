@@ -3,6 +3,7 @@ import { Alert, Popconfirm, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
 import { hasRole } from '../auth/session';
@@ -23,7 +24,7 @@ import { formatDuration } from '../trips/routeOptionText';
 import { fetchRouteLines } from '../trips/routesApi';
 import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
 import { formatPeriod, stopDays } from '../trips/time';
-import { deleteTrip, fetchTrip, fetchTripIncidents, removeStop, TripsApiError } from '../trips/tripsApi';
+import { deleteTrip, dismissIncident, fetchTrip, fetchTripIncidents, removeStop, TripsApiError } from '../trips/tripsApi';
 
 // MapLibre needs the browser (WebGL), load it only there
 const TripMap = lazy(() => import('../map/TripMap'));
@@ -64,28 +65,33 @@ export default function TripPage() {
   }, []);
   const position = useCurrentPosition();
   const [focus, setFocus] = useState<MapFocus | null>(null);
-  // why the position button cannot help, shown for a moment next to the buttons
-  const [positionHint, setPositionHint] = useState<string | null>(null);
+  // short note next to the map buttons, e.g. why the position button cannot help or a removal that failed
+  const [dockHint, setDockHint] = useState<string | null>(null);
   useEffect(() => {
-    if (!positionHint) {
+    if (!dockHint) {
       return;
     }
-    const timer = setTimeout(() => setPositionHint(null), 4000);
+    const timer = setTimeout(() => setDockHint(null), 5000);
     return () => clearTimeout(timer);
-  }, [positionHint]);
+  }, [dockHint]);
   const focusOn = (target: MapFocus['target']) => setFocus((last) => ({ target, key: (last?.key ?? 0) + 1 }));
   const focusPosition = () => {
     if (position.coordinates || position.status === 'searching') {
-      setPositionHint(position.coordinates ? null : t('map.position.searching'));
+      setDockHint(position.coordinates ? null : t('map.position.searching'));
       focusOn('position');
     } else {
-      setPositionHint(t(`map.position.${position.status === 'denied' ? 'denied' : 'unavailable'}`));
+      setDockHint(t(`map.position.${position.status === 'denied' ? 'denied' : 'unavailable'}`));
     }
   };
   const [trip, allIncidents, bookings, lines] = data ?? [undefined, [] as TripIncident[], [] as Booking[], [] as RouteLine[]];
   // resolved ones (incident ended) only appear on the map with a green check, everything else uses the current ones
   const incidents = useMemo(() => allIncidents.filter((incident) => !incident.resolved), [allIncidents]);
-  const resolvedIncidents = useMemo(() => allIncidents.filter((incident) => incident.resolved), [allIncidents]);
+  // removed by the user: gone from the map at once, back if the server refuses (Docs/domain.md, erledigte Hinweise)
+  const [removedResolved, setRemovedResolved] = useState<ReadonlySet<string>>(() => new Set());
+  const resolvedIncidents = useMemo(
+    () => allIncidents.filter((incident) => incident.resolved && !removedResolved.has(incidentKey(incident))),
+    [allIncidents, removedResolved],
+  );
   const routeLines = useMemo(() => new Map(lines.map((line) => [line.routeId, line])), [lines]);
 
   const stopById = useMemo(() => new Map((trip?.stops ?? []).map((stop) => [stop.id, stop])), [trip]);
@@ -111,6 +117,30 @@ export default function TripPage() {
   // a tap on the map above the expanded list folds it back in, like the toggle
   const collapse = useCallback(() => setExpanded(false), []);
   const openRoute = useCallback((routeId: number) => navigate(`/reisen/${id}/routen/${routeId}`), [navigate, id]);
+  const removeResolvedIncident = useCallback(
+    (incident: TripIncident) => {
+      const key = incidentKey(incident);
+      const setRemoved = (removed: boolean) =>
+        setRemovedResolved((last) => {
+          const next = new Set(last);
+          if (removed) {
+            next.add(key);
+          } else {
+            next.delete(key);
+          }
+          return next;
+        });
+      setRemoved(true);
+      dismissIncident(id, incident.routeId, incident.incidentId).then(
+        () => reload(),
+        () => {
+          setRemoved(false);
+          setDockHint(t('incidentSheet.removeFailed'));
+        },
+      );
+    },
+    [id, reload],
+  );
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const deleteStop = async (stopId: number) => {
     setDeleteError(null);
@@ -157,6 +187,7 @@ export default function TripPage() {
     incidents,
     incidentsByRoute,
     resolvedIncidents,
+    removeResolvedIncident,
     stopById,
     bookings,
     bookingsByStop,
@@ -205,7 +236,7 @@ export default function TripPage() {
           <OpenReservations tripId={trip.id} bookings={bookings} onFinished={reload} />
           <ProposalsBanner trip={trip} incidentsByRoute={incidentsByRoute} stopById={stopById} />
         </div>
-        <Suspense fallback={<div className="va-map va-map-loading" />}>
+        <Suspense fallback={<div className="va-map va-map-loading"><KiwiLoader size="large" /></div>}>
           <TripMap
             stops={trip.stops}
             routes={trip.routes}
@@ -235,9 +266,9 @@ export default function TripPage() {
               <span className="va-fab-label" aria-hidden="true">{t('testIncident.label')}</span>
             </Link>
           )}
-          {positionHint && (
+          {dockHint && (
             <span className="va-dock-hint" role="status">
-              {positionHint}
+              {dockHint}
             </span>
           )}
           <button type="button" className="va-map-button" aria-label={t('map.showTrip')} title={t('map.showTrip')} onClick={() => focusOn('trip')}>
@@ -377,4 +408,8 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
       )}
     </Link>
   );
+}
+
+function incidentKey(incident: { routeId: number; incidentId: number }): string {
+  return `${incident.routeId}/${incident.incidentId}`;
 }

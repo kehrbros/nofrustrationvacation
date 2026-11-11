@@ -10,6 +10,7 @@ export const de = {
     rooms_one: '1 Zimmer',
     rooms_other: '{{count}} Zimmer',
     saving: 'Wird gespeichert …',
+    loading: 'Wird geladen …',
     retry: 'Erneut versuchen',
     cancel: 'Abbrechen',
     close: 'Schließen',
