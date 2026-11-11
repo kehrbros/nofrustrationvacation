@@ -28,7 +28,7 @@ type Step = 'type' | 'place' | 'details' | 'result';
 /**
  * Test tool "Störung melden" (role tester): kind, a point tapped on the map (near a route of the trip: placed onto
  * that route by the backend, so the incident hits it), times, delay and text; posted to the manual test source, which runs it through the normal flow (match,
- * incident, assessment), see Docs/traffic-feed.md#testquelle-manual. Reports from this device are listed in the
+ * incident, assessment), see Docs/traffic-feed.md#test-source-manual. Reports from this device are listed in the
  * first step and can be changed (same id) or ended. Shows what became of it; the trip reloads when closing.
  */
 export default function TestIncidentSheet() {

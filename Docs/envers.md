@@ -1,22 +1,22 @@
-# Historisierung mit Hibernate Envers
+# History tracking with Hibernate Envers
 
-- **Aktivieren:** Entity mit `@org.hibernate.envers.Audited` annotieren. Jede Änderung (Insert, Update, Delete) wird dann in `<tabelle>_aud` mitgeschrieben.
-- **Einzelne Felder ausnehmen:** `@NotAudited` am Feld. Beziehungen auf nicht auditierte Entities: `@Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)`.
-- **Revisionen:** Pro Transaktion entsteht eine Zeile in `revinfo` (`rev`, `revtstmp` in Epoch-Millis, `username` des authentifizierten Nutzers oder `NULL`), gemappt durch `com.nfv.common.data.Revision`. Den Username setzt `UsernameRevisionListener`, siehe [authentication.md](authentication.md).
-- **Konfiguration:** `backend/src/main/resources/application.properties` (`hibernate.envers.audit_table_suffix=_aud`, Spaltennamen `rev` und `revtype`).
-- **Schema:** Hibernate erzeugt keine Tabellen (`ddl-auto=validate`). Für jede neue `@Audited`-Entity eine Flyway-Migration mit der `_aud`-Tabelle anlegen, sonst startet die App nicht. `revinfo` legt `V1__initial_schema.sql` an.
-- **Aufbau einer `_aud`-Tabelle:** alle auditierten Spalten der Basistabelle (nullable, ohne Unique/FK), dazu `rev` und `revtype` (`0` = Insert, `1` = Update, `2` = Delete); Primärschlüssel `(id, rev)`:
+- **Enable:** annotate the entity with `@org.hibernate.envers.Audited`. Every change (insert, update, delete) is then recorded in `<table>_aud`.
+- **Exclude individual fields:** `@NotAudited` on the field. Relationships to non-audited entities: `@Audited(targetAuditMode = RelationTargetAuditMode.NOT_AUDITED)`.
+- **Revisions:** each transaction creates one row in `revinfo` (`rev`, `revtstmp` in epoch millis, `username` of the authenticated user or `NULL`), mapped by `com.nfv.common.data.Revision`. The username is set by `UsernameRevisionListener`, see [authentication.md](authentication.md).
+- **Configuration:** `backend/src/main/resources/application.properties` (`hibernate.envers.audit_table_suffix=_aud`, column names `rev` and `revtype`).
+- **Schema:** Hibernate does not create tables (`ddl-auto=validate`). For every new `@Audited` entity create a Flyway migration with the `_aud` table, otherwise the app does not start. `revinfo` is created by `V1__initial_schema.sql`.
+- **Structure of an `_aud` table:** all audited columns of the base table (nullable, without unique/FK), plus `rev` and `revtype` (`0` = insert, `1` = update, `2` = delete); primary key `(id, rev)`:
 
   ```sql
   CREATE TABLE payout_account_aud (
       id       BIGINT   NOT NULL,
       rev      BIGINT   NOT NULL REFERENCES revinfo (rev),
       revtype  TINYINT,
-      -- auditierte Spalten der Basistabelle, z. B.:
+      -- audited columns of the base table, e.g.:
       email    VARCHAR(255),
       PRIMARY KEY (id, rev)
   );
   ```
 
-- **Historie lesen:** `AuditReaderFactory.get(entityManager)`, z. B. `getRevisions(PayoutAccount.class, id)`, `find(PayoutAccount.class, id, rev)` oder `createQuery().forRevisionsOfEntity(...)`. Innerhalb einer Transaktion aufrufen.
-- **Beispiel/Test:** `backend/src/test/java/com/nfv/common/EnversAuditTest.java`.
+- **Reading history:** `AuditReaderFactory.get(entityManager)`, e.g. `getRevisions(PayoutAccount.class, id)`, `find(PayoutAccount.class, id, rev)` or `createQuery().forRevisionsOfEntity(...)`. Call within a transaction.
+- **Example/test:** `backend/src/test/java/com/nfv/common/EnversAuditTest.java`.

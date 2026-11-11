@@ -234,7 +234,7 @@ export default function RouteSheet() {
   );
 }
 
-/** Why a chosen route is stored but not planned (no line on the map yet), see Docs/recommendations.md#auswahl-speichern. */
+/** Why a chosen route is stored but not planned (no line on the map yet), see Docs/recommendations.md#saving-the-choice. */
 function notPlannedText(outcome: PlanOutcome, fromName: string | undefined): string {
   switch (outcome) {
     case 'MISSING_DEPARTURE':

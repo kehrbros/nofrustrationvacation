@@ -9,7 +9,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 /**
- * Starts a run for a route that is too late, see Docs/advisor.md#automatisch-nur-too_late. After the commit and on a
+ * Starts a run for a route that is too late, see Docs/advisor.md#automatic-only-too_late. After the commit and on a
  * thread of its own: routing and the model must not run inside the transaction of the assessment, and on a rollback
  * no run starts.
  */

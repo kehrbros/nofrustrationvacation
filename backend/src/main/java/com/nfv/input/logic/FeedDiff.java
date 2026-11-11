@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 
 /**
  * Compares a fetched {@link SourceSnapshot} with the last known version of each event of the source and stores new
- * versions as {@link TrafficEvent}s, see Docs/traffic-feed.md#abgleich-feeddiff.
+ * versions as {@link TrafficEvent}s, see Docs/traffic-feed.md#diffing-feeddiff.
  * <ul>
  *     <li>new or changed (other version): one event {@code <subjectId>@<version>}</li>
  *     <li>unchanged: nothing stored</li>

@@ -16,7 +16,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** Checks of the time windows from the model: zone, length, count, validity, see Docs/traffic-feed.md#anreicherung-messageenrichment. */
+/** Checks of the time windows from the model: zone, length, count, validity, see Docs/traffic-feed.md#enrichment-messageenrichment. */
 class MessageEnrichmentTest {
     private static final ZoneId AUCKLAND = ZoneId.of("Pacific/Auckland");
     private static final OffsetDateTime FROM = OffsetDateTime.parse("2026-11-01T21:00:26+13:00");

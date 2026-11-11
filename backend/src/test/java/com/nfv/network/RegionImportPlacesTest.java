@@ -26,7 +26,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 
 /**
- * Places during the import, see Docs/network.md#orte. The Wellington extract has no place nodes (filtered to roads when
+ * Places during the import, see Docs/network.md#places. The Wellington extract has no place nodes (filtered to roads when
  * it was cut), so the tests add some to a copy of it.
  */
 @SpringBootTest

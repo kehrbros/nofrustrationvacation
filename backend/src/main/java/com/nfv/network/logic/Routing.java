@@ -49,7 +49,7 @@ public class Routing {
 
     /**
      * Fastest route and alternatives between two stops with GraphHopper {@code alternative_route}. GraphHopper 11.1
-     * does not support pass_through there, see Docs/recommendations.md#generatoren. Between two stops the request is
+     * does not support pass_through there, see Docs/recommendations.md#generators. Between two stops the request is
      * the same as for {@link #route}, so the fastest alternative can be planned again.
      *
      * @return at least one route, the first is the fastest

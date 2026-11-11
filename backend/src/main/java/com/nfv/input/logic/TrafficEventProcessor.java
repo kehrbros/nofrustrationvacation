@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Turns stored traffic events into incidents, see Docs/traffic-feed.md#verarbeitung-trafficeventprocessor. Runs after
+ * Turns stored traffic events into incidents, see Docs/traffic-feed.md#processing-trafficeventprocessor. Runs after
  * the commit of a poll on a virtual thread, one transaction per event, oldest first:
  * <ol>
  *     <li>the model reads the text if it has not read this text yet, before the transaction: the call can take long</li>

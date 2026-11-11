@@ -28,7 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Test tool: enter traffic events by hand and see what became of them, see Docs/traffic-feed.md#testquelle-manual.
+ * Test tool: enter traffic events by hand and see what became of them, see Docs/traffic-feed.md#test-source-manual.
  * Only exists with {@code nfv.input.sources.manual.enabled=true} and needs the role {@code tester}
  * ({@code ApiSecurityConfig}), because an event affects the routes of every user.
  */

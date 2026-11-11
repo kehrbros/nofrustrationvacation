@@ -20,7 +20,7 @@ import java.util.Map;
 
 /**
  * Writes the segments of a graph into {@code road_segment} (upsert on the business key) and its {@code edge_mapping},
- * see Docs/network.md#import-und-aktualisierung.
+ * see Docs/network.md#import-and-update.
  */
 @Component
 @RequiredArgsConstructor

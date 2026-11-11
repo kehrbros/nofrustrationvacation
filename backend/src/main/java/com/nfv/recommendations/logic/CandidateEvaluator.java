@@ -18,7 +18,7 @@ import java.util.Set;
 
 /**
  * Passage times, incidents and delays along a way, for candidates and the planned route alike, see
- * Docs/recommendations.md#bewertung-aussortieren-ranking. Pure functions.
+ * Docs/recommendations.md#assessment-filtering-ranking. Pure functions.
  */
 final class CandidateEvaluator {
     private CandidateEvaluator() {

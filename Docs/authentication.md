@@ -1,176 +1,176 @@
-# Authentifizierung
+# Authentication
 
-## Konzept
+## Concept
 
-- **OAuth2/OIDC mit zwei getrennten Rollen** im selben Backend-Prozess:
-  - **Identity Provider (IdP):** Paket `com.nfv.auth`. Accounts, Login, Registrierung, Ausstellen signierter JWTs (Spring Authorization Server).
-  - **Resource Server:** alles unter `/api/**` und der MCP-Endpunkt `/mcp`. Validiert JWTs des konfigurierten Issuers und mappt sie auf den `AppUser`.
-- **Schnittstelle zwischen beiden sind nur Standards:** OIDC Discovery, JWKS, JWT-Claims. Keine Java-Aufrufe, keine gemeinsamen Entities oder Tabellen.
-- **`AppUser`** ist die Anwendungsseite des Accounts. Verbindendes Merkmal zum Token ist der **Username** (beim eigenen IdP im Claim `sub`).
+- **OAuth2/OIDC with two separate roles** in the same backend process:
+  - **Identity provider (IdP):** package `com.nfv.auth`. Accounts, login, registration, issuing signed JWTs (Spring Authorization Server).
+  - **Resource server:** everything under `/api/**` and the MCP endpoint `/mcp`. Validates JWTs of the configured issuer and maps them to the `AppUser`.
+- **The interface between the two is standards only:** OIDC discovery, JWKS, JWT claims. No Java calls, no shared entities or tables.
+- **`AppUser`** is the application side of the account. The link to the token is the **username** (with the own IdP in the claim `sub`).
 
-## Motivation der Modultrennung
+## Motivation for the module separation
 
-- Der eigene IdP ist eine Übergangslösung. Er soll später durch einen externen IdP (z. B. Keycloak) ersetzt werden, **ohne Änderungen an Fachmodulen**.
-- Das geht nur, wenn das Fachbackend nichts über den IdP weiß außer Issuer-URL und Claim-Namen – also genau das, was auch Keycloak liefert.
-- Der IdP kennt umgekehrt keine Fachdaten (`AppUser`, Guthaben, …). Was die Anwendung über einen Nutzer braucht, entsteht auf der Resource-Server-Seite.
-- Abgesichert durch `AuthModuleIsolationTest` (ArchUnit): `auth` importiert nichts aus anderen `com.nfv`-Paketen und wird von keinem importiert.
+- The own IdP is an interim solution. It is to be replaced later by an external IdP (e.g. Keycloak), **without changes to domain modules**.
+- That only works if the domain backend knows nothing about the IdP except issuer URL and claim names – i.e. exactly what Keycloak provides as well.
+- Conversely the IdP knows no domain data (`AppUser`, credit, …). What the application needs about a user is created on the resource server side.
+- Secured by `AuthModuleIsolationTest` (ArchUnit): `auth` imports nothing from other `com.nfv` packages and is imported by none.
 
-## Bausteine
+## Building blocks
 
-| Ort | Inhalt |
+| Location | Content |
 |---|---|
-| `auth/config/AuthSecurityConfig` | Filterketten für die Protokoll-Endpunkte des Authorization Servers (`getEndpointsMatcher()`: `/oauth2/**`, AS-Metadaten, OIDC-Discovery) und die Seiten (Login, Registrierung, Consent, Verbindungen); Token-Claims (`preferred_username`, `email`, `roles`, `aud`); Signaturschlüssel; Token-Generator mit Refresh Tokens für öffentliche Clients; `PasswordEncoder` |
-| `auth/config/CimdConfig`, `auth/cimd/*` | MCP-Clients per Client ID Metadata Document, Autorisierungen und Consents per JDBC, siehe [MCP-Clients (CIMD)](#mcp-clients-cimd) |
-| `auth/entities/AuthAccount` | Login-Account: `username` (unique), Passwort-Hash, `email`, Rollen (Default `user`; `tester` für `/api/v1/test/**`, siehe [traffic-feed.md](traffic-feed.md#testquelle-manual)) |
-| `auth/api`, `templates/auth` | `/login`, `/register`, `/oauth2/consent`, `/account/connections` (serverseitig gerendert, wie bei Keycloak; deutsch, im Noir-Look der App mit Wortmarke „NoFrustration.Vacation.“; gemeinsames Layout mit Inline-CSS in `templates/auth/layout.html`, daher keine statischen Ressourcen hinter der Security-Filterkette) |
-| `auth/config/StaleFormAccessDeniedHandler` | Login-/Registrierungsformular mit veraltetem CSRF-Token (siehe [Veraltete Formulare](#veraltete-formulare)) |
-| `templates/error.html`, `messages*.properties` | Fehlerseite für Browser statt Whitelabel-Seite, deutsch/englisch nach `Accept-Language` (sonst Englisch), Link „Zurück zur App“ auf `nfv.frontend-url`; JSON-Clients bekommen weiter den JSON-Fehler |
-| `db/migration/auth/V3__auth_account.sql` | `auth_account`, `auth_account_role` – ohne Fremdschlüssel zu Fachtabellen |
-| `db/migration/auth/V17__oauth2_authorization.sql` | `oauth2_authorization`, `oauth2_authorization_consent` (Schema von Spring Authorization Server, `VARCHAR` statt `BLOB`), `auth_cimd_client` (Cache der Metadata Documents) |
-| `user/security/ApiSecurityConfig` | Filterkette `/api/**`: stateless, JWT-Validierung über `issuer-uri`, Tokens für `/mcp` werden abgelehnt |
-| `user/security/McpSecurityConfig`, `McpScopeFilter`, `ProtectedResourceMetadataController` | Filterkette `/mcp`: Audience, Scopes pro Tool, `401`/`403` nach MCP-Spec, `/.well-known/oauth-protected-resource/mcp` |
-| `user/security/AppUserJwtAuthenticationConverter` | JWT → `AppUser` (anlegen falls nötig) → `AppUserAuthentication` mit Principal `CurrentUser(appUserId, username)` |
-| `user/logic/AppUserProvisioning` | race-sicheres Find-or-Create |
-| `common/data/UsernameRevisionListener` | schreibt den Username in `revinfo.username` (Envers) |
-| `auth/logic/TestAccountInitializer` | legt beim Start `test`/`test` mit Rolle `tester` an, wenn noch kein `AuthAccount` existiert (`nfv.auth.test-account.enabled`); ein bestehendes `test` bekommt `tester` beim Start nachträglich, aber nur wenn es das älteste Konto ist (also vom Initializer angelegt, nicht fremd registriert). Rolle wirkt im Frontend erst nach neuem Login (Token) |
+| `auth/config/AuthSecurityConfig` | Filter chains for the protocol endpoints of the authorization server (`getEndpointsMatcher()`: `/oauth2/**`, AS metadata, OIDC discovery) and the pages (login, registration, consent, connections); token claims (`preferred_username`, `email`, `roles`, `aud`); signing key; token generator with refresh tokens for public clients; `PasswordEncoder` |
+| `auth/config/CimdConfig`, `auth/cimd/*` | MCP clients via client ID metadata document, authorisations and consents via JDBC, see [MCP clients (CIMD)](#mcp-clients-cimd) |
+| `auth/entities/AuthAccount` | Login account: `username` (unique), password hash, `email`, roles (default `user`; `tester` for `/api/v1/test/**`, see [traffic-feed.md](traffic-feed.md#test-source-manual)) |
+| `auth/api`, `templates/auth` | `/login`, `/register`, `/oauth2/consent`, `/account/connections` (rendered on the server, as with Keycloak; German, in the app's noir look with the word mark "NoFrustration.Vacation."; shared layout with inline CSS in `templates/auth/layout.html`, hence no static resources behind the security filter chain) |
+| `auth/config/StaleFormAccessDeniedHandler` | Login/registration form with outdated CSRF token (see [Outdated forms](#outdated-forms)) |
+| `templates/error.html`, `messages*.properties` | Error page for browsers instead of the whitelabel page, German/English according to `Accept-Language` (otherwise English), link "Back to the app" to `nfv.frontend-url`; JSON clients still get the JSON error |
+| `db/migration/auth/V3__auth_account.sql` | `auth_account`, `auth_account_role` – without foreign keys to domain tables |
+| `db/migration/auth/V17__oauth2_authorization.sql` | `oauth2_authorization`, `oauth2_authorization_consent` (schema of Spring Authorization Server, `VARCHAR` instead of `BLOB`), `auth_cimd_client` (cache of the metadata documents) |
+| `user/security/ApiSecurityConfig` | Filter chain `/api/**`: stateless, JWT validation via `issuer-uri`, tokens for `/mcp` are rejected |
+| `user/security/McpSecurityConfig`, `McpScopeFilter`, `ProtectedResourceMetadataController` | Filter chain `/mcp`: audience, scopes per tool, `401`/`403` according to the MCP spec, `/.well-known/oauth-protected-resource/mcp` |
+| `user/security/AppUserJwtAuthenticationConverter` | JWT → `AppUser` (create if necessary) → `AppUserAuthentication` with principal `CurrentUser(appUserId, username)` |
+| `user/logic/AppUserProvisioning` | race-safe find-or-create |
+| `common/data/UsernameRevisionListener` | writes the username to `revinfo.username` (Envers) |
+| `auth/logic/TestAccountInitializer` | creates `test`/`test` with role `tester` at startup if no `AuthAccount` exists yet (`nfv.auth.test-account.enabled`); an existing `test` gets `tester` added at startup, but only if it is the oldest account (i.e. created by the initializer, not registered by someone else). The role takes effect in the frontend only after a new login (token) |
 
-- Signaturschlüssel: `nfv.auth.signing-key` (PEM, PKCS#8 RSA, Secret `NFV_IDP_SIGNING_KEY`), `kid` ist der JWK-Thumbprint. Ohne Schlüssel wird beim Start ein temporärer erzeugt (Warnung im Log), Tokens werden dann durch einen Neustart ungültig.
-- Autorisierungen (Codes, Access und Refresh Tokens) und Consents liegen in der Datenbank (`JdbcOAuth2AuthorizationService`).
-- Client `nfv-frontend`: öffentlich, Authorization Code + PKCE + Refresh Token, Redirect `http://localhost:18173/auth/callback`, kein Consent-Screen. Access Token 15 min, Refresh Token 14 Tage, bei jeder Nutzung rotiert (`…client.nfv-frontend.token.*`). Refresh und Widerruf (`/oauth2/revoke`) nur mit `client_id`, wie bei den MCP-Clients.
-- MCP-Clients: nicht vorregistriert, sondern über ihre `client_id`-URL, siehe unten.
+- Signing key: `nfv.auth.signing-key` (PEM, PKCS#8 RSA, secret `NFV_IDP_SIGNING_KEY`), `kid` is the JWK thumbprint. Without a key a temporary one is generated at startup (warning in the log), tokens then become invalid after a restart.
+- Authorisations (codes, access and refresh tokens) and consents are stored in the database (`JdbcOAuth2AuthorizationService`).
+- Client `nfv-frontend`: public, authorization code + PKCE + refresh token, redirect `http://localhost:18173/auth/callback`, no consent screen. Access token 15 min, refresh token 14 days, rotated on every use (`…client.nfv-frontend.token.*`). Refresh and revocation (`/oauth2/revoke`) only with `client_id`, as with the MCP clients.
+- MCP clients: not pre-registered, but via their `client_id` URL, see below.
 
-## Konfiguration
+## Configuration
 
 ```properties
 spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:18180
 nfv.security.username-claim=sub      # Keycloak: preferred_username
 nfv.security.roles-claim=roles       # Keycloak: realm_access.roles
-spring.security.oauth2.authorizationserver.*  # nur eigener IdP
-nfv.auth.cors.allowed-origins=…       # nur eigener IdP
-nfv.auth.test-account.enabled=true    # nur eigener IdP, in Produktion false
-nfv.auth.signing-key=…                # nur eigener IdP, PEM
-nfv.auth.allowed-resources=…          # nur eigener IdP, Default ${nfv.mcp.resource-uri}
-nfv.auth.cimd.*                       # nur eigener IdP, MCP-Clients, siehe unten
+spring.security.oauth2.authorizationserver.*  # own IdP only
+nfv.auth.cors.allowed-origins=…       # own IdP only
+nfv.auth.test-account.enabled=true    # own IdP only, false in production
+nfv.auth.signing-key=…                # own IdP only, PEM
+nfv.auth.allowed-resources=…          # own IdP only, default ${nfv.mcp.resource-uri}
+nfv.auth.cimd.*                       # own IdP only, MCP clients, see below
 nfv.mcp.resource-uri=${nfv.backend-url}/mcp
-nfv.mcp.read-tools=…                  # noch keine Tools; alle anderen Tools brauchen mcp:write
+nfv.mcp.read-tools=…                  # no tools yet; all other tools need mcp:write
 ```
 
 ## Frontend
 
-- `oidc-client-ts` + `react-oidc-context`, Konfiguration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, Defaults: `http://localhost:18180`, `nfv-frontend`).
-- `RequireAuth` schützt das Dashboard: nicht angemeldet → `signinRedirect` → Login-Seite des IdP.
-- `/auth/callback` (`AuthCallback`): Code-Tausch durch den `AuthProvider`, danach zurück auf die Seite, auf der der Login begann (`state.returnTo`, nur eigene Pfade).
-- Tokens im `sessionStorage`. `frontend/src/auth/session.ts` hält die Anmeldung still am Leben: `automaticSilentRenew` erneuert das Access Token kurz vor Ablauf per Refresh Token, API-Requests erneuern vorher, wenn es weniger als 30 s gilt, eine 401 erneuert und wiederholt den Request einmal. Netzwerkfehler beenden die Sitzung nicht.
-- Ein abgelaufenes Access Token entfernt den Nutzer nicht mehr, die Seite bleibt gemountet. Erst wenn der IdP das Refresh Token ablehnt (abgelaufen, widerrufen), erscheint `SessionExpiredDialog` über der Seite: Login im Popup (Seite und Eingaben bleiben erhalten), falls das Popup nicht geht, Login im selben Fenster mit Rückkehr auf dieselbe Seite (nicht gespeicherte Eingaben gehen dabei verloren).
-- `frontend/src/api/apiClient.ts`: generierter API-Client mit `Authorization: Bearer …`, relative URLs (`/api` wird vom Vite-Dev-Server an das Backend weitergeleitet, `VITE_API_BASE_URL` überschreibt).
-- Abmelden: Refresh Token widerrufen, dann `signoutRedirect` (OIDC-Logout des IdP, zurück auf `/`, von dort wieder zum Login).
+- `oidc-client-ts` + `react-oidc-context`, configuration in `frontend/src/auth/oidcConfig.ts` (`VITE_OIDC_AUTHORITY`, `VITE_OIDC_CLIENT_ID`, defaults: `http://localhost:18180`, `nfv-frontend`).
+- `RequireAuth` protects the dashboard: not logged in → `signinRedirect` → login page of the IdP.
+- `/auth/callback` (`AuthCallback`): code exchange by the `AuthProvider`, then back to the page where the login started (`state.returnTo`, own paths only).
+- Tokens in `sessionStorage`. `frontend/src/auth/session.ts` keeps the login alive silently: `automaticSilentRenew` renews the access token shortly before expiry via refresh token, API requests renew beforehand if it is valid for less than 30 s, a 401 renews and repeats the request once. Network errors do not end the session.
+- An expired access token no longer removes the user, the page stays mounted. Only when the IdP rejects the refresh token (expired, revoked) does `SessionExpiredDialog` appear over the page: login in a popup (page and inputs are kept), if the popup does not work, login in the same window with return to the same page (unsaved inputs are lost).
+- `frontend/src/api/apiClient.ts`: generated API client with `Authorization: Bearer …`, relative URLs (`/api` is forwarded to the backend by the Vite dev server, `VITE_API_BASE_URL` overrides).
+- Logout: revoke the refresh token, then `signoutRedirect` (OIDC logout of the IdP, back to `/`, from there back to the login).
 
 ## Workflows
 
-### Registrierung
+### Registration
 
-1. Frontend startet den Login (`/oauth2/authorize`) → IdP leitet auf `/login` um.
-2. Nutzer folgt dem Link „Registrieren“ → `GET /register`.
-3. `POST /register` validiert die Eingaben und legt einen `AuthAccount` mit bcrypt-Hash an. Doppelter Username: Prüfung vorab, bei gleichzeitiger Registrierung der Unique-Constraint.
-4. Weiterleitung nach `/login?registered`. Es wird **kein `AppUser`** angelegt.
+1. The frontend starts the login (`/oauth2/authorize`) → the IdP redirects to `/login`.
+2. The user follows the link "Register" → `GET /register`.
+3. `POST /register` validates the inputs and creates an `AuthAccount` with a bcrypt hash. Duplicate username: check beforehand, for simultaneous registration the unique constraint.
+4. Redirect to `/login?registered`. **No `AppUser`** is created.
 
-### Login (Authorization Code + PKCE)
+### Login (authorization code + PKCE)
 
 1. Frontend → `GET /oauth2/authorize?response_type=code&client_id=nfv-frontend&code_challenge=…`.
-2. Login per Formular. Danach setzt der IdP die gespeicherte Anfrage fort und leitet mit `code` zurück zum Frontend.
-3. Frontend → `POST /oauth2/token` mit `code` + `code_verifier` → Access Token (JWT, `sub` = Username, `roles`, `email`) und ID Token.
-- Ohne gespeicherte Anfrage (Login-Seite direkt aufgerufen) geht es nach dem Login in die App (`nfv.frontend-url`), nicht auf `/` des Backends.
+2. Login via form. Then the IdP continues the saved request and redirects back to the frontend with `code`.
+3. Frontend → `POST /oauth2/token` with `code` + `code_verifier` → access token (JWT, `sub` = username, `roles`, `email`) and ID token.
+- Without a saved request (login page called directly), after login the user goes to the app (`nfv.frontend-url`), not to `/` of the backend.
 
-### Veraltete Formulare
+### Outdated forms
 
-- CSRF-Token des Login-Formulars liegt in der Session. Es ist veraltet, wenn
-  - das Formular doppelt abgeschickt wurde (Doppelklick, Enter + Klick): der erste Login ersetzt das Token, der Browser zeigt die Antwort des zweiten,
-  - die Seite nach dem Login per Zurück-Taste wiederhergestellt und erneut abgeschickt wurde,
-  - die Seite länger offen war als die Session lebt oder das Backend inzwischen neu gestartet wurde (Deploy).
-- Früher: 403 mit Whitelabel-Seite. Jetzt (`StaleFormAccessDeniedHandler`, nur `POST /login` und `POST /register`):
-  - schon angemeldet → Weiterleitung in die App, die holt sich ihre Tokens ohne neuen Login,
-  - nicht angemeldet → Formular erneut mit Hinweis (`/login?expired`, `/register?expired`).
-- Zusätzlich verhindert ein kleines Skript im Layout ein zweites Abschicken desselben Formulars (nach Wiederherstellen aus dem Back-Forward-Cache wieder frei).
-- Andere 403 der Seiten (z. B. Logout-Formular mit veraltetem Token) zeigen die Fehlerseite.
+- The CSRF token of the login form is stored in the session. It is outdated if
+  - the form was submitted twice (double click, Enter + click): the first login replaces the token, the browser shows the response of the second,
+  - the page was restored after login via the back button and submitted again,
+  - the page was open longer than the session lives or the backend has been restarted in the meantime (deploy).
+- Before: 403 with whitelabel page. Now (`StaleFormAccessDeniedHandler`, only `POST /login` and `POST /register`):
+  - already logged in → redirect to the app, which gets its tokens without a new login,
+  - not logged in → form again with a notice (`/login?expired`, `/register?expired`).
+- Additionally a small script in the layout prevents submitting the same form a second time (enabled again after restoring from the back-forward cache).
+- Other 403s of the pages (e.g. logout form with outdated token) show the error page.
 
-### Authentifizierter API-Request
+### Authenticated API request
 
-1. `Authorization: Bearer <jwt>` an `/api/**`.
-2. Signatur und Issuer werden geprüft. Die Schlüssel kommen per Discovery vom Issuer, also auch beim eigenen IdP über HTTP.
-3. Der Converter liest den Username aus dem konfigurierten Claim (fehlt er → 401) und holt bzw. erzeugt den `AppUser`.
-4. Im SecurityContext liegt `CurrentUser(appUserId, username)`, Rollen als `ROLE_<rolle>`. Zugriff über `@AuthenticationPrincipal CurrentUser user`.
-5. **Ein authentifizierter Request hat immer einen existierenden `AppUser`.**
+1. `Authorization: Bearer <jwt>` to `/api/**`.
+2. Signature and issuer are checked. The keys come via discovery from the issuer, so also via HTTP with the own IdP.
+3. The converter reads the username from the configured claim (missing → 401) and fetches or creates the `AppUser`.
+4. The SecurityContext contains `CurrentUser(appUserId, username)`, roles as `ROLE_<role>`. Access via `@AuthenticationPrincipal CurrentUser user`.
+5. **An authenticated request always has an existing `AppUser`.**
 
-### Erster Login: AppUser anlegen
+### First login: creating the AppUser
 
-- Parallele erste Requests desselben Nutzers sind der Normalfall (SPA lädt mehrere Ressourcen).
-- **Keine expliziten Locks:** `SELECT … FOR UPDATE` kann eine noch nicht existierende Zeile nicht sperren, JVM-Locks wirken nur in einer Instanz.
-- Stattdessen ist der **Unique-Constraint auf `app_user.username`** die einzige Wahrheit:
-  1. `findByUsername` → vorhanden, fertig.
-  2. Sonst Insert in eigener Transaktion (`REQUIRES_NEW`, `saveAndFlush`).
-  3. `DataIntegrityViolationException` → ein paralleler Request war schneller → erneut lesen.
-- Abgesichert durch `AppUserProvisioningTest` (16 parallele Threads → genau ein `AppUser`).
+- Parallel first requests of the same user are the normal case (the SPA loads several resources).
+- **No explicit locks:** `SELECT … FOR UPDATE` cannot lock a row that does not exist yet, JVM locks only work within one instance.
+- Instead the **unique constraint on `app_user.username`** is the single source of truth:
+  1. `findByUsername` → present, done.
+  2. Otherwise insert in its own transaction (`REQUIRES_NEW`, `saveAndFlush`).
+  3. `DataIntegrityViolationException` → a parallel request was faster → read again.
+- Secured by `AppUserProvisioningTest` (16 parallel threads → exactly one `AppUser`).
 
-### Historisierung (Envers)
+### History tracking (Envers)
 
-- `revinfo.username` enthält den Username des authentifizierten Nutzers einer Änderung, `NULL` bei Änderungen ohne Nutzerkontext.
+- `revinfo.username` contains the username of the authenticated user of a change, `NULL` for changes without user context.
 
-## MCP-Clients (CIMD)
+## MCP clients (CIMD)
 
-MCP-Clients wie Claude oder ChatGPT verbinden sich nach der [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). Sie werden nicht vorab registriert: Die `client_id` ist die HTTPS-URL eines **Client ID Metadata Documents** (CIMD), das der IdP abruft und prüft. Konzept und Entscheidungen: [CIMD-Konzept: MCP-Authentifizierung für Nfv](https://claude.ai/artifact/Nhx7NcpAaE12WVo4KcW9TG).
+MCP clients such as Claude or ChatGPT connect according to the [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization). They are not registered in advance: the `client_id` is the HTTPS URL of a **client ID metadata document** (CIMD), which the IdP fetches and checks. Concept and decisions: [CIMD concept: MCP authentication for Nfv](https://claude.ai/artifact/Nhx7NcpAaE12WVo4KcW9TG).
 
-### Ablauf
+### Flow
 
-1. Client → `POST /mcp` ohne Token → `401` mit `WWW-Authenticate: Bearer resource_metadata="<backend>/.well-known/oauth-protected-resource/mcp", scope="mcp:read"`.
-2. Client liest die Protected Resource Metadata (RFC 9728: `resource`, `authorization_servers`, `scopes_supported`) und die AS-Metadaten `/.well-known/oauth-authorization-server` (`client_id_metadata_document_supported: true`, `token_endpoint_auth_methods_supported` enthält `none`).
+1. Client → `POST /mcp` without token → `401` with `WWW-Authenticate: Bearer resource_metadata="<backend>/.well-known/oauth-protected-resource/mcp", scope="mcp:read"`.
+2. The client reads the protected resource metadata (RFC 9728: `resource`, `authorization_servers`, `scopes_supported`) and the AS metadata `/.well-known/oauth-authorization-server` (`client_id_metadata_document_supported: true`, `token_endpoint_auth_methods_supported` contains `none`).
 3. Client → `/oauth2/authorize?client_id=https://…&redirect_uri=…&code_challenge=…&resource=<backend>/mcp&scope=mcp:read mcp:write`.
-4. IdP löst die `client_id` auf (`CimdClientResolver`): Allowlist → Cache → Abruf → Validierung → `RegisteredClient` (öffentlich, PKCE Pflicht, Consent Pflicht, `authorization_code` + `refresh_token`). Unbekannte oder ungültige Clients: Fehlerseite, **keine** Weiterleitung.
-5. `AuthorizationRequestValidator`: Redirect-URI aus dem Dokument (Loopback mit beliebigem Port), Scopes, `resource` Pflicht und erlaubt (RFC 8707).
-6. Login, dann Consent-Seite `/oauth2/consent` (Name und Host des Clients, Ziel der Weiterleitung, Warnhinweis bei lokalen Apps). Der Nutzer kann `mcp:write` abwählen.
-7. Token-Request mit `code_verifier` → Access Token (15 min, `aud` = `<backend>/mcp`, `scope`, `client_id`) und Refresh Token (30 Tage, bei jeder Nutzung rotiert).
-8. `/mcp` prüft Signatur, Issuer und `aud`; `McpScopeFilter` prüft `mcp:read` für jeden Request und `mcp:write` für `tools/call` außer den `read-tools`. Fehlt ein Scope: `403` mit `error="insufficient_scope", scope="mcp:read mcp:write"`, der Client fragt den Nutzer erneut (Step-up).
-9. Tools sehen nur Daten des `AppUser` aus dem Token (`CurrentUser`), wie bei der API.
+4. The IdP resolves the `client_id` (`CimdClientResolver`): allowlist → cache → fetch → validation → `RegisteredClient` (public, PKCE required, consent required, `authorization_code` + `refresh_token`). Unknown or invalid clients: error page, **no** redirect.
+5. `AuthorizationRequestValidator`: redirect URI from the document (loopback with any port), scopes, `resource` required and allowed (RFC 8707).
+6. Login, then consent page `/oauth2/consent` (name and host of the client, target of the redirect, warning for local apps). The user can deselect `mcp:write`.
+7. Token request with `code_verifier` → access token (15 min, `aud` = `<backend>/mcp`, `scope`, `client_id`) and refresh token (30 days, rotated on every use).
+8. `/mcp` checks signature, issuer and `aud`; `McpScopeFilter` checks `mcp:read` for every request and `mcp:write` for `tools/call` except the `read-tools`. If a scope is missing: `403` with `error="insufficient_scope", scope="mcp:read mcp:write"`, the client asks the user again (step-up).
+9. Tools only see data of the `AppUser` from the token (`CurrentUser`), as with the API.
 
-### Regeln
+### Rules
 
-| Regel | Umsetzung |
+| Rule | Implementation |
 |---|---|
-| Nur bekannte Clients | `nfv.auth.cimd.allowed-client-ids`: Claude (Web/Desktop/Mobile), Claude Code, ChatGPT (Präfix), VS Code. Nicht gelistete URLs werden nie abgerufen. |
-| `client_id`-URL | `https`, Port 443, mit Pfad, ohne Query, Fragment, User-Info und Dot-Segmente (`ClientMetadataValidator.validateClientId`) |
-| Dokument | `client_id` gleich URL, `client_name` (bereinigt, max. 100 Zeichen), `token_endpoint_auth_method` `none`, nur Code-Flow, 1–20 Redirect-URIs: `https`, Loopback (`http://127.0.0.1`, `[::1]`, `localhost`) oder privates Schema der eigenen Domain (`ai.claude:/…` für `claude.ai`) |
-| SSRF-Schutz | `HttpsClientMetadataSource`: alle aufgelösten Adressen müssen öffentlich sein (`AddressPolicy`), Verbindung genau zur geprüften IP (kein DNS-Rebinding), TLS mit Hostname-Prüfung, keine Redirects, kein Proxy, 3 s, 5 KB, max. 10 Abrufe pro Host und Minute |
-| Cache | `auth_cimd_client`, TTL aus `Cache-Control: max-age`, begrenzt auf 5 min – 24 h, ohne Angabe 1 h. Ist der Host nicht erreichbar, gilt das alte Dokument noch 24 h. |
-| Lokale Apps nur lesend | Redirect-URI nicht `https` (Loopback, privates Schema) → nur `nfv.auth.cimd.native-scopes` (`mcp:read`). Grund: Jedes Programm auf dem Rechner kann einen Loopback-Port öffnen und sich als der Client ausgeben, PKCE schützt davor nicht. Clients ohne `https`-Redirect bekommen ausschließlich `mcp:read`. |
-| Audience | Token-Request mit anderem `resource` → `invalid_target`. Tokens mit `aud` = MCP-URI lehnt `/api/**` ab, Tokens ohne diese `aud` lehnt `/mcp` ab. |
-| Refresh | `PublicClientRefreshAuthenticationConverter`/`-Provider` authentifizieren öffentliche Clients nur mit `client_id`, `PublicClientRefreshTokenGenerator` gibt ihnen Refresh Tokens. Rotation: ein benutztes Refresh Token ist ungültig. |
+| Known clients only | `nfv.auth.cimd.allowed-client-ids`: Claude (web/desktop/mobile), Claude Code, ChatGPT (prefix), VS Code. URLs not listed are never fetched. |
+| `client_id` URL | `https`, port 443, with path, without query, fragment, user info and dot segments (`ClientMetadataValidator.validateClientId`) |
+| Document | `client_id` equal to the URL, `client_name` (sanitised, max. 100 characters), `token_endpoint_auth_method` `none`, code flow only, 1–20 redirect URIs: `https`, loopback (`http://127.0.0.1`, `[::1]`, `localhost`) or private scheme of the own domain (`ai.claude:/…` for `claude.ai`) |
+| SSRF protection | `HttpsClientMetadataSource`: all resolved addresses must be public (`AddressPolicy`), connection exactly to the checked IP (no DNS rebinding), TLS with host name verification, no redirects, no proxy, 3 s, 5 KB, max. 10 fetches per host and minute |
+| Cache | `auth_cimd_client`, TTL from `Cache-Control: max-age`, limited to 5 min – 24 h, 1 h without a value. If the host is unreachable, the old document remains valid for 24 h. |
+| Local apps read-only | Redirect URI not `https` (loopback, private scheme) → only `nfv.auth.cimd.native-scopes` (`mcp:read`). Reason: any program on the machine can open a loopback port and pose as the client, PKCE does not protect against that. Clients without an `https` redirect get exclusively `mcp:read`. |
+| Audience | Token request with a different `resource` → `invalid_target`. Tokens with `aud` = MCP URI are rejected by `/api/**`, tokens without this `aud` are rejected by `/mcp`. |
+| Refresh | `PublicClientRefreshAuthenticationConverter`/`-Provider` authenticate public clients with `client_id` only, `PublicClientRefreshTokenGenerator` gives them refresh tokens. Rotation: a used refresh token is invalid. |
 
-### Verbindungen
+### Connections
 
-- `/account/connections` (Login nötig): verbundene MCP-Clients des Nutzers mit Scopes und letzter Token-Ausgabe.
-- „Revoke“ löscht alle Autorisierungen (Access und Refresh Tokens) und den Consent des Clients. Bereits ausgegebene Access Tokens bleiben bis zum Ablauf (max. 15 min) gültig, da `/mcp` JWTs lokal prüft.
+- `/account/connections` (login required): connected MCP clients of the user with scopes and last token issuance.
+- "Revoke" deletes all authorisations (access and refresh tokens) and the consent of the client. Access tokens already issued remain valid until expiry (max. 15 min), since `/mcp` checks JWTs locally.
 
-### Lokal testen
+### Testing locally
 
-- Automatisiert: `McpAuthorizationFlowTest` spielt den kompletten Ablauf mit einem Stub für die Metadata Documents durch (Discovery, Consent, Token, Scopes pro Tool, Refresh, Loopback, Revoke). Unit-Tests: `ClientMetadataValidatorTest`, `RedirectUrisTest`, `AddressPolicyTest`, `CimdClientResolverTest`.
-- Manuell mit Claude Code (Loopback, also nur lesend): Backend starten, `claude mcp add --transport http nfv http://localhost:18180/mcp`, in Claude Code `/mcp` → Authentifizieren. Dafür `nfv.backend-url` unverändert lassen (`http://localhost:18180`).
-- Manuell mit Claude Web/ChatGPT: Die Clients erreichen nur öffentliche HTTPS-URLs, also einen Tunnel nutzen (z. B. `cloudflared tunnel --url http://localhost:18180`) und `NFV_BACKEND_URL` auf die Tunnel-URL setzen, dann in Claude unter „Connectors“ `https://<tunnel>/mcp` hinzufügen.
-- MCP Inspector (`npx @modelcontextprotocol/inspector`) ist nicht auf der Allowlist und wird abgewiesen.
+- Automated: `McpAuthorizationFlowTest` plays through the complete flow with a stub for the metadata documents (discovery, consent, token, scopes per tool, refresh, loopback, revoke). Unit tests: `ClientMetadataValidatorTest`, `RedirectUrisTest`, `AddressPolicyTest`, `CimdClientResolverTest`.
+- Manually with Claude Code (loopback, so read-only): start the backend, `claude mcp add --transport http nfv http://localhost:18180/mcp`, in Claude Code `/mcp` → Authenticate. For this leave `nfv.backend-url` unchanged (`http://localhost:18180`).
+- Manually with Claude web/ChatGPT: the clients only reach public HTTPS URLs, so use a tunnel (e.g. `cloudflared tunnel --url http://localhost:18180`) and set `NFV_BACKEND_URL` to the tunnel URL, then add `https://<tunnel>/mcp` in Claude under "Connectors".
+- MCP Inspector (`npx @modelcontextprotocol/inspector`) is not on the allowlist and is rejected.
 
-## Wechsel zu Keycloak
+## Switching to Keycloak
 
-1. Realm + öffentlichen Client (PKCE) anlegen, Self-Registration aktivieren, **„Edit username“ deaktivieren** (das Mapping hängt am Username).
-2. Accounts migrieren (bcrypt-Hashes sind importierbar), Usernames unverändert übernehmen.
-3. `issuer-uri`, `username-claim=preferred_username`, `roles-claim=realm_access.roles` setzen.
-4. MCP: Keycloak muss CIMD unterstützen und `aud` auf `nfv.mcp.resource-uri` setzen (Audience-Mapper), die Scopes `mcp:read`/`mcp:write` anlegen. `ProtectedResourceMetadataController` meldet dann den Keycloak-Issuer.
-5. Entfernen: Paket `com.nfv.auth`, `templates/auth`, die Properties `spring.security.oauth2.authorizationserver.*` und `nfv.auth.*`, die Abhängigkeiten `spring-boot-starter-security-oauth2-authorization-server` und `spring-boot-starter-thymeleaf`.
-6. Migrationen `V3__auth_account.sql` und `V17__oauth2_authorization.sql` im Repo lassen (Flyway-Historie) und die Tabellen mit einer neuen Migration droppen.
-7. Frontend: nur `authority` (Issuer) und `client_id` der OIDC-Konfiguration ändern.
+1. Create a realm + public client (PKCE), enable self-registration, **disable "Edit username"** (the mapping depends on the username).
+2. Migrate accounts (bcrypt hashes can be imported), take over usernames unchanged.
+3. Set `issuer-uri`, `username-claim=preferred_username`, `roles-claim=realm_access.roles`.
+4. MCP: Keycloak must support CIMD and set `aud` to `nfv.mcp.resource-uri` (audience mapper), create the scopes `mcp:read`/`mcp:write`. `ProtectedResourceMetadataController` then reports the Keycloak issuer.
+5. Remove: package `com.nfv.auth`, `templates/auth`, the properties `spring.security.oauth2.authorizationserver.*` and `nfv.auth.*`, the dependencies `spring-boot-starter-security-oauth2-authorization-server` and `spring-boot-starter-thymeleaf`.
+6. Keep the migrations `V3__auth_account.sql` and `V17__oauth2_authorization.sql` in the repo (Flyway history) and drop the tables with a new migration.
+7. Frontend: only change `authority` (issuer) and `client_id` of the OIDC configuration.
 
-## Offen
+## Open
 
-- Access Token lebt 5 Minuten (Default des Authorization Servers), danach Redirect-Runde über den IdP. Ggf. `…token.access-token-time-to-live` erhöhen.
-- Produktion: Frontend (nginx) leitet `/api` noch nicht an das Backend weiter.
-- Abgelaufene Einträge in `oauth2_authorization` werden nicht aufgeräumt (Job fehlt).
-- Wiederverwendung eines rotierten Refresh Tokens widerruft noch nicht die ganze Token-Familie (nur das alte Token ist ungültig).
-- Link auf `/account/connections` im Frontend fehlt.
-- `tools/list` zeigt auch mit `mcp:read` alle Tools, schreibende Aufrufe werden erst beim Aufruf abgelehnt.
+- The access token lives 5 minutes (default of the authorization server), then a redirect round trip via the IdP. Possibly increase `…token.access-token-time-to-live`.
+- Production: the frontend (nginx) does not yet forward `/api` to the backend.
+- Expired entries in `oauth2_authorization` are not cleaned up (job missing).
+- Reuse of a rotated refresh token does not yet revoke the whole token family (only the old token is invalid).
+- Link to `/account/connections` in the frontend is missing.
+- `tools/list` shows all tools even with `mcp:read`, write calls are only rejected when called.

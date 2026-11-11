@@ -8,7 +8,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /**
- * What a plan leads to, computed by the backend, see Docs/incident-plans.md#bausteine-und-compose_plan.
+ * What a plan leads to, computed by the backend, see Docs/incident-plans.md#building-blocks-and-tools.
  *
  * @param deadline         latest check-in at the accommodation on the day of arrival, else the arrival of the target
  * @param reachesTarget    the planned target is reached, false with {@code NEW_TARGET}

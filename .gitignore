@@ -96,7 +96,7 @@ backend/config/
 # Throwaway spikes, code only on spike branches (e.g. spike/graphhopper), see Docs/network.md
 spikes/
 
-# OSM extracts, kept outside the repository (~/data/osm on each host), see Docs/network.md#konfiguration
+# OSM extracts, kept outside the repository (~/data/osm on each host), see Docs/network.md#configuration
 *.osm.pbf
 # GraphHopper graphs, in case NFV_HOST_DATA_DIR points into the repository
 data/graphs/

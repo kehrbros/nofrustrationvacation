@@ -36,7 +36,7 @@ public abstract class Event extends AbstractEntity {
     private @Nullable String externalId;
     /** Id of the event at the source, the same for all versions of it (see {@link SourceSubject}). */
     private @Nullable String subjectId;
-    /** SHA-256 of the normalised message text, {@code null} without text, see Docs/traffic-feed.md#anreicherung-messageenrichment. */
+    /** SHA-256 of the normalised message text, {@code null} without text, see Docs/traffic-feed.md#enrichment-messageenrichment. */
     @Column(length = 64)
     private @Nullable String messageHash;
     @Column(nullable = false, length = MAX_PAYLOAD_LENGTH)

@@ -9,7 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Reads routes for other modules as {@link RouteSnapshot}, see Docs/recommendations.md#schnittstellen. */
+/** Reads routes for other modules as {@link RouteSnapshot}, see Docs/recommendations.md#interfaces. */
 @Service
 @RequiredArgsConstructor
 public class RouteSnapshots {

@@ -1,6 +1,6 @@
 package com.nfv.bookings.entities;
 
-/** Steps of booking an alternative, see Docs/accommodation-alternatives.md#zahlung. */
+/** Steps of booking an alternative, see Docs/accommodation-alternatives.md#payment. */
 public enum ReservationStatus {
     /** Offer prebooked at LiteAPI, price locked. */
     PREBOOKED,

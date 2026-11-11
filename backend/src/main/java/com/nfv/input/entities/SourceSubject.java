@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 
 /**
  * Last known version of one event of a polled {@link EventSource} (subject), the state of the feed comparison, see
- * Docs/traffic-feed.md#abgleich-feeddiff.
+ * Docs/traffic-feed.md#diffing-feeddiff.
  */
 @Getter
 @Entity

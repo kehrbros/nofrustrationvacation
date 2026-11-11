@@ -1,6 +1,6 @@
 package com.nfv.advisor.entities;
 
-/** A step of a plan, in the order the plan runs, see Docs/incident-plans.md#bausteine-und-compose_plan. */
+/** A step of a plan, in the order the plan runs, see Docs/incident-plans.md#building-blocks-and-tools. */
 public enum PlanStepKind {
     /** The drive today: on the planned route, another way or another departure ({@code routeKind}). */
     DRIVE,

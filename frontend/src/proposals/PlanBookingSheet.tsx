@@ -44,7 +44,7 @@ type Step =
 const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: '' };
 
 /**
- * Takes a plan with hotels in one go, see Docs/incident-plans.md#ausführen-mit-einem-klick: guest data, one PayPal
+ * Takes a plan with hotels in one go, see Docs/incident-plans.md#one-click-execution: guest data, one PayPal
  * approval for all hotels, then the backend books them, changes the trip and pays. Nothing is paid or changed if a
  * hotel fails. The redirect fallback of PayPal comes back to plan/:executionId.
  */

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 /**
  * Route suggestions for other parts of the app (REST, later notifications and MCP), see
- * Docs/recommendations.md#schnittstellen. Computed per request and not stored; routing runs outside of
+ * Docs/recommendations.md#interfaces. Computed per request and not stored; routing runs outside of
  * transactions, as in {@code RoutePlanning}.
  */
 @Service

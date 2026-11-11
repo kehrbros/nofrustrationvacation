@@ -51,7 +51,7 @@ const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: ''
 
 /**
  * Books the hotel of a taken proposal at its stop: a night on the way (new stop) or another accommodation at the
- * target stop, paid with the PayPal button like an alternative (Docs/accommodation-alternatives.md#zahlung). The offer
+ * target stop, paid with the PayPal button like an alternative (Docs/accommodation-alternatives.md#payment). The offer
  * comes from the proposal, the price is checked again before paying. The redirect fallback of PayPal comes back here.
  */
 export default function StayBookingSheet() {

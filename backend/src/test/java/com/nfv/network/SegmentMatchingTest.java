@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Locating the NZTA sample events on the Wellington extract, see Docs/traffic-feed.md#testumgebung:
+ * Locating the NZTA sample events on the Wellington extract, see Docs/traffic-feed.md#test-environment:
  * 566003 is a point inside the Terrace Tunnel (SH 1), The Terrace runs above it; 566353 is a line along the urban
  * motorway that reaches beyond the extract.
  */

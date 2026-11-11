@@ -15,7 +15,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
-/** Imports the OSM extract of a region and switches to the new graph, see Docs/network.md#import-und-aktualisierung. */
+/** Imports the OSM extract of a region and switches to the new graph, see Docs/network.md#import-and-update. */
 @Slf4j
 @Service
 @RequiredArgsConstructor

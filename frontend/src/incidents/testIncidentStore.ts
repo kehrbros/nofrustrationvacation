@@ -2,7 +2,7 @@ import type { TestIncident } from './testIncidentApi';
 
 /**
  * Test incidents reported from this device, so they can be changed or ended (same id again), see
- * Docs/traffic-feed.md#testquelle-manual. Only in this browser; the test source keeps its events in memory, after a
+ * Docs/traffic-feed.md#test-source-manual. Only in this browser; the test source keeps its events in memory, after a
  * restart of the backend the same id creates the event anew.
  */
 export interface StoredTestIncident {

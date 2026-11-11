@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 
 /**
  * Values from the free text of an event that {@code read} cannot get, see
- * Docs/traffic-feed.md#anreicherung-messageenrichment. The model is asked once per text and validity ({@link #ask},
+ * Docs/traffic-feed.md#enrichment-messageenrichment. The model is asked once per text and validity ({@link #ask},
  * outside a transaction, the call can take long); its answer is stored as it came and checked strictly on every use
  * ({@link #enrichment}):
  * <ul>

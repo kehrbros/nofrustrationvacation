@@ -27,7 +27,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Test source: events entered by hand go through the same flow as those of a real source, see
- * Docs/traffic-feed.md#testquelle-manual. Only exists with {@code nfv.input.sources.manual.enabled=true}. Events are
+ * Docs/traffic-feed.md#test-source-manual. Only exists with {@code nfv.input.sources.manual.enabled=true}. Events are
  * kept in memory until polled again; the snapshot is never complete, so a restart clears nothing. An event ends by
  * posting it with {@code resolved}.
  */

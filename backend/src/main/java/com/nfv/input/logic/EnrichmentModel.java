@@ -11,7 +11,7 @@ import java.util.Optional;
 
 /**
  * The model call of {@link MessageEnrichment}: reads the free text of an event, see
- * Docs/traffic-feed.md#anreicherung-messageenrichment. Answers are unchecked, the checks are in
+ * Docs/traffic-feed.md#enrichment-messageenrichment. Answers are unchecked, the checks are in
  * {@link MessageEnrichment}.
  */
 public interface EnrichmentModel {

@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Details of road segments for other modules, see Docs/network.md#schnittstellen-networklogic. */
+/** Details of road segments for other modules, see Docs/network.md#interfaces-networklogic. */
 @Service
 @RequiredArgsConstructor
 public class SegmentQueries {

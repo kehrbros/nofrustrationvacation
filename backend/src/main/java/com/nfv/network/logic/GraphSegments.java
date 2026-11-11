@@ -23,7 +23,7 @@ import java.util.function.Consumer;
 /**
  * Directed, drivable edges of a graph as segment rows. Key: OSM way, junction coordinates (1e-7 degrees) and a hash of
  * the geometry. Zero-length edges (barriers) are skipped, identical duplicate edges get the same key, see
- * Docs/network.md#datenmodell.
+ * Docs/network.md#data-model.
  */
 final class GraphSegments {
     private static final int MAX_TEXT = 255;

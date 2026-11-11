@@ -14,7 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Creates the account "test" with password "test" and the role {@code tester} (test endpoints, see
- * Docs/traffic-feed.md#testquelle-manual) on startup if no account exists yet. Only the login account is created; the
+ * Docs/traffic-feed.md#test-source-manual) on startup if no account exists yet. Only the login account is created; the
  * {@code AppUser} follows on the first authenticated request like for any other account.
  * <p>
  * An existing account "test" created before the role existed gets the role on startup too, but only if it is the oldest

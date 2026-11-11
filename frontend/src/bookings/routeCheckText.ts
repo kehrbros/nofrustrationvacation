@@ -5,7 +5,7 @@ import type { RouteCheck } from './alternativesApi';
 
 /**
  * Texts of the route check before paying for an alternative in another place, see
- * Docs/accommodation-alternatives.md#route-vor-dem-buchen-pruefen. Null where nothing is to be said.
+ * Docs/accommodation-alternatives.md#checking-the-route-before-booking. Null where nothing is to be said.
  */
 export interface RouteCheckText {
   /** "26 km vom bisherigen Stop. Nach der Buchung wird der Stop dorthin verlegt und die Route neu geplant." */

@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 
 /**
  * Via points that reproduce a candidate when they become waypoints: the intention is stored, not the segments, see
- * Docs/recommendations.md#auswahl-speichern.
+ * Docs/recommendations.md#saving-the-choice.
  */
 @Slf4j
 @Component
@@ -44,7 +44,7 @@ class ViaPointExtractor {
      * part still different until {@code viaReproduceRatio} is reached. Every point is checked by routing over all
      * points the way {@code RoutePlanning} plans after choosing: a point that cannot be routed is replaced by the next
      * longest segment of its part, so the returned points can always be planned (unless the waypoints of the user
-     * cannot), see Docs/recommendations.md#auswahl-speichern.
+     * cannot), see Docs/recommendations.md#saving-the-choice.
      *
      * @param base     see {@link #base}
      * @param segments details of all segments of the candidate

@@ -1,219 +1,219 @@
-# Konzept: Alternative Unterkünfte suchen (LiteAPI + Assistant)
+# Concept: searching for alternative accommodations (LiteAPI + assistant)
 
-- **Status:** umgesetzt (2026-11-03), Zahlung nur über PayPal, das Payment SDK von LiteAPI wird nicht genutzt. Abweichungen vom ursprünglichen Konzept stehen unter [Umsetzung](#umsetzung-stand-2026-11-03).
-- **Ziel:** Zu einer hinterlegten Unterkunft-Buchung eine Alternative finden, die alle übergebenen Kriterien erfüllt, und sie in der App buchen.
-- **Kriterien (erste Stufe):** maximaler Preis, Region (Adresse bzw. Koordinaten + Umkreis), Verfügbarkeit für die Gästezahl, Anzahl Zimmer, Datum von/bis.
-- **Erster Use-Case „Buchung nicht nutzbar“:** falsch gebucht, Hotel hat die Buchung vergessen, überbucht o. Ä. Die Kriterien werden aus der aktuellen Unterkunft befüllt, der Nutzer kann sie vor der Suche ändern.
-- **Später:** dieselbe Suche mit anderen Parametern, z. B. äquivalente Unterkunft an einem anderen Ort (Route gesperrt, Stop verschoben). Deshalb sind Kriterien ein eigenes Objekt, der Use-Case befüllt es nur vor.
-- Liegt fachlich im Modul `bookings` (Altbestand bleibt unberührt).
+- **Status:** implemented (2026-11-03), payment only via PayPal, LiteAPI's payment SDK is not used. Deviations from the original concept are listed under [Implementation](#implementation-as-of-2026-11-03).
+- **Goal:** for a stored accommodation booking, find an alternative that meets all given criteria and book it in the app.
+- **Criteria (first stage):** maximum price, region (address or coordinates + radius), availability for the number of guests, number of rooms, date from/to.
+- **First use case "booking not usable":** booked wrongly, hotel forgot the booking, overbooked or similar. The criteria are filled from the current accommodation, the user can change them before the search.
+- **Later:** the same search with other parameters, e.g. equivalent accommodation at another place (route closed, stop moved). That is why criteria are a separate object, the use case only prefills it.
+- Belongs to the module `bookings` in domain terms (legacy code stays untouched).
 
-## Annahme: „Lite-API“ = LiteAPI von Nuitee
+## Assumption: "Lite-API" = LiteAPI by Nuitee
 
-- Gemeint ist **LiteAPI** (https://liteapi.travel, Doku https://docs.liteapi.travel), eine Hotel-API von Nuitee für Suche, Verfügbarkeit, Preise, Prebook, Buchung und Storno. Bitte bestätigen, falls ein anderer Dienst gemeint ist.
-- Geprüft am 2026-11-02 anhand der Referenz (REST `v3.0`):
-  - Suche und Stammdaten unter `https://api.liteapi.travel/v3.0`, Buchung unter `https://book.liteapi.travel/v3.0`. Auth per Header `X-API-Key`, Sandbox-Keys beginnen mit `sand_`.
-  - `POST /hotels/rates`: `latitude`, `longitude`, `radius` (Meter); `checkin`, `checkout` (`YYYY-MM-DD`); `occupancies` (je Zimmer `{adults, children: [Alter]}`); `currency`, `guestNationality`; Filter `starRating`, `boardType`, `refundableRatesOnly`, `maxRatesPerHotel`, `limit`, `sort`, `includeHotelData`, `margin`, `timeout`.
-  - Antwort je Hotel `roomTypes[]` mit `offerId`, darin `rates[]` mit `boardType`, `retailRate.total` (Gesamtpreis), `suggestedSellingPrice`, `cancellationPolicies` (`refundableTag` `RFN`/`NRFN`, Fristen mit Zeitzone).
-  - `GET /data/hotel?hotelId=…`: Name, Adresse, Koordinaten, Sterne, Ausstattung, Check-in-Zeiten, Bilder.
-  - `POST /rates/prebook` (`offerId`, `usePaymentSdk`): sichert Preis und Verfügbarkeit, meldet Preis-, Storno- und Verpflegungsänderungen, liefert `prebookId`, mit Payment SDK zusätzlich `transactionId` + `secretKey`.
-  - `POST /rates/book` (`prebookId`, `holder`, `guests`, `payment.method`, `clientReference`): liefert `bookingId`, `status`. Doppelte `clientReference` → Fehler `4005`.
-  - `GET /bookings/{bookingId}`, `PUT /bookings/{bookingId}` (Storno, liefert Gebühr und Erstattung).
-  - Payment SDK (Script von `payment-wrapper.liteapi.travel`): Kartenzahlung (laut Doku auch Google Pay, kein PayPal) im Browser, danach Buchung mit `TRANSACTION_ID`. Nuitee ist dann Merchant of Record, wir bekommen eine Kommission (`margin` in Prozent, `0` = Nettopreis), wöchentlich ausgezahlt nach dem Check-out.
-  - Eigene Zahlung (wir sind Merchant of Record): Rates mit `margin: 0` (Nettopreis), eigene Provision über einen eigenen Zahlungsweg, Buchung mit `ACC_CREDIT_CARD` (belastet die im LiteAPI-Konto hinterlegte Karte; in der Sandbox eine versteckte Testkarte je Key). `CREDIT` (Kreditlinie) nur nach Vertrag und nicht in der Sandbox.
-  - Preise unter dem empfohlenen Verkaufspreis (`suggestedSellingPrice`) nur für angemeldete Nutzer bzw. in der App, nicht öffentlich.
-  - Fehler `2001` bei Prebook oder Book: Angebot nicht mehr verfügbar, neu suchen.
-  - Es gibt einen LiteAPI-MCP-Server, wird bewusst nicht genutzt (siehe Rollen).
+- Meant is **LiteAPI** (https://liteapi.travel, docs https://docs.liteapi.travel), a hotel API by Nuitee for search, availability, prices, prebook, booking and cancellation. Please confirm if another service is meant.
+- Checked on 2026-11-02 against the reference (REST `v3.0`):
+  - Search and master data under `https://api.liteapi.travel/v3.0`, booking under `https://book.liteapi.travel/v3.0`. Auth via header `X-API-Key`, sandbox keys start with `sand_`.
+  - `POST /hotels/rates`: `latitude`, `longitude`, `radius` (metres); `checkin`, `checkout` (`YYYY-MM-DD`); `occupancies` (per room `{adults, children: [age]}`); `currency`, `guestNationality`; filters `starRating`, `boardType`, `refundableRatesOnly`, `maxRatesPerHotel`, `limit`, `sort`, `includeHotelData`, `margin`, `timeout`.
+  - Response per hotel `roomTypes[]` with `offerId`, inside `rates[]` with `boardType`, `retailRate.total` (total price), `suggestedSellingPrice`, `cancellationPolicies` (`refundableTag` `RFN`/`NRFN`, deadlines with time zone).
+  - `GET /data/hotel?hotelId=…`: name, address, coordinates, stars, facilities, check-in times, images.
+  - `POST /rates/prebook` (`offerId`, `usePaymentSdk`): secures price and availability, reports price, cancellation and board changes, returns `prebookId`, with the payment SDK additionally `transactionId` + `secretKey`.
+  - `POST /rates/book` (`prebookId`, `holder`, `guests`, `payment.method`, `clientReference`): returns `bookingId`, `status`. Duplicate `clientReference` → error `4005`.
+  - `GET /bookings/{bookingId}`, `PUT /bookings/{bookingId}` (cancellation, returns fee and refund).
+  - Payment SDK (script from `payment-wrapper.liteapi.travel`): card payment (according to the docs also Google Pay, no PayPal) in the browser, then booking with `TRANSACTION_ID`. Nuitee is then merchant of record, we get a commission (`margin` in percent, `0` = net price), paid out weekly after check-out.
+  - Own payment (we are merchant of record): rates with `margin: 0` (net price), own commission via an own payment method, booking with `ACC_CREDIT_CARD` (charges the card stored in the LiteAPI account; in the sandbox a hidden test card per key). `CREDIT` (credit line) only after a contract and not in the sandbox.
+  - Prices below the suggested selling price (`suggestedSellingPrice`) only for logged-in users or in the app, not publicly.
+  - Error `2001` on prebook or book: offer no longer available, search again.
+  - There is a LiteAPI MCP server, deliberately not used (see roles).
 
-## Rollen: Assistant und LiteAPI
+## Roles: assistant and LiteAPI
 
-- **Grundsatz:** Ob ein Angebot die Kriterien erfüllt, entscheidet das Backend anhand der Daten von LiteAPI, nicht das Sprachmodell. Das Modell vergleicht nur Angebote, die alle Kriterien schon erfüllen, mit der bisherigen Unterkunft. Es erfindet keine Preise oder Verfügbarkeit und löst keine Buchung aus.
-- **Seit 2026-11-10 darf das Modell ausschließen:** Kandidaten, die nicht zur bisherigen Unterkunft passen (andere Art oder deutlich anderer Standard, z. B. Backpackers statt Hotel), fallen weg, die übrigen ordnet es. Vorher durfte es nur ordnen. Anlass: in Nelson bestand das Ergebnis fast nur aus günstigen Backpackers.
-  - **In beide Richtungen** (2026-11-10): auch deutlich gehobener ist nicht vergleichbar, z. B. Luxus- oder 5-Sterne-Hotel statt Backpackers, Motel oder einfachem Hotel, 2 oder mehr Sterne über der bisherigen, Preis pro Nacht über etwa dem 2,5-Fachen. Etwas besser (ein Stern mehr, Einzel- statt Mehrbettzimmer) bleibt vergleichbar. Anlass: zu einem günstigen Backpackers kam ein teures Sofitel. Vorher stand im Prompt „deutlich besser ist vergleichbar“. Der Max. Preis begrenzt das nur, wenn die Buchung einen Preis hat. Das Ergebnis meldet die Zahl der ausgeschlossenen (`excludedByAssistant`), das Frontend zeigt sie als Hinweis.
+- **Principle:** whether an offer meets the criteria is decided by the backend based on LiteAPI's data, not by the language model. The model only compares offers that already meet all criteria with the previous accommodation. It does not invent prices or availability and does not trigger a booking.
+- **Since 2026-11-10 the model may exclude:** candidates that do not match the previous accommodation (different kind or clearly different standard, e.g. backpackers instead of hotel) are dropped, it orders the rest. Before, it was only allowed to order. Reason: in Nelson the result consisted almost entirely of cheap backpackers.
+  - **In both directions** (2026-11-10): clearly more upmarket is not comparable either, e.g. luxury or 5-star hotel instead of backpackers, motel or simple hotel, 2 or more stars above the previous one, price per night above about 2.5 times. Somewhat better (one star more, single instead of dorm room) remains comparable. Reason: an expensive Sofitel came up for a cheap backpackers. Before, the prompt said "clearly better is comparable". The max. price only limits this if the booking has a price. The result reports the number of excluded ones (`excludedByAssistant`), the frontend shows it as a note.
 
-| Aufgabe | wer |
+| Task | who |
 |---|---|
-| Kriterien aus der aktuellen Buchung vorbefüllen | Backend, deterministisch (`AlternativeCriteria.from(booking)`) |
-| Verfügbarkeit für Gäste und Zimmer im Zeitraum, Preise, Storno | LiteAPI (`/hotels/rates`) |
-| Harte Prüfung jedes Angebots gegen alle Kriterien (Preis ≤ Max., Abstand ≤ Umkreis, Zeitraum, Belegung, Mindeststerne) | Backend, nach der Antwort von LiteAPI |
-| „Gleichwertig zur bisherigen Unterkunft“: nicht vergleichbare Angebote ausschließen, Reihenfolge der übrigen, beste Alternative, kurze Begründung | Assistant (`StructuredExtraction`, Schema in `bookings.logic`) |
-| Preis sichern, buchen, ggf. stornieren | LiteAPI, nur nach Bestätigung des Nutzers |
-| Zahlung | PayPal (Modul `paypal`) oder später Payment SDK, siehe [Zahlung](#zahlung); nie das Modell |
+| Prefill criteria from the current booking | backend, deterministic (`AlternativeCriteria.from(booking)`) |
+| Availability for guests and rooms in the period, prices, cancellation | LiteAPI (`/hotels/rates`) |
+| Hard check of every offer against all criteria (price ≤ max., distance ≤ radius, period, occupancy, minimum stars) | backend, after LiteAPI's response |
+| "Equivalent to the previous accommodation": exclude non-comparable offers, order of the rest, best alternative, short justification | assistant (`StructuredExtraction`, schema in `bookings.logic`) |
+| Secure the price, book, cancel if necessary | LiteAPI, only after the user's confirmation |
+| Payment | PayPal (module `paypal`) or later payment SDK, see [Payment](#payment); never the model |
 
-- **Was das Modell bekommt:** die bisherige Unterkunft (Name, Adresse, Gesamtpreis, Nächte, Preis pro Nacht; ist `placeRef` eine LiteAPI-Hotel-Id, zusätzlich Sterne, Art, Beschreibung, Ausstattung) und je Kandidat nur Fakten (Hotel-Id, Name, Sterne, Bewertung, Abstand, Gesamtpreis, Preis pro Nacht, Zimmer, Verpflegung, stornierbar, Art, Beschreibung, Ausstattung).
-  - Die nächsten `nfv.bookings.alternatives.ranking-pool` (25) Kandidaten nach Abstand, dann Preis. Vorher die 20 günstigsten, dadurch kamen bessere Hotels gar nicht beim Modell an.
-  - Art, Beschreibung und Ausstattung aus `GET /data/hotel` (`hotelType`, `hotelDescription` als Text ohne HTML, gekürzt auf 300 Zeichen, `hotelFacilities` höchstens 15), ein Aufruf je Hotel, parallel (höchstens 6 gleichzeitig), im Speicher einen Tag gecacht (`HotelProfiles`). Fehlt ein Profil, vergleicht das Modell mit den Fakten des Angebots.
-  - Beschreibungen stammen von den Hotels: das Modell soll sie als Daten behandeln und Anweisungen darin ignorieren.
-- **Was es liefert:** je Hotel-Id `comparable` (ja/nein), die vergleichbaren in Rangfolge, eine Begründung nur für die ersten 10 vergleichbaren (sonst leer). Nicht vergleichbare fallen weg, Ids, die nicht unter den Kandidaten sind, verwirft das Backend, vergessene hängt es hinten an. Angezeigt werden höchstens `max-candidates` (20).
-- **Antwortzeit (2026-11-10):** der Nutzer wartet auf das Ergebnis, deshalb mit `ReasoningEffort.LOW` (`reasoning.effort` der Responses API, sonst gilt der Standard des Modells, bei `gpt-5-mini` `medium`), kleiner Pool, kurze Beschreibungen und Begründungen nur für die ersten 10, weil die Länge der Antwort die Zeit bestimmt. Ein Modell ohne Reasoning lehnt den Parameter ab, dann gilt die Reihenfolge nach Preis. `AlternativeSearch` loggt je Suche die Dauer von Rates, Profilen und Ranking (`Alternatives search: …`). Nächster möglicher Schritt, noch nicht beschlossen: Treffer nach der harten Prüfung sofort zeigen und das Ranking nachreichen.
-- **Ohne Assistant** (kein OpenAI-Key, Rate-Limit, Fehler): die Suche funktioniert trotzdem, nichts wird ausgeschlossen, Reihenfolge nach Preis, dann Abstand, ohne Begründung. In der Notlage soll die Suche nicht am Modell scheitern.
-- **Ohne LiteAPI-Key:** die Funktion wird nicht angeboten (Status-Endpunkt wie `GET /bookings/assistant`).
-- **Warum nicht `aiSearch` oder der MCP-Server von LiteAPI:** Kriterien müssen nachprüfbar hart gelten, und Buchen ist teuer und nicht umkehrbar. Ablauf, Bestätigung und Speicherung bleiben im Backend.
+- **What the model gets:** the previous accommodation (name, address, total price, nights, price per night; if `placeRef` is a LiteAPI hotel id, additionally stars, kind, description, facilities) and per candidate only facts (hotel id, name, stars, rating, distance, total price, price per night, rooms, board, cancellable, kind, description, facilities).
+  - The nearest `nfv.bookings.alternatives.ranking-pool` (25) candidates by distance, then price. Before, the 20 cheapest, so better hotels never reached the model.
+  - Kind, description and facilities from `GET /data/hotel` (`hotelType`, `hotelDescription` as text without HTML, shortened to 300 characters, `hotelFacilities` at most 15), one call per hotel, in parallel (at most 6 at a time), cached in memory for one day (`HotelProfiles`). If a profile is missing, the model compares with the facts of the offer.
+  - Descriptions come from the hotels: the model should treat them as data and ignore instructions in them.
+- **What it returns:** per hotel id `comparable` (yes/no), the comparable ones in ranking order, a justification only for the first 10 comparable ones (otherwise empty). Non-comparable ones are dropped, ids that are not among the candidates are discarded by the backend, forgotten ones are appended at the end. At most `max-candidates` (20) are shown.
+- **Response time (2026-11-10):** the user waits for the result, therefore with `ReasoningEffort.LOW` (`reasoning.effort` of the Responses API, otherwise the model's default applies, `medium` for `gpt-5-mini`), small pool, short descriptions and justifications only for the first 10, because the length of the answer determines the time. A model without reasoning rejects the parameter, then the order by price applies. `AlternativeSearch` logs the duration of rates, profiles and ranking per search (`Alternatives search: …`). Possible next step, not decided yet: show hits right after the hard check and deliver the ranking afterwards.
+- **Without the assistant** (no OpenAI key, rate limit, error): the search still works, nothing is excluded, order by price, then distance, without justification. In an emergency the search should not fail because of the model.
+- **Without a LiteAPI key:** the feature is not offered (status endpoint like `GET /bookings/assistant`).
+- **Why not `aiSearch` or LiteAPI's MCP server:** criteria must apply strictly and verifiably, and booking is expensive and irreversible. Flow, confirmation and storage stay in the backend.
 
-## Kriterien
+## Criteria
 
-- `AlternativeCriteria` (Record in `bookings.logic`), unabhängig vom Use-Case:
-  - `latitude`, `longitude`, `radiusMeters` (Region). Adresse nur zur Anzeige.
-  - `checkIn`, `checkOut` (`LocalDate`, Ortszeit der Unterkunft).
-  - `guests` (Erwachsene), `rooms`. Verteilung auf `occupancies`: Gäste gleichmäßig auf Zimmer (5 Gäste, 2 Zimmer → 3 + 2).
-  - `maxPrice` + `currency` (Gesamtpreis des Aufenthalts).
-  - `minStars` (1–5, optional, seit 2026-11-10): an LiteAPI als Filter `starRating` [minStars..5], zusätzlich in der harten Prüfung; Hotels ohne Sterne erfüllen es nicht. Der Agent (`search_accommodations`) setzt es nicht.
-  - Später optional: Kinder mit Alter, Verpflegung, nur stornierbar, Ausschluss von Hotels (z. B. das bisherige).
-- **Vorbefüllung im Use-Case „Buchung nicht nutzbar“:**
+- `AlternativeCriteria` (record in `bookings.logic`), independent of the use case:
+  - `latitude`, `longitude`, `radiusMeters` (region). Address only for display.
+  - `checkIn`, `checkOut` (`LocalDate`, local time of the accommodation).
+  - `guests` (adults), `rooms`. Distribution to `occupancies`: guests evenly across rooms (5 guests, 2 rooms → 3 + 2).
+  - `maxPrice` + `currency` (total price of the stay).
+  - `minStars` (1–5, optional, since 2026-11-10): to LiteAPI as filter `starRating` [minStars..5], additionally in the hard check; hotels without stars do not meet it. The agent (`search_accommodations`) does not set it.
+  - Later optional: children with age, board, refundable only, exclusion of hotels (e.g. the previous one).
+- **Prefill in the use case "booking not usable":**
 
-  | Kriterium | aus der Buchung | fehlt der Wert |
+  | Criterion | from the booking | if the value is missing |
   |---|---|---|
-  | Region | Koordinaten von `AccommodationDetails` (sonst des Stops), Umkreis Standard 5 km (`nfv.bookings.alternatives.default-radius`) | Nutzer muss einen Ort wählen (Photon wie beim Stop) |
-  | Datum von/bis | Datum von `startsAt`/`endsAt` in der Zone der Unterkunft; liegt der Check-in in der Vergangenheit (Aufenthalt läuft), ab heute am Ort | Pflichteingabe |
-  | Gäste | `guests` | Pflichteingabe, vorgeschlagen 2 |
-  | Zimmer | `rooms` | 1 |
-  | Max. Preis | `price` + `currency` der Buchung, Standard ohne Aufschlag (Nutzer erhöht bei Bedarf); bei verkürztem Zeitraum anteilig pro Nacht | ohne Obergrenze, Nutzer kann eine setzen |
-  | Mindeststerne | Sterne der bisherigen Unterkunft (abgerundet) aus ihrem LiteAPI-Profil, nur wenn `placeRef` eine LiteAPI-Hotel-Id ist; ein Fehler bei LiteAPI lässt das Feld leer | „Egal“, Nutzer kann 2–5 wählen |
+  | Region | coordinates of `AccommodationDetails` (otherwise of the stop), radius default 5 km (`nfv.bookings.alternatives.default-radius`) | user must choose a place (Photon as for the stop) |
+  | Date from/to | date of `startsAt`/`endsAt` in the zone of the accommodation; if the check-in is in the past (stay in progress), from today at the place | required input |
+  | Guests | `guests` | required input, suggested 2 |
+  | Rooms | `rooms` | 1 |
+  | Max. price | `price` + `currency` of the booking, default without markup (user increases if needed); for a shortened period proportionally per night | no upper limit, user can set one |
+  | Minimum stars | stars of the previous accommodation (rounded down) from its LiteAPI profile, only if `placeRef` is a LiteAPI hotel id; an error at LiteAPI leaves the field empty | "Any", user can choose 2–5 |
 
-- Ausgeschlossen wird die bisherige Unterkunft, wenn ihr `placeRef` eine LiteAPI-Hotel-Id ist; sonst Treffer mit sehr kleinem Abstand (< 50 m) und ähnlichem Namen als „bisherige Unterkunft?“ markieren.
-- Spätere Use-Cases befüllen anders, z. B. „anderer Ort“: Region aus einem anderen Stop oder Ort, übrige Werte aus der Buchung.
+- The previous accommodation is excluded if its `placeRef` is a LiteAPI hotel id; otherwise hits with very small distance (< 50 m) and a similar name are marked as "previous accommodation?".
+- Later use cases prefill differently, e.g. "other place": region from another stop or place, other values from the booking.
 
-## Ablauf
+## Flow
 
-1. **Einstieg:** in den Details einer Unterkunft-Buchung „Alternative suchen“ (optional Grund: falsch gebucht, Hotel hat keine Buchung, sonstiges).
-2. **Kriterien prüfen:** Formular mit den vorbefüllten Werten (Herkunft „aus der Buchung“ gekennzeichnet, fehlende Pflichtwerte markiert). Nutzer kann alles ändern.
-3. **Suche:** Backend ruft `/hotels/rates` mit Koordinaten, Umkreis, Zeitraum, `occupancies`, `currency` = Währung des Max. Preises, `starRating` bei Mindeststernen, `includeHotelData`, `maxRatesPerHotel` klein, `limit` begrenzt.
-4. **Harte Prüfung:** je Hotel das günstigste Angebot, das alle Kriterien erfüllt (Gesamtpreis ≤ Max., Abstand per Haversine ≤ Umkreis, Belegung passt, Sterne ≥ Mindeststerne). Hotels ohne passendes Angebot fallen weg.
-5. **Vergleich durch den Assistant** (falls verfügbar) über die nächsten 25 mit ihren Profilen: nicht vergleichbare fallen weg, Ergebnis: empfohlene Alternative plus geordnete weitere Treffer mit Begründung (✦ wie beim Auslesen) und Hinweis „N Unterkünfte ausgeblendet“.
-6. **Ergebnis:** Liste und Karte mit der bisherigen Unterkunft als Bezug (Abstand, Preisunterschied). Keine Treffer → Hinweis, welches Kriterium am meisten ausschließt (z. B. „ab 7 km gäbe es 4 Treffer“, durch erneute Suche mit größerem Umkreis, nur auf Wunsch).
-7. **Angebot wählen → Prebook:** `/rates/prebook` (bei PayPal `usePaymentSdk: false`). Neuer Preis wird erneut gegen den Max. Preis geprüft; Preis-, Storno- oder Verpflegungsänderung wird vor der Zahlung angezeigt.
-8. **Bestätigen und zahlen:** Zusammenfassung mit Endpreis (Nettopreis + Provision), Gastdaten (Name, E-Mail aus dem Profil vorbelegt), Zahlung per PayPal, siehe [Zahlung](#zahlung).
-9. **Buchen:** `/rates/book` mit `ACC_CREDIT_CARD` (bzw. `TRANSACTION_ID` beim Payment SDK) und `clientReference` (Id der Reservierung, schützt vor doppelter Buchung). Danach legt `BookingLogic` eine neue `Booking` am selben Stop an: `source` `SEARCH`, Buchungsnummer, Preis, Stornofrist, Zeiten über die bestehende Zeitzonenlogik, `AccommodationDetails` aus den Hotel-Stammdaten, `placeRef` `liteapi:hotel/<hotelId>`.
-10. **Bisherige Buchung:** wird nicht automatisch geändert. Der Nutzer wird gefragt, ob sie als storniert markiert werden soll (`Booking.cancel()`, gibt es schon); stornieren beim fremden Anbieter muss er selbst (Link `manageUrl`). Seit 2026-11-07 kommt sie dazu auf die To-do-Liste der Reise (`REPLACED`, [domain.md](domain.md#bookings)), „Erledigt“ markiert sie als storniert.
+1. **Entry:** in the details of an accommodation booking "Search alternative" (optional reason: booked wrongly, hotel has no booking, other).
+2. **Check criteria:** form with the prefilled values (origin "from the booking" marked, missing required values highlighted). The user can change everything.
+3. **Search:** the backend calls `/hotels/rates` with coordinates, radius, period, `occupancies`, `currency` = currency of the max. price, `starRating` with minimum stars, `includeHotelData`, `maxRatesPerHotel` small, `limit` limited.
+4. **Hard check:** per hotel the cheapest offer that meets all criteria (total price ≤ max., distance via haversine ≤ radius, occupancy fits, stars ≥ minimum stars). Hotels without a matching offer are dropped.
+5. **Comparison by the assistant** (if available) over the nearest 25 with their profiles: non-comparable ones are dropped, result: recommended alternative plus ordered further hits with justification (✦ as with extraction) and the note "N accommodations hidden".
+6. **Result:** list and map with the previous accommodation as reference (distance, price difference). No hits → note which criterion excludes the most (e.g. "from 7 km there would be 4 hits", via a new search with a larger radius, only on request).
+7. **Choose offer → prebook:** `/rates/prebook` (with PayPal `usePaymentSdk: false`). The new price is checked again against the max. price; a price, cancellation or board change is shown before payment.
+8. **Confirm and pay:** summary with final price (net price + commission), guest data (name, email prefilled from the profile), payment via PayPal, see [Payment](#payment).
+9. **Book:** `/rates/book` with `ACC_CREDIT_CARD` (or `TRANSACTION_ID` with the payment SDK) and `clientReference` (id of the reservation, protects against double booking). Then `BookingLogic` creates a new `Booking` at the same stop: `source` `SEARCH`, booking number, price, cancellation deadline, times via the existing time zone logic, `AccommodationDetails` from the hotel master data, `placeRef` `liteapi:hotel/<hotelId>`.
+10. **Previous booking:** is not changed automatically. The user is asked whether it should be marked as cancelled (`Booking.cancel()`, already exists); cancelling at the foreign provider they must do themselves (link `manageUrl`). Since 2026-11-07 it also goes on the trip's to-do list (`REPLACED`, [domain.md](domain.md#bookings)), "Done" marks it as cancelled.
 
-## Zahlung
+## Payment
 
-- **Entscheidung (2026-11-02):** Erster Zahlungsweg ist PayPal über das bestehende Modul `paypal`, das dafür angepasst und weiterverwendet wird (kein Altbestand mehr). Wir sind Merchant of Record und behalten eine Provision ein.
-- **Preis:** Rates mit `margin: 0`, Endpreis = Nettopreis + Provision (`nfv.bookings.alternatives.fee-percent`, optional Mindestbetrag). Der Max. Preis der Kriterien gilt für den Endpreis. Provision so wählen, dass der Endpreis in der Regel nicht über dem `suggestedSellingPrice` liegt.
-- **Ablauf mit PayPal (Orders API v2, `intent=AUTHORIZE`):**
-  1. Prebook erfolgreich → `PayPalCheckout` legt eine Order über den Endpreis an (`reference` = Id der Reservierung, idempotent), Nutzer bestätigt bei PayPal (`approveUrl`, Rückkehr auf die Unterroute der Alternativen).
-  2. Backend autorisiert die Zahlung (Geld reserviert, noch nicht eingezogen) und prüft Betrag und Währung.
-  3. Buchung bei LiteAPI mit `ACC_CREDIT_CARD`.
-  4. Erfolgreich → Capture der Autorisierung, Reservierung `BOOKED`, `Booking` anlegen. Gescheitert (`2001`, Preisänderung) → Autorisierung freigeben (void), kein Geld bewegt, keine Erstattungsgebühr.
-  - Bricht der Ablauf zwischen 3 und 4 ab, gleicht ein Poller (wie beim Top-up in `accounting`) Reservierungen mit Autorisierung über `clientReference` bei LiteAPI ab und captured oder gibt frei. Autorisierungen laufen nach einigen Tagen ab, das reicht für den Abgleich.
-- **Mehrere Hotels eines Plans (2026-11-11):** eine Order mit einer `purchase_unit` je Hotel (`reference_id` = Reservierung), eine Freigabe, Autorisierung je Einheit, LiteAPI-Buchung je Hotel, Capture erst nachdem der Plan die Reise geändert hat. Scheitert ein Hotel, werden die übrigen storniert und alle Autorisierungen freigegeben (`bookings.PlanPayments`), siehe [incident-plans.md](incident-plans.md#ausführen-mit-einem-klick).
-- **Storno einer per App gebuchten Alternative:** LiteAPI erstattet laut Bedingungen auf unsere Karte, wir erstatten per PayPal (Refund der Capture). Provision bei Storno einbehalten oder erstatten: offen.
-- **Anpassungen am Modul `paypal`** (bleibt technische Anbindung ohne Fachwissen, `PayPalModuleTest` gilt weiter):
-  - Return- und Cancel-URL je Aufruf statt fest konfiguriert (`checkout-return-url` zeigt auf eine entfernte Seite von `accounting`).
-  - `intent=AUTHORIZE` mit Authorize, Capture und Void der Autorisierung (`/v2/checkout/orders/{id}/authorize`, `/v2/payments/authorizations/{id}/capture|void`).
-  - Refund einer Capture (`/v2/payments/captures/{id}/refund`), idempotent per `PayPal-Request-Id`.
-  - `PayPalConnect` und `PayPalPayouts` bleiben unverändert (siehe [Weitere PayPal-Potenziale](#weitere-paypal-potenziale)).
-  - Abhängigkeit neu: `bookings --> paypal`. `accounting` und `onboarding` bleiben Altbestand.
-- **Später zusätzlich Payment SDK („Mit Karte / Google Pay zahlen“):** technisch möglich, beide Wege nebeneinander anzubieten. Beim Payment SDK ist Nuitee Merchant of Record, bei PayPal wir. Folgen:
-  - Zwei Preismodelle: SDK über `margin` (Provision von Nuitee ausgezahlt), PayPal über `margin: 0` + eigene Provision. Endpreise sollten gleich sein, sonst sieht der Nutzer je Zahlart einen anderen Preis; deshalb Angebote je Zahlart getrennt holen oder `margin` und Provision gleich setzen.
-  - Storno und Erstattung laufen je nach Weg bei Nuitee oder bei uns; die Reservierung merkt sich den Weg (`payment_method`).
-  - Rechtlich und steuerlich zwei Rollen gleichzeitig.
-- **Alternative zu zwei Anbietern:** Karte, Google Pay und Apple Pay auch über PayPal anbieten (PayPal JS SDK mit Card Fields und Wallet-Buttons). Dann bleibt es bei einem Merchant of Record, einem Preismodell und einer Abrechnung. Für den Hackathon reicht der PayPal-Button.
+- **Decision (2026-11-02):** the first payment method is PayPal via the existing module `paypal`, which is adapted and reused for this (no longer legacy code). We are merchant of record and keep a commission.
+- **Price:** rates with `margin: 0`, final price = net price + commission (`nfv.bookings.alternatives.fee-percent`, optional minimum amount). The max. price of the criteria applies to the final price. Choose the commission such that the final price is usually not above the `suggestedSellingPrice`.
+- **Flow with PayPal (Orders API v2, `intent=AUTHORIZE`):**
+  1. Prebook successful → `PayPalCheckout` creates an order over the final price (`reference` = id of the reservation, idempotent), the user approves at PayPal (`approveUrl`, return to the sub-route of the alternatives).
+  2. The backend authorises the payment (money reserved, not yet collected) and checks amount and currency.
+  3. Booking at LiteAPI with `ACC_CREDIT_CARD`.
+  4. Successful → capture of the authorisation, reservation `BOOKED`, create `Booking`. Failed (`2001`, price change) → release the authorisation (void), no money moved, no refund fee.
+  - If the flow aborts between 3 and 4, a poller (as with the top-up in `accounting`) reconciles reservations with authorisation via `clientReference` at LiteAPI and captures or releases. Authorisations expire after a few days, which is enough for the reconciliation.
+- **Several hotels of a plan (2026-11-11):** one order with one `purchase_unit` per hotel (`reference_id` = reservation), one approval, authorisation per unit, LiteAPI booking per hotel, capture only after the plan has changed the trip. If one hotel fails, the others are cancelled and all authorisations released (`bookings.PlanPayments`), see [incident-plans.md](incident-plans.md#one-click-execution).
+- **Cancellation of an alternative booked via the app:** LiteAPI refunds to our card according to the conditions, we refund via PayPal (refund of the capture). Whether to keep or refund the commission on cancellation: open.
+- **Adaptations to the module `paypal`** (stays a technical integration without domain knowledge, `PayPalModuleTest` still applies):
+  - Return and cancel URL per call instead of fixed configuration (`checkout-return-url` points to a removed page of `accounting`).
+  - `intent=AUTHORIZE` with authorize, capture and void of the authorisation (`/v2/checkout/orders/{id}/authorize`, `/v2/payments/authorizations/{id}/capture|void`).
+  - Refund of a capture (`/v2/payments/captures/{id}/refund`), idempotent via `PayPal-Request-Id`.
+  - `PayPalConnect` and `PayPalPayouts` stay unchanged (see [Further PayPal potential](#further-paypal-potential)).
+  - New dependency: `bookings --> paypal`. `accounting` and `onboarding` stay legacy code.
+- **Later additionally the payment SDK ("Pay with card / Google Pay"):** technically possible to offer both methods side by side. With the payment SDK Nuitee is merchant of record, with PayPal we are. Consequences:
+  - Two pricing models: SDK via `margin` (commission paid out by Nuitee), PayPal via `margin: 0` + own commission. Final prices should be the same, otherwise the user sees a different price per payment method; therefore fetch offers separately per payment method or set `margin` and commission equal.
+  - Cancellation and refund run at Nuitee or with us depending on the method; the reservation remembers the method (`payment_method`).
+  - Legally and fiscally two roles at the same time.
+- **Alternative to two providers:** also offer card, Google Pay and Apple Pay via PayPal (PayPal JS SDK with card fields and wallet buttons). Then it stays one merchant of record, one pricing model and one settlement. For the hackathon the PayPal button is enough.
 
-## Weitere PayPal-Potenziale
+## Further PayPal potential
 
-- Ideen, nicht beschlossen. Hinweise zu PayPal-Produkten aus allgemeinem Wissen, vor der Umsetzung in der PayPal-Doku prüfen.
-- **Schnelle Zahlung in der Notlage:** PayPal-Konto des Nutzers speichern (Vault), Alternative dann mit einem Tippen bezahlen, ohne Weiterleitung. Passt zum Use-Case abends an der Rezeption.
-- **Erstattung bei Storno:** Refund wie oben, auch automatisch, wenn LiteAPI eine Buchung storniert.
-- **Kosten teilen unter Mitreisenden:** Trips teilen ist offen ([domain.md](domain.md#offen)). Danach Anteil einer Buchung von Mitreisenden per PayPal einsammeln, Weiterleitung an den Buchenden über `PayPalPayouts` (gibt es schon).
-- **Bezahlte Funktionen:** z. B. Benachrichtigungen bei Incidents als Abo (PayPal Subscriptions). In [architecture.md](architecture.md#altbestand) schon als Idee für `accounting` genannt.
-- **Später bezahlen** (PayPal Pay Later / Ratenzahlung) für teure Alternativen, je nach Land verfügbar.
-- **Weitere Buchungstypen:** Transport und Aktivitäten (geplant) über denselben Checkout.
-- **Zahlung über KI-Assistenten:** MCP-Tools (`/mcp`) könnten eine Alternative vorschlagen und einen PayPal-Link zur Freigabe schicken; die Zahlung bestätigt der Nutzer immer selbst bei PayPal. PayPal bietet dafür eigene Agent-Werkzeuge an, zu prüfen.
-- **Gastdaten vorbelegen:** „Log in with PayPal“ (`PayPalConnect`) liefert Name und E-Mail; bewusst getrennt vom Login der App (`auth` bleibt isoliert).
+- Ideas, not decided. Notes on PayPal products from general knowledge, check in the PayPal docs before implementing.
+- **Fast payment in an emergency:** save the user's PayPal account (vault), then pay for an alternative with one tap, without redirect. Fits the use case in the evening at the reception.
+- **Refund on cancellation:** refund as above, also automatically if LiteAPI cancels a booking.
+- **Splitting costs among fellow travellers:** sharing trips is open ([domain.md](domain.md#open)). Afterwards collect a share of a booking from fellow travellers via PayPal, forwarding to the booker via `PayPalPayouts` (already exists).
+- **Paid features:** e.g. notifications for incidents as a subscription (PayPal Subscriptions). Already mentioned as an idea for `accounting` in [architecture.md](architecture.md#legacy-code).
+- **Pay later** (PayPal Pay Later / instalments) for expensive alternatives, available depending on the country.
+- **Further booking types:** transport and activities (planned) via the same checkout.
+- **Payment via AI assistants:** MCP tools (`/mcp`) could propose an alternative and send a PayPal link for approval; the user always confirms the payment themselves at PayPal. PayPal offers its own agent tools for this, to be checked.
+- **Prefill guest data:** "Log in with PayPal" (`PayPalConnect`) provides name and email; deliberately separate from the app's login (`auth` stays isolated).
 
-## Umsetzung im Modul `bookings`
+## Implementation in the module `bookings`
 
 - `bookings.logic`:
-  - `AlternativeCriteria` (Record) und `AlternativeSearch` (`@Service`): `criteriaFor(appUserId, bookingId)`, `search(appUserId, bookingId, criteria)`.
-  - `AlternativeRanking` (paketprivat): Anweisung und Schema für `StructuredExtraction`, wie `AccommodationExtractor`.
-  - `AlternativeReservations` (`@Service`): Prebook, Buchen, Abgleich, später Storno.
-  - LiteAPI-Client `LiteApiClient` (paketprivat oder `bookings.logic.liteapi`), `RestClient` direkt wie im Assistant, kein SDK. Liefert eigene Records, keine LiteAPI-Typen nach außen.
-- `bookings.config`: `@ConfigurationProperties` `nfv.bookings.alternatives.*`: `api-key` (`LITEAPI_API_KEY`, im Stack Docker Secret), `base-url`, `book-url`, `margin`, `default-radius`, `max-candidates`, `timeout`, `searches-per-hour` (je Nutzer).
-- **Abhängigkeiten:** wie bisher `bookings --> trips` (Eigentum, Stop) und `bookings --> assistant`, neu `bookings --> paypal`. LiteAPI kommt als externes System hinzu (System Context), PayPal ist dort schon. `assistant` bleibt ohne Fachwissen; neu ist nur der fachfreie Parameter `ReasoningEffort` an `StructuredExtraction.extract` (2026-11-10). Das Ranking zählt gegen dessen Limit je Nutzer.
-- **Alternative:** Wird LiteAPI später auch außerhalb von `bookings` gebraucht, den Client in ein technisches Modul wie `assistant` auslagern, das keine Fachmodule kennt.
+  - `AlternativeCriteria` (record) and `AlternativeSearch` (`@Service`): `criteriaFor(appUserId, bookingId)`, `search(appUserId, bookingId, criteria)`.
+  - `AlternativeRanking` (package-private): instruction and schema for `StructuredExtraction`, like `AccommodationExtractor`.
+  - `AlternativeReservations` (`@Service`): prebook, booking, reconciliation, later cancellation.
+  - LiteAPI client `LiteApiClient` (package-private or `bookings.logic.liteapi`), `RestClient` directly as in the assistant, no SDK. Returns own records, no LiteAPI types to the outside.
+- `bookings.config`: `@ConfigurationProperties` `nfv.bookings.alternatives.*`: `api-key` (`LITEAPI_API_KEY`, Docker secret in the stack), `base-url`, `book-url`, `margin`, `default-radius`, `max-candidates`, `timeout`, `searches-per-hour` (per user).
+- **Dependencies:** as before `bookings --> trips` (ownership, stop) and `bookings --> assistant`, new `bookings --> paypal`. LiteAPI is added as an external system (system context), PayPal is already there. `assistant` stays without domain knowledge; the only new thing is the domain-free parameter `ReasoningEffort` on `StructuredExtraction.extract` (2026-11-10). The ranking counts against its limit per user.
+- **Alternative:** if LiteAPI is later needed outside `bookings` as well, move the client into a technical module like `assistant` that knows no domain modules.
 
-## Persistenz
+## Persistence
 
-- **Suchergebnisse werden nicht gespeichert** (Preise und Angebote verfallen). Optional kurzer Cache im Speicher je Suche (wenige Minuten) für Details und Prebook.
-- **Neue Tabelle `booking_reservation`** (Flyway, nächste freie Version, laut [architecture.md](architecture.md#persistence) derzeit `V29`), eine Zeile je Buchungsversuch über LiteAPI:
-  - `stop_id` (FK), `replaces_booking_id` (FK auf `booking`, die nicht nutzbare Buchung, leer bei anderen Use-Cases), `booking_id` (FK, `UNIQUE`, leer bis gebucht), `hotel_id`, `offer_id`, `prebook_id`, `provider_booking_id`, `client_reference` (`UNIQUE`), `status` (`PREBOOKED`, `AUTHORIZED`, `BOOKED`, `FAILED`, `CANCELLED`), `net_price` laut Prebook, `fee`, `price` (Endpreis), `currency`, `payment_method` (`PAYPAL`, später `LITEAPI_SDK`), `paypal_order_id`, `paypal_authorization_id`, `paypal_capture_id`, `created_at`, `booked_at`.
-  - Zweck: Wiederaufnahme, wenn Zahlung erfolgte, die Antwort aber verloren ging (Abgleich über `clientReference`/`GET /bookings`), späteres Storno mit der LiteAPI-Id, Nachvollziehbarkeit gegenüber Nuitee.
-  - Innerhalb des Moduls, daher `@ManyToOne` zu `Booking` zulässig. Envers für Statuswechsel, `_aud` in derselben Migration.
-- `booking` und `booking_accommodation` bleiben unverändert. Die neue Buchung bringt Koordinaten mit, damit greift auch `location` (`V28`).
-- **Grund „nicht nutzbar“:** zunächst nur an der Reservierung (`reason` `VARCHAR(32)`), kein neuer `BookingStatus`. Ob die alte Buchung einen eigenen Status wie `UNUSABLE` braucht, ist offen.
+- **Search results are not stored** (prices and offers expire). Optionally a short in-memory cache per search (a few minutes) for details and prebook.
+- **New table `booking_reservation`** (Flyway, next free version, according to [architecture.md](architecture.md#persistence) currently `V29`), one row per booking attempt via LiteAPI:
+  - `stop_id` (FK), `replaces_booking_id` (FK to `booking`, the unusable booking, empty for other use cases), `booking_id` (FK, `UNIQUE`, empty until booked), `hotel_id`, `offer_id`, `prebook_id`, `provider_booking_id`, `client_reference` (`UNIQUE`), `status` (`PREBOOKED`, `AUTHORIZED`, `BOOKED`, `FAILED`, `CANCELLED`), `net_price` according to prebook, `fee`, `price` (final price), `currency`, `payment_method` (`PAYPAL`, later `LITEAPI_SDK`), `paypal_order_id`, `paypal_authorization_id`, `paypal_capture_id`, `created_at`, `booked_at`.
+  - Purpose: resumption if payment happened but the response was lost (reconciliation via `clientReference`/`GET /bookings`), later cancellation with the LiteAPI id, traceability towards Nuitee.
+  - Within the module, hence `@ManyToOne` to `Booking` is allowed. Envers for status changes, `_aud` in the same migration.
+- `booking` and `booking_accommodation` stay unchanged. The new booking brings coordinates, so `location` (`V28`) also applies.
+- **Reason "not usable":** initially only on the reservation (`reason` `VARCHAR(32)`), no new `BookingStatus`. Whether the old booking needs its own status like `UNUSABLE` is open.
 
-## API (Vorschlag)
+## API (proposal)
 
-- `GET /bookings/alternatives/status` (LiteAPI verfügbar? Assistant verfügbar?).
-- `GET /accommodation-bookings/{id}/alternative-criteria` → vorbefüllte Kriterien mit fehlenden Pflichtfeldern.
-- `POST /accommodation-bookings/{id}/alternative-searches` (Body: Kriterien) → geprüfte Treffer, Empfehlung, Begründungen.
-- `POST /accommodation-bookings/{id}/alternative-reservations` (Body: `offerId`) → Reservierung nach Prebook mit Endpreis und `approveUrl` der PayPal-Order.
-- `POST /booking-reservations/{id}/booking` (nach Rückkehr von PayPal) → autorisieren, bei LiteAPI buchen, capturen; liefert die neue `Booking`. Fehler: 422 `PAYMENT_NOT_APPROVED`/`PAYMENT_DECLINED` (wie in `accounting`).
-- `POST /stops/{stopId}/stay-reservations` (umgesetzt 2026-11-07): Reservierung ohne ersetzte Buchung für das Hotel eines Vorschlags des Agenten (`STOPOVER`, `TARGET_STAY` ohne gebuchte Unterkunft), gleicher Body wie `alternative-reservations`, PayPal kehrt auf `/reisen/{trip}/stops/{stopId}/unterkunft` zurück. Die neue Buchung hängt am Stop, siehe [advisor.md](advisor.md#übernachtung-übernehmen).
-- Später allgemein `POST /stops/{stopId}/accommodation-searches` für Use-Cases ohne bestehende Buchung, gleiche Kriterien.
-- Fehler über `BookingExceptionHandler`: 503 `ALTERNATIVES_UNAVAILABLE`, 409 `OFFER_EXPIRED` (LiteAPI `2001`), 409 `PRICE_EXCEEDED` (Prebook über Max. Preis), 429 `ALTERNATIVES_RATE_LIMITED`, 400 `INVALID_BOOKING_INPUT` (Kriterien unvollständig).
-- **MCP:** später lesend `find_alternative_accommodation`; Buchen bewusst nicht per MCP (Zahlung bestätigt der Nutzer bei PayPal).
+- `GET /bookings/alternatives/status` (LiteAPI available? Assistant available?).
+- `GET /accommodation-bookings/{id}/alternative-criteria` → prefilled criteria with missing required fields.
+- `POST /accommodation-bookings/{id}/alternative-searches` (body: criteria) → checked hits, recommendation, justifications.
+- `POST /accommodation-bookings/{id}/alternative-reservations` (body: `offerId`) → reservation after prebook with final price and `approveUrl` of the PayPal order.
+- `POST /booking-reservations/{id}/booking` (after returning from PayPal) → authorise, book at LiteAPI, capture; returns the new `Booking`. Errors: 422 `PAYMENT_NOT_APPROVED`/`PAYMENT_DECLINED` (as in `accounting`).
+- `POST /stops/{stopId}/stay-reservations` (implemented 2026-11-07): reservation without a replaced booking for the hotel of an agent proposal (`STOPOVER`, `TARGET_STAY` without a booked accommodation), same body as `alternative-reservations`, PayPal returns to `/reisen/{trip}/stops/{stopId}/unterkunft`. The new booking is attached to the stop, see [advisor.md](advisor.md#accepting-an-overnight-stay).
+- Later in general `POST /stops/{stopId}/accommodation-searches` for use cases without an existing booking, same criteria.
+- Errors via `BookingExceptionHandler`: 503 `ALTERNATIVES_UNAVAILABLE`, 409 `OFFER_EXPIRED` (LiteAPI `2001`), 409 `PRICE_EXCEEDED` (prebook above max. price), 429 `ALTERNATIVES_RATE_LIMITED`, 400 `INVALID_BOOKING_INPUT` (criteria incomplete).
+- **MCP:** later read-only `find_alternative_accommodation`; booking deliberately not via MCP (the user confirms payment at PayPal).
 
 ## Frontend
 
-- Button „Alternative suchen“ in den Buchungsdetails, Unterroute `buchungen/:bookingId/alternativen`.
-- Kriterien-Formular, Ergebnisliste mit Karte, „Mit PayPal bezahlen“ (Weiterleitung, Rückkehr auf die Unterroute). PayPal-Rückkehr braucht eine öffentliche URL, lokal per ngrok wie in [paypal.md](paypal.md#lokal-ohne-localhost-sandbox).
-- Später Payment SDK: Script von `payment-wrapper.liteapi.travel`, dafür CSP und Service Worker (nicht cachen) anpassen.
-- Mobil zuerst: typischer Fall ist abends vor der Rezeption.
+- Button "Search alternative" in the booking details, sub-route `buchungen/:bookingId/alternativen`.
+- Criteria form, result list with map, "Pay with PayPal" (redirect, return to the sub-route). The PayPal return needs a public URL, locally via ngrok as in [paypal.md](paypal.md#local-without-localhost-sandbox).
+- Later payment SDK: script from `payment-wrapper.liteapi.travel`, adapt CSP and service worker (do not cache) for it.
+- Mobile first: the typical case is in the evening in front of the reception.
 
-## Datenschutz und Recht
+## Privacy and legal
 
-- An LiteAPI: Koordinaten, Zeitraum, Belegung, bei Buchung Name und E-Mail von Buchendem und Gästen. An OpenAI: Fakten der bisherigen Unterkunft und der Kandidaten, keine Namen oder Kontaktdaten der Reisenden, keine Buchungsnummer. Hinweise im Frontend und in der Datenschutzerklärung.
-- Zahlung nur bei PayPal (bzw. im Payment SDK), Zahlungsdaten erreichen weder Backend noch Modell. An PayPal gehen Endpreis und eine Beschreibung ohne Gastdaten.
-- Mit PayPal sind wir Merchant of Record: wir verkaufen die Übernachtung weiter. Zu klären vor dem Live-Betrieb: Rolle als Vermittler oder Reiseverkäufer (Informationspflichten, AGB, Widerruf, Impressum), Steuern auf die Provision, Haftung bei Storno durch das Hotel. Für den Hackathon nur Sandbox.
+- To LiteAPI: coordinates, period, occupancy, on booking name and email of the booker and guests. To OpenAI: facts of the previous accommodation and of the candidates, no names or contact details of the travellers, no booking number. Notes in the frontend and in the privacy policy.
+- Payment only at PayPal (or in the payment SDK), payment data reaches neither backend nor model. PayPal receives the final price and a description without guest data.
+- With PayPal we are merchant of record: we resell the overnight stay. To be clarified before live operation: role as intermediary or travel seller (information obligations, terms and conditions, right of withdrawal, legal notice), taxes on the commission, liability on cancellation by the hotel. For the hackathon sandbox only.
 
 ## Tests
 
-- LiteAPI-Client, `StructuredExtraction` und `PayPalCheckout` in Integrationstests gemockt, `nfv.bookings.alternatives.api-key=` leer in den Test-Properties. Neue PayPal-Aufrufe in `PayPalClientTest` gegen `MockRestServiceServer`.
-- Zahlfälle: Buchung scheitert nach Autorisierung → Void, kein Capture; Abbruch zwischen Buchung und Capture → Poller captured; Capture doppelt → idempotent.
-- Fälle: Vorbefüllung (fehlende Gäste/Koordinaten, laufender Aufenthalt, anteiliger Preis), harte Prüfung verwirft zu teure, zu weit entfernte und Angebote unter den Mindeststernen (auch ohne Sterne), `starRating` an LiteAPI, Ranking verwirft fremde Ids, Assistant schließt nicht vergleichbare aus und bekommt die Profile, Suche ohne Assistant, Prebook über Max. Preis → `PRICE_EXCEEDED`, `2001` → `OFFER_EXPIRED`, Buchung idempotent über `clientReference`, neue Booking mit `source` `SEARCH`.
-- Manuell gegen die Sandbox (`sand_`-Key, Testkarten des Payment SDK).
+- LiteAPI client, `StructuredExtraction` and `PayPalCheckout` mocked in integration tests, `nfv.bookings.alternatives.api-key=` empty in the test properties. New PayPal calls in `PayPalClientTest` against `MockRestServiceServer`.
+- Payment cases: booking fails after authorisation → void, no capture; abort between booking and capture → poller captures; duplicate capture → idempotent.
+- Cases: prefill (missing guests/coordinates, stay in progress, proportional price), the hard check discards offers that are too expensive, too far away and below the minimum stars (also without stars), `starRating` to LiteAPI, ranking discards foreign ids, the assistant excludes non-comparable ones and gets the profiles, search without assistant, prebook above max. price → `PRICE_EXCEEDED`, `2001` → `OFFER_EXPIRED`, booking idempotent via `clientReference`, new booking with `source` `SEARCH`.
+- Manually against the sandbox (`sand_` key, test cards of the payment SDK).
 
-## Umsetzung (Stand 2026-11-03)
+## Implementation (as of 2026-11-03)
 
-- **Code:** `bookings.logic` `LiteApi` (Client, eigene Records), `AlternativeSearch` (Kriterien, harte Prüfung), `AlternativeRanking` (Assistant: Vergleich, Ausschluss, Rangfolge), `HotelProfiles` (Profile aus `/data/hotel`, Cache), `AlternativeReservations` (Ablauf) mit `ReservationSteps` (eine Transaktion je Schritt), `Pricing`, `SearchLimiter`; `bookings.api.AlternativeController`; `bookings.config.AlternativesProperties` (`nfv.bookings.alternatives.*`); Frontend `src/bookings/AlternativesSheet.tsx`.
-- **Zahlung nur PayPal** (Entscheidung 2026-11-03), kein Payment SDK. Buchung bei LiteAPI immer mit `ACC_CREDIT_CARD`, Rates und Prebook mit `margin: 0`.
-- **Provision:** `fee-percent` (Standard 10 %) auf den Nettopreis, gedeckelt auf den `suggestedSellingPrice`, falls der über dem Nettopreis liegt. Der Max. Preis gilt für den Endpreis.
-- **Status** der Reservierung: `PREBOOKED`, `PAYMENT_PENDING` (Order angelegt), `AUTHORIZED`, `PROVIDER_BOOKED` (bei LiteAPI gebucht, Geld noch nicht eingezogen), `BOOKED`, `FAILED`.
-- **Wiederaufnahme:** `POST /booking-reservations/{id}/booking` setzt beim letzten gespeicherten Schritt fort und ist wiederholbar (PayPal-Request-Ids, `clientReference` `nfv-stay-<id>`). Seit 2026-11-06 macht das auch ein Job im Hintergrund, `4005` wird über die Suche nach der `clientReference` aufgelöst, ein abgelehnter Capture führt zu `NEEDS_ATTENTION`, siehe [paypal.md](paypal.md#stabilität).
-- **Fehler von LiteAPI:** einen Code `2001` gibt es laut Referenz nicht. Jede 4xx-Antwort auf Prebook oder Book (außer 401/403) ist `OFFER_UNAVAILABLE`, 5xx und Netzwerkfehler `ALTERNATIVES_UNAVAILABLE`.
-- **Gäste:** LiteAPI braucht je Zimmer einen Gast; eingetragen wird der Buchende für jedes Zimmer. Gästezahl wird gleichmäßig auf die Zimmer verteilt (`Pricing.adultsPerRoom`).
-- **Hotel und Gastdaten** stehen in der Reservierung (Tabelle `booking_reservation`, `V30`), nicht historisiert. Gastdaten werden bei `BOOKED` oder `FAILED` gelöscht. Hotel-Daten kommen aus `GET /data/hotel`, Check-in/Check-out-Zeiten daraus, sonst 15:00/11:00.
-- **Grund** („falsch gebucht“ usw.) wird nicht gespeichert. Die bisherige Buchung wird nur auf Wunsch in der App als storniert markiert (`POST /bookings/{id}/cancellation`).
-- **Storno** einer gebuchten Alternative mit PayPal-Erstattung seit 2026-11-06 ([paypal.md](paypal.md#stabilität)). Die Provision wird bei kostenlosem Storno mit erstattet.
-- **Zahlung im Sheet** per PayPal-Button statt Weiterleitung ([paypal.md](paypal.md#paypal-button-im-sheet)). Gastdaten merkt sich das Gerät (`localStorage`), sind sie vollständig, geht es nach der Wahl eines Angebots direkt zur Zahlung. Sind die Kriterien aus der Buchung vollständig, sucht das Sheet sofort, das Formular gibt es nur unter „Suche anpassen“.
-- **Nicht umgesetzt:** Abgleich per `GET /bookings/{id}`, MCP-Tools, Ausschluss der bisherigen Unterkunft über ähnliche Namen (nur über `placeRef` und die Markierung „möglicherweise die bisherige Unterkunft“ bis 50 m).
-- **Lokal ausprobieren:** `LITEAPI_API_KEY` (Sandbox-Key `sand_…`), `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` (Sandbox), Frontend über ngrok (PayPal akzeptiert `localhost` nicht als Return-URL), siehe [paypal.md](paypal.md#lokal-ohne-localhost-sandbox). `OPENAI_API_KEY` optional für das Ranking. Im Stack Docker Secret `nfv_liteapi_api_key`, siehe [deployment.md](deployment.md).
+- **Code:** `bookings.logic` `LiteApi` (client, own records), `AlternativeSearch` (criteria, hard check), `AlternativeRanking` (assistant: comparison, exclusion, ranking), `HotelProfiles` (profiles from `/data/hotel`, cache), `AlternativeReservations` (flow) with `ReservationSteps` (one transaction per step), `Pricing`, `SearchLimiter`; `bookings.api.AlternativeController`; `bookings.config.AlternativesProperties` (`nfv.bookings.alternatives.*`); frontend `src/bookings/AlternativesSheet.tsx`.
+- **Payment only PayPal** (decision 2026-11-03), no payment SDK. Booking at LiteAPI always with `ACC_CREDIT_CARD`, rates and prebook with `margin: 0`.
+- **Commission:** `fee-percent` (default 10 %) on the net price, capped at the `suggestedSellingPrice` if that is above the net price. The max. price applies to the final price.
+- **Status** of the reservation: `PREBOOKED`, `PAYMENT_PENDING` (order created), `AUTHORIZED`, `PROVIDER_BOOKED` (booked at LiteAPI, money not yet collected), `BOOKED`, `FAILED`.
+- **Resumption:** `POST /booking-reservations/{id}/booking` continues at the last stored step and can be repeated (PayPal request ids, `clientReference` `nfv-stay-<id>`). Since 2026-11-06 a background job does this too, `4005` is resolved via the search for the `clientReference`, a declined capture leads to `NEEDS_ATTENTION`, see [paypal.md](paypal.md#stability).
+- **Errors from LiteAPI:** according to the reference there is no code `2001`. Every 4xx response to prebook or book (except 401/403) is `OFFER_UNAVAILABLE`, 5xx and network errors `ALTERNATIVES_UNAVAILABLE`.
+- **Guests:** LiteAPI needs one guest per room; the booker is entered for every room. The number of guests is distributed evenly across the rooms (`Pricing.adultsPerRoom`).
+- **Hotel and guest data** are stored in the reservation (table `booking_reservation`, `V30`), not historised. Guest data is deleted on `BOOKED` or `FAILED`. Hotel data comes from `GET /data/hotel`, check-in/check-out times from there, otherwise 15:00/11:00.
+- **Reason** ("booked wrongly" etc.) is not stored. The previous booking is only marked as cancelled in the app on request (`POST /bookings/{id}/cancellation`).
+- **Cancellation** of a booked alternative with PayPal refund since 2026-11-06 ([paypal.md](paypal.md#stability)). The commission is refunded as well for a free cancellation.
+- **Payment in the sheet** via the PayPal button instead of redirect ([paypal.md](paypal.md#paypal-button-in-the-sheet)). The device remembers guest data (`localStorage`), if it is complete, choosing an offer leads directly to payment. If the criteria from the booking are complete, the sheet searches immediately, the form only exists under "Adjust search".
+- **Not implemented:** reconciliation via `GET /bookings/{id}`, MCP tools, exclusion of the previous accommodation via similar names (only via `placeRef` and the marker "possibly the previous accommodation" up to 50 m).
+- **Trying it locally:** `LITEAPI_API_KEY` (sandbox key `sand_…`), `PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` (sandbox), frontend via ngrok (PayPal does not accept `localhost` as return URL), see [paypal.md](paypal.md#local-without-localhost-sandbox). `OPENAI_API_KEY` optional for the ranking. In the stack Docker secret `nfv_liteapi_api_key`, see [deployment.md](deployment.md).
 
-## Route nach dem Umbuchen
+## Route after rebooking
 
-- **Ausgangslage:** Routen laufen von Stop zu Stop über die Koordinaten der Stops (`RoutePlanning`), die Unterkunft spielt dafür keine Rolle. Liegt die Alternative im selben Ort, ändert sich an der Route nichts.
-- **Anderer Ort:** mehr als 10 km vom Stop (`trips.logic.StayPlaces.OTHER_PLACE_METERS`, Luftlinie). Nach der Buchung (`AlternativeReservations.followStay`, auch im Hintergrund-Job) zieht der Stop zum Hotel (`TripEditing.moveStopToStay`):
-  - Koordinaten des Hotels, Name = Ort des Hotels laut LiteAPI (`city` aus `GET /data/hotel`, wird nicht in der Reservierung gespeichert). Ohne Ort bleibt der Name. Ein Stop ohne Koordinaten bekommt nur die Koordinaten und behält seinen Namen.
-  - Wegpunkte aus Vorschlägen (`SUGGESTION`) der Routen zum und vom Stop fallen weg, sie führen zum alten Ort. Wegpunkte des Nutzers (`USER`) bleiben. Beide Routen werden neu geplant (schnellster Weg), Incidents bewerten sie danach wie gewohnt.
-  - Scheitert das Verschieben, bleibt die Buchung bestehen (nur Log).
-- **Antwort:** `ReservationDto.replannedRouteIds` nennt die neu geplanten Routen, nur in der Antwort, die gebucht hat (nicht gespeichert). Bucht der Hintergrund-Job, ist die Liste leer; der Stop ist trotzdem verschoben.
-- **Frontend:** Bei „Umgebucht“ steht „Der Stop liegt jetzt in …, die Route wurde neu geplant“. Liefern die Vorschläge für eine Route mehr als eine Option, gibt es den Knopf „Route … wählen“ zum bestehenden RouteSheet, sonst wird nichts gefragt.
+- **Starting point:** routes run from stop to stop via the coordinates of the stops (`RoutePlanning`), the accommodation plays no role for this. If the alternative is in the same place, nothing changes on the route.
+- **Other place:** more than 10 km from the stop (`trips.logic.StayPlaces.OTHER_PLACE_METERS`, straight line). After booking (`AlternativeReservations.followStay`, also in the background job) the stop moves to the hotel (`TripEditing.moveStopToStay`):
+  - Coordinates of the hotel, name = place of the hotel according to LiteAPI (`city` from `GET /data/hotel`, not stored in the reservation). Without a place the name stays. A stop without coordinates only gets the coordinates and keeps its name.
+  - Waypoints from suggestions (`SUGGESTION`) of the routes to and from the stop are dropped, they lead to the old place. Waypoints of the user (`USER`) stay. Both routes are replanned (fastest way), incidents then assess them as usual.
+  - If moving fails, the booking remains (log only).
+- **Response:** `ReservationDto.replannedRouteIds` names the replanned routes, only in the response that booked (not stored). If the background job books, the list is empty; the stop is moved anyway.
+- **Frontend:** for "Rebooked" it says "The stop is now in …, the route has been replanned". If the suggestions for a route return more than one option, there is the button "Choose route …" to the existing RouteSheet, otherwise nothing is asked.
 
-## Route vor dem Buchen prüfen
+## Checking the route before booking
 
-- `GET /booking-reservations/{id}/route-check`, aufgerufen im Zahlschritt (nach dem Prebook, vor PayPal), berechnet und nicht gespeichert (`bookings.logic.StayRouteCheck`).
-- Nur bei anderem Ort: bester Weg von der Abfahrt am vorigen Stop zum Hotel (`recommendations.Suggestions.towards`: ohne Wegpunkte, ohne Referenz, Incidents wie bei der Planung). Ergebnis: Ankunft inkl. Verzögerung, spätester Check-in (`checkInUntil` des Hotels am Anreisetag in der Zeitzone des Hotels, Mitternacht gilt als unbekannt), `late`, `blocked` (auch der beste Weg führt durch eine Sperrung).
-- Ohne Prüfung (`problem`): erster Stop (`FIRST_STOP`), Abfahrt schon vorbei (`UNDER_WAY`, z. B. vor Ort), fehlende Abfahrt/Koordinaten, kein Weg, kein Graph. Dann zeigt die App nur den Hinweis auf den Ortswechsel.
-- Nur ein Hinweis im Zahlschritt („Anderer Ort“, Ankunft, Warnung), Buchen bleibt möglich. Geprüft wird nur die gewählte Unterkunft, nicht die ganze Ergebnisliste (Routing je Kandidat wäre zu langsam).
-- Neue Abhängigkeit `bookings --> recommendations` (kein Zyklus, `recommendations` kennt `bookings` nicht).
+- `GET /booking-reservations/{id}/route-check`, called in the payment step (after prebook, before PayPal), calculated and not stored (`bookings.logic.StayRouteCheck`).
+- Only for another place: best way from the departure at the previous stop to the hotel (`recommendations.Suggestions.towards`: without waypoints, without reference, incidents as in planning). Result: arrival incl. delay, latest check-in (`checkInUntil` of the hotel on the arrival day in the hotel's time zone, midnight counts as unknown), `late`, `blocked` (even the best way leads through a closure).
+- Without a check (`problem`): first stop (`FIRST_STOP`), departure already passed (`UNDER_WAY`, e.g. on site), missing departure/coordinates, no way, no graph. Then the app only shows the note about the change of place.
+- Only a note in the payment step ("Other place", arrival, warning), booking remains possible. Only the chosen accommodation is checked, not the whole result list (routing per candidate would be too slow).
+- New dependency `bookings --> recommendations` (no cycle, `recommendations` does not know `bookings`).
 
-## Offene Punkte
+## Open points
 
-- Live-Key und Freischaltung bei Nuitee, Karte im LiteAPI-Konto für `ACC_CREDIT_CARD`.
-- Höhe der Provision, PayPal-Gebühren (wer trägt sie, in die Provision einrechnen), Provision bei Storno.
-- Max. Preis: Gesamtpreis oder pro Nacht, Aufschlag auf den bisherigen Preis als Standard (z. B. +20 %)? Bisherige Buchung schon bezahlt, daher ist der Preis der Alternative zusätzlich.
-- Kinder und Alter, `guestNationality` (Profil oder Gerät), Sprache der Hotel-Daten.
-- Status der nicht nutzbaren Buchung (`CANCELLED` oder eigener Status) und ob sie in der Stop-Liste sichtbar bleibt.
-- Webhooks von LiteAPI für Statusänderungen prüfen; bis dahin Abgleich per `GET /bookings/{id}` beim Öffnen.
-- Weitere Use-Cases: anderer Ort (Region aus anderem Stop), Empfehlung bei nicht rechtzeitig fahrbarer Route (Modul `advisor`, Schnittstelle `StayOptions`, siehe [advisor.md](advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft)), Bezug zu Incidents an Unterkünften.
+- Live key and activation at Nuitee, card in the LiteAPI account for `ACC_CREDIT_CARD`.
+- Amount of the commission, PayPal fees (who bears them, include them in the commission), commission on cancellation.
+- Max. price: total price or per night, markup on the previous price as default (e.g. +20 %)? The previous booking is already paid, so the price of the alternative is additional.
+- Children and age, `guestNationality` (profile or device), language of the hotel data.
+- Status of the unusable booking (`CANCELLED` or its own status) and whether it stays visible in the stop list.
+- Check LiteAPI webhooks for status changes; until then reconciliation via `GET /bookings/{id}` when opening.
+- Further use cases: other place (region from another stop), recommendation when a route cannot be driven in time (module `advisor`, interface `StayOptions`, see [advisor.md](advisor.md#later-accommodations-and-message-to-the-accommodation)), relation to incidents at accommodations.

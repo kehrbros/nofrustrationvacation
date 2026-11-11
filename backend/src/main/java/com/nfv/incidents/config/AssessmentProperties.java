@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import java.time.Duration;
 
 /**
- * Rules of the assessment of consequences, see Docs/consequence-assessment.md#konfiguration.
+ * Rules of the assessment of consequences, see Docs/consequence-assessment.md#configuration.
  *
  * @param noImpactBelow  own delay below this: {@code NO_IMPACT}
  * @param maxWait        a closure needing a longer wait counts as not passable

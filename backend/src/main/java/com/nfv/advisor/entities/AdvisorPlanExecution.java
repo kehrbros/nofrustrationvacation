@@ -11,7 +11,7 @@ import lombok.Getter;
 import java.time.OffsetDateTime;
 
 /**
- * A plan the user takes, see Docs/incident-plans.md#ausführen-mit-einem-klick. Keeps a copy of the plan: a night on
+ * A plan the user takes, see Docs/incident-plans.md#one-click-execution. Keeps a copy of the plan: a night on
  * the way splits the route, the run and its proposals go with it. Route and run are by id without a foreign key for
  * the same reason.
  */

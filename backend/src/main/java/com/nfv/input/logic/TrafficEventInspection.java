@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.OffsetDateTime;
 import java.util.Optional;
 
-/** What became of an event of a source, for diagnosis, see Docs/traffic-feed.md#testquelle-manual. */
+/** What became of an event of a source, for diagnosis, see Docs/traffic-feed.md#test-source-manual. */
 @Component
 @RequiredArgsConstructor
 public class TrafficEventInspection {

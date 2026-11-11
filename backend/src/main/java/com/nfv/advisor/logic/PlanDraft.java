@@ -21,7 +21,7 @@ import java.util.stream.IntStream;
 
 /**
  * A plan as {@code compose_plan} computed it, before the model adds its reason, see
- * Docs/incident-plans.md#bausteine-und-compose_plan.
+ * Docs/incident-plans.md#building-blocks-and-tools.
  *
  * @param departureAt departure of the first drive
  * @param arrivalAt   at the target (the new one with {@code NEW_TARGET}), null if it is not reached

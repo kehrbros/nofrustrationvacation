@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-/** Order of other targets, see Docs/incident-plans.md#regeln. */
+/** Order of other targets, see Docs/incident-plans.md#rules. */
 class DestinationsTest {
     private static final GeoPoint QUEENSTOWN = new GeoPoint(-45.0312, 168.6626);
 

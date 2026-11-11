@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-/** Drops, ranks and labels evaluated candidates, see Docs/recommendations.md#bewertung-aussortieren-ranking. */
+/** Drops, ranks and labels evaluated candidates, see Docs/recommendations.md#assessment-filtering-ranking. */
 @Component
 @RequiredArgsConstructor
 class SuggestionRanker {

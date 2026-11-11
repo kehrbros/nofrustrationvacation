@@ -1,6 +1,6 @@
 package com.nfv.incidents.entities;
 
-/** How the passage of a route hits an incident, see Docs/consequence-assessment.md#toleranz-der-durchfahrt-beschlossen-2026-11-04. */
+/** How the passage of a route hits an incident, see Docs/consequence-assessment.md#passage-tolerance-decided-2026-11-04. */
 public enum MatchKind {
     /** The planned passage falls into the incident. */
     DIRECT,

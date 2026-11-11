@@ -22,7 +22,7 @@ import java.util.concurrent.Semaphore;
 
 /**
  * Profiles of LiteAPI hotels (stars, kind, description, facilities) for the comparison by the assistant, see
- * Docs/accommodation-alternatives.md#rollen-assistant-und-liteapi. Master data barely changes, so they are kept in
+ * Docs/accommodation-alternatives.md#roles-assistant-and-liteapi. Master data barely changes, so they are kept in
  * memory for a day; a search loads the missing ones in parallel. A hotel whose profile cannot be loaded is left out
  * of the map, the comparison then works with the facts of the offer.
  */

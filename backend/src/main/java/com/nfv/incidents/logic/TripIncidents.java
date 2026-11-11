@@ -142,7 +142,7 @@ public class TripIncidents {
     }
 
     /**
-     * Ranking within a trip, see Docs/consequence-assessment.md#rangfolge: {@code TOO_LATE} by lateness at the
+     * Ranking within a trip, see Docs/consequence-assessment.md#ranking: {@code TOO_LATE} by lateness at the
      * deadline (not passable first), {@code DELAYED} by own delay, both descending, {@code NO_IMPACT} by passage;
      * ties by earlier passage. Not yet assessed last.
      */

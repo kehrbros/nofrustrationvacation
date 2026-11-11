@@ -8,7 +8,7 @@ import java.time.ZoneId;
 import java.util.Map;
 import java.util.Objects;
 
-/** Regions of the road network, see Docs/network.md#konfiguration. */
+/** Regions of the road network, see Docs/network.md#configuration. */
 @ConfigurationProperties("nfv.network")
 public record NetworkProperties(boolean importOnStart, Map<String, Region> regions) {
     public NetworkProperties {

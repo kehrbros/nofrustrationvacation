@@ -14,7 +14,7 @@ import java.util.stream.Stream;
 
 /**
  * Starting point of suggestions: points, departure, restrictions in the network and the planned route. Planning and
- * incidents only differ in how it is built ({@link ScenarioFactory}), see Docs/recommendations.md#szenario-recommendationslogic.
+ * incidents only differ in how it is built ({@link ScenarioFactory}), see Docs/recommendations.md#scenario-recommendationslogic.
  *
  * @param vias              waypoints of the user, empty with {@code IGNORE}
  * @param constraints       blocked and delayed segments for routing, none when planning

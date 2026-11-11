@@ -1,6 +1,6 @@
 package com.nfv.recommendations.logic;
 
-/** What suggestions are computed for, see Docs/recommendations.md#szenario-recommendationslogic. */
+/** What suggestions are computed for, see Docs/recommendations.md#scenario-recommendationslogic. */
 public enum SuggestionTrigger {
     /** The user opened the route. */
     PLANNING,

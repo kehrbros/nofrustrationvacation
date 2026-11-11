@@ -23,7 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A step of a plan as the backend computed it, see Docs/incident-plans.md#datenmodell. Which fields are set depends
+ * A step of a plan as the backend computed it, see Docs/incident-plans.md#data-model-v50. Which fields are set depends
  * on {@link #kind}.
  */
 @Getter

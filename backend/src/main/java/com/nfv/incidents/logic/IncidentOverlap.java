@@ -11,8 +11,8 @@ import java.util.Optional;
 
 /**
  * Whether an incident affects a passage, shared by {@code ConsequenceMatcher} and the evaluation of route suggestions,
- * see Docs/recommendations.md#bewertung-aussortieren-ranking. The validity {@code [validFrom, validTo]} is the
- * envelope; an incident with time windows applies only within them, see Docs/traffic-feed.md#zeitfenster.
+ * see Docs/recommendations.md#assessment-filtering-ranking. The validity {@code [validFrom, validTo]} is the
+ * envelope; an incident with time windows applies only within them, see Docs/traffic-feed.md#time-windows.
  */
 public final class IncidentOverlap {
     private IncidentOverlap() {

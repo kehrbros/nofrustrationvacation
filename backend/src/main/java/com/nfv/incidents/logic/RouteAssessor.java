@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Assessment of one route as a pure function, see Docs/consequence-assessment.md#verzögerung-je-consequence:
+ * Assessment of one route as a pure function, see Docs/consequence-assessment.md#delay-per-consequence:
  * sections in driving order, each incident on them once (first section it hits), delays accumulate as {@code shift}
  * and move the passage of all later sections.
  * <ul>

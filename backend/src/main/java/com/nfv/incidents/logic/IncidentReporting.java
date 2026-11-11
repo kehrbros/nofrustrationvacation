@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 /**
  * Entry point for incidents reported by sources ({@code input}): locates them on road segments and creates or changes
- * the incident, see Docs/traffic-feed.md#verarbeitung-trafficeventprocessor.
+ * the incident, see Docs/traffic-feed.md#processing-trafficeventprocessor.
  * <ul>
  *     <li>point: segments within {@code nfv.incidents.point-radius-meters} with the road number</li>
  *     <li>lines: map matching, with the road number</li>

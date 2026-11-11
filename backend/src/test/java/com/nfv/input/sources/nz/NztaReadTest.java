@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** NztaSource.read over all 197 events of the sample, field table and type rules of Docs/traffic-feed.md#erste-quelle-nzta. */
+/** NztaSource.read over all 197 events of the sample, field table and type rules of Docs/traffic-feed.md#first-source-nzta. */
 class NztaReadTest {
     private static NztaSource source;
     private static Map<String, String> payloads;

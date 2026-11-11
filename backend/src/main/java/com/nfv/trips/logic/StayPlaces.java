@@ -4,7 +4,7 @@ import jakarta.annotation.Nullable;
 
 /**
  * Whether a new accommodation of a stop lies in another place, so the stop and its routes follow it, see
- * Docs/accommodation-alternatives.md#route-nach-dem-umbuchen. Routes run from stop to stop; within the same place the
+ * Docs/accommodation-alternatives.md#route-after-rebooking. Routes run from stop to stop; within the same place the
  * accommodation does not change them.
  */
 public final class StayPlaces {

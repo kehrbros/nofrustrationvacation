@@ -49,7 +49,7 @@ import java.util.Set;
 
 /**
  * One run of the agent: asks the model, which calls the tools and ends with {@code submit_proposals}, and stores the
- * proposals, see Docs/advisor.md#ablauf. The model picks and explains, all numbers come from the backend. Without the
+ * proposals, see Docs/advisor.md#flow. The model picks and explains, all numbers come from the backend. Without the
  * model the best calculated options are stored without reasons. No transaction around the model or routing.
  */
 @Slf4j

@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * Way a generator proposes: one route result per leg (start → via → … → end), see
- * Docs/recommendations.md#generatoren.
+ * Docs/recommendations.md#generators.
  */
 record Candidate(OptionKind kind, List<RouteResult> legs, OffsetDateTime departure) {
     double distanceMeters() {

@@ -21,7 +21,7 @@ public class ApiSecurityConfig {
     public SecurityFilterChain apiSecurityFilterChain(HttpSecurity http, AppUserJwtAuthenticationConverter jwtConverter) throws Exception {
         http.securityMatcher("/api/**")
                 .authorizeHttpRequests(authorize -> authorize
-                        // test tools, they can affect the routes of every user (Docs/traffic-feed.md#testquelle-manual)
+                        // test tools, they can affect the routes of every user (Docs/traffic-feed.md#test-source-manual)
                         .requestMatchers("/api/v1/test/**").hasRole("tester")
                         .anyRequest().authenticated())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

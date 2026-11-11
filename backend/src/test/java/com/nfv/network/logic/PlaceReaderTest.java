@@ -8,7 +8,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** See Docs/network.md#orte. */
+/** See Docs/network.md#places. */
 class PlaceReaderTest {
     @Test
     void readsNamedCitiesTownsAndVillagesFromNodes() {

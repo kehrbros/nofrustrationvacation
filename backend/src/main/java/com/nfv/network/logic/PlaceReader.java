@@ -13,7 +13,7 @@ import java.util.List;
 
 /**
  * Reads the places of an OSM extract in a pass of its own, GraphHopper keeps no nodes of its import, see
- * Docs/network.md#orte. Only nodes: a place mapped only as a way or relation is not found.
+ * Docs/network.md#places. Only nodes: a place mapped only as a way or relation is not found.
  */
 final class PlaceReader {
     private PlaceReader() {

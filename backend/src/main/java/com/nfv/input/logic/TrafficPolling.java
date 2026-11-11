@@ -18,7 +18,7 @@ import java.util.random.RandomGenerator;
 
 /**
  * Polls all enabled {@code TRAFFIC_FEED} sources, each on its own schedule ({@link PollPolicy}), and hands the result
- * to {@link FeedDiff}, see Docs/traffic-feed.md#abruf-trafficpolling. The fetch runs outside a transaction; a failed
+ * to {@link FeedDiff}, see Docs/traffic-feed.md#polling-trafficpolling. The fetch runs outside a transaction; a failed
  * fetch changes nothing stored and backs off.
  */
 @Component

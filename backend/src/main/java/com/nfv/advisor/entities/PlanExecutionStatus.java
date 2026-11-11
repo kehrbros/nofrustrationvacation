@@ -1,6 +1,6 @@
 package com.nfv.advisor.entities;
 
-/** Where taking a plan stands, see Docs/incident-plans.md#ausführen-mit-einem-klick. */
+/** Where taking a plan stands, see Docs/incident-plans.md#one-click-execution. */
 public enum PlanExecutionStatus {
     /** Hotels prebooked, the user approves at PayPal. */
     AWAITING_PAYMENT,

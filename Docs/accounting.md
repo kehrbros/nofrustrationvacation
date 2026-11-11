@@ -1,61 +1,61 @@
-# Abrechnung
+# Accounting
 
-- **Modul `com.nfv.accounting`:** fachliche Abrechnung (Konten, Buchungen, Einzahlung, Auszahlung). Altbestand aus Nfv, Verwendung in der Reise-App offen, siehe [architecture.md](architecture.md#altbestand). Die Frontend-Seiten dazu (Guthaben, Einnahmen, Auszahlungskonto) sind entfernt. Nutzt `com.nfv.paypal` für die Zahlungen, siehe [paypal.md](paypal.md). Beträge immer `Money` in USD, siehe [money.md](money.md).
+- **Module `com.nfv.accounting`:** domain accounting (accounts, ledger entries, top-up, payout). Legacy code from Nfv, use in the travel app undecided, see [architecture.md](architecture.md#legacy-code). The frontend pages for it (credit, earnings, payout account) have been removed. Uses `com.nfv.paypal` for payments, see [paypal.md](paypal.md). Amounts are always `Money` in USD, see [money.md](money.md).
 
-## Konten und Buchungen
+## Accounts and ledger entries
 
-- **Zwei Konten je Nutzer** (`Account`, Tabelle `accounting_account`, eindeutig je `app_user_id` und `type`):
-  - `CREDIT` (Guthaben, Consumer): per PayPal aufgeladen, **nicht auszahlbar**.
-  - `EARNINGS` (Einnahmen, Provider): per PayPal auszahlbar.
-  - Grund für die Trennung: eingezahltes Geld soll nicht direkt wieder ausgezahlt werden können (Gebühren, Geldwäsche-Risiko).
-- **Ersetzt `app_user.account_balance`:** `V11__accounting.sql` übernimmt vorhandene Guthaben als `CREDIT` mit Buchung `OPENING_BALANCE` und löscht die Spalte. `GET /api/v1/users/me` liefert kein `accountBalance` mehr, Kontostände kommen aus `GET /api/v1/accounting/balances`.
-- **Buchungen** (`LedgerEntry`): nur anhängen, nie ändern; Summe der Buchungen = Kontostand. Typen: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` zeigt auf Aufladung oder Auszahlung. `USAGE_CHARGE`/`USAGE_EARNING` stammen aus dem entfernten Markt (Referenz: Vereinbarung) und bleiben nur für vorhandene Buchungen.
-- **`AccountLedger`:** `credit`/`debit` nur innerhalb einer Transaktion (`MANDATORY`). Der Kontostand ändert sich mit einem atomaren `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: keine verlorenen Updates, nie negativ, keine Locks (Test mit parallelen Abbuchungen). Zusätzlich DB-Constraint `type = 'CREDIT' OR balance >= 0` (`V14__credit_may_go_negative.sql`, für die entfernte Nutzungsabrechnung, die `CREDIT` ins Minus buchen durfte).
+- **Two accounts per user** (`Account`, table `accounting_account`, unique per `app_user_id` and `type`):
+  - `CREDIT` (credit, consumer): topped up via PayPal, **not withdrawable**.
+  - `EARNINGS` (earnings, provider): withdrawable via PayPal.
+  - Reason for the separation: deposited money should not be withdrawable again directly (fees, money laundering risk).
+- **Replaces `app_user.account_balance`:** `V11__accounting.sql` takes over existing balances as `CREDIT` with entry `OPENING_BALANCE` and drops the column. `GET /api/v1/users/me` no longer returns `accountBalance`, balances come from `GET /api/v1/accounting/balances`.
+- **Ledger entries** (`LedgerEntry`): append only, never change; sum of entries = balance. Types: `TOP_UP`, `PAYOUT`, `PAYOUT_REVERSAL`, `USAGE_CHARGE`, `USAGE_EARNING`, `OPENING_BALANCE`. `referenceId` points to the top-up or payout. `USAGE_CHARGE`/`USAGE_EARNING` come from the removed market (reference: agreement) and remain only for existing entries.
+- **`AccountLedger`:** `credit`/`debit` only within a transaction (`MANDATORY`). The balance changes with an atomic `UPDATE … SET balance = balance + :delta WHERE … AND balance + :delta >= 0`: no lost updates, never negative, no locks (test with parallel debits). Additionally DB constraint `type = 'CREDIT' OR balance >= 0` (`V14__credit_may_go_negative.sql`, for the removed usage billing, which was allowed to book `CREDIT` into the negative).
 
-## Auszahlungskonto verknüpfen (Provider)
+## Linking the payout account (provider)
 
-- `PayoutAccount` (auditiert): `payer_id` von PayPal, E-Mail, verifiziert ja/nein. Ein PayPal-Konto gehört höchstens zu einem Nutzer (`PAYPAL_ACCOUNT_IN_USE`).
-- Ablauf:
-  1. `POST /api/v1/accounting/payout-account/paypal/authorization` → zufälliger `state` (32 Byte) wird für den Nutzer gespeichert, Antwort ist die PayPal-Login-URL.
-  2. PayPal leitet auf `/paypal/connected?code=…&state=…` (Frontend) zurück.
-  3. `POST /api/v1/accounting/payout-account/paypal {code, state}`: `state` muss vom selben Nutzer sein, ist 15 min gültig (`link-state-ttl`) und nur einmal verwendbar (CSRF-Schutz). Danach Code gegen Kontodaten tauschen.
-- `DELETE /api/v1/accounting/payout-account` trennt, solange keine Auszahlung offen ist (`PAYOUTS_OPEN`).
+- `PayoutAccount` (audited): `payer_id` from PayPal, email, verified yes/no. A PayPal account belongs to at most one user (`PAYPAL_ACCOUNT_IN_USE`).
+- Flow:
+  1. `POST /api/v1/accounting/payout-account/paypal/authorization` → a random `state` (32 bytes) is stored for the user, the response is the PayPal login URL.
+  2. PayPal redirects back to `/paypal/connected?code=…&state=…` (frontend).
+  3. `POST /api/v1/accounting/payout-account/paypal {code, state}`: `state` must belong to the same user, is valid for 15 min (`link-state-ttl`) and can be used only once (CSRF protection). Then exchange the code for account data.
+- `DELETE /api/v1/accounting/payout-account` unlinks as long as no payout is open (`PAYOUTS_OPEN`).
 
-## Einzahlung (Consumer)
+## Top-up (consumer)
 
-1. `POST /api/v1/accounting/top-ups {amount: {amount, currency}}`: Betrag in einer unterstützten Währung mit höchstens deren Nachkommastellen. Umrechnung mit `toBaseForBooking` (Kurs höchstens 4 Tage alt), Originalbetrag und Kurs werden gespeichert (`OriginalAmount`). Grenzen 5–1000 USD (`min-top-up`, `max-top-up`). PayPal-Order über den Originalbetrag.
-2. Frontend leitet auf `approveUrl`, PayPal kommt zurück auf `/consumer/guthaben/paypal?token={orderId}` (abgebrochen: `&abgebrochen=1`).
-3. `POST /top-ups/paypal/{orderId}/capture`: Gutschrift erst bei Capture `COMPLETED` und passendem Betrag, genau einmal (Zeile gesperrt, Status geprüft). `PENDING` schreibt der Poller später gut. Abgelehnt → `FAILED`, `PAYMENT_DECLINED`.
+1. `POST /api/v1/accounting/top-ups {amount: {amount, currency}}`: amount in a supported currency with at most its decimal places. Conversion with `toBaseForBooking` (rate at most 4 days old), original amount and rate are stored (`OriginalAmount`). Limits 5–1000 USD (`min-top-up`, `max-top-up`). PayPal order over the original amount.
+2. Frontend redirects to `approveUrl`, PayPal comes back to `/consumer/guthaben/paypal?token={orderId}` (cancelled: `&abgebrochen=1`).
+3. `POST /top-ups/paypal/{orderId}/capture`: credited only on capture `COMPLETED` and matching amount, exactly once (row locked, status checked). `PENDING` is credited later by the poller. Declined → `FAILED`, `PAYMENT_DECLINED`.
 - Status `TopUp`: `CREATED` → `COMPLETED` | `PENDING` → `COMPLETED` | `CANCELLED` | `FAILED`.
 
-## Auszahlung (Provider)
+## Payout (provider)
 
-1. `POST /api/v1/accounting/payouts {currency, amount?}`: ohne `amount` alles (Einnahmen in der Zielwährung abgerundet, `MoneyRounding.PAYOUT`). Mindestens 10 USD (`min-payout`), Auszahlungskonto nötig.
-2. In einer Transaktion: `Payout` (`REQUESTED`) anlegen und `EARNINGS` belasten. Erst danach PayPal aufrufen, damit nie doppelt ausgezahlt wird.
-3. PayPal-Antwort: angenommen → `SUBMITTED`; abgelehnt → `FAILED` + Rückbuchung `PAYOUT_REVERSAL`; Ausgang unbekannt (Timeout/5xx) → `UNKNOWN`, bleibt belastet, Fehler im Log mit `sender_batch_id` zur manuellen Prüfung im PayPal-Dashboard.
-4. `PaymentStatusPoller` (alle 5 min, `status-check-interval`): `SUCCESS` → `COMPLETED`; `FAILED`, `RETURNED`, `REFUNDED`, `REVERSED`, `BLOCKED`, `DENIED` → `FAILED` + Rückbuchung (genau einmal).
+1. `POST /api/v1/accounting/payouts {currency, amount?}`: without `amount` everything (earnings in the target currency rounded down, `MoneyRounding.PAYOUT`). At least 10 USD (`min-payout`), payout account required.
+2. In one transaction: create `Payout` (`REQUESTED`) and debit `EARNINGS`. Only then call PayPal, so that nothing is ever paid out twice.
+3. PayPal response: accepted → `SUBMITTED`; declined → `FAILED` + reversal `PAYOUT_REVERSAL`; outcome unknown (timeout/5xx) → `UNKNOWN`, stays debited, error in the log with `sender_batch_id` for manual review in the PayPal dashboard.
+4. `PaymentStatusPoller` (every 5 min, `status-check-interval`): `SUCCESS` → `COMPLETED`; `FAILED`, `RETURNED`, `REFUNDED`, `REVERSED`, `BLOCKED`, `DENIED` → `FAILED` + reversal (exactly once).
 
-## API-Fehler
+## API errors
 
-- Problem Details mit stabilem Feld `code`: `INVALID_AMOUNT`, `LINK_STATE_INVALID` (400), `INSUFFICIENT_BALANCE`, `PAYOUT_ACCOUNT_REQUIRED`, `PAYPAL_ACCOUNT_IN_USE`, `PAYOUTS_OPEN` (409), `AMOUNT_OUT_OF_RANGE`, `PAYMENT_NOT_APPROVED`, `PAYMENT_DECLINED` (422), `TOP_UP_NOT_FOUND` (404), `PAYPAL_ERROR` (502), `PAYPAL_NOT_CONFIGURED`, `EXCHANGE_RATE_UNAVAILABLE` (503). Deutsche Texte dazu hatte das entfernte Frontend-Modul `src/accounting/problems.ts` (Git-Historie).
+- Problem details with stable field `code`: `INVALID_AMOUNT`, `LINK_STATE_INVALID` (400), `INSUFFICIENT_BALANCE`, `PAYOUT_ACCOUNT_REQUIRED`, `PAYPAL_ACCOUNT_IN_USE`, `PAYOUTS_OPEN` (409), `AMOUNT_OUT_OF_RANGE`, `PAYMENT_NOT_APPROVED`, `PAYMENT_DECLINED` (422), `TOP_UP_NOT_FOUND` (404), `PAYPAL_ERROR` (502), `PAYPAL_NOT_CONFIGURED`, `EXCHANGE_RATE_UNAVAILABLE` (503). German texts for these were in the removed frontend module `src/accounting/problems.ts` (Git history).
 
-## Konfiguration
+## Configuration
 
 ```properties
 nfv.accounting.min-top-up=5.00
 nfv.accounting.max-top-up=1000.00
 nfv.accounting.min-payout=10.00
 nfv.accounting.link-state-ttl=15m
-nfv.accounting.status-check-enabled=true   # in Tests false
+nfv.accounting.status-check-enabled=true   # false in tests
 nfv.accounting.status-check-interval=5m
 ```
 
 ## Tests
 
-- `AccountingFlowTest` (Einzahlung, Auszahlung, Verknüpfung, Nutzung über die API, PayPal gemockt), `AccountLedgerTest` (nie negativ, parallele Abbuchungen), `PayPalClientTest`, `PayPalModuleTest`.
+- `AccountingFlowTest` (top-up, payout, linking, usage via the API, PayPal mocked), `AccountLedgerTest` (never negative, parallel debits), `PayPalClientTest`, `PayPalModuleTest`.
 
-## Offen
+## Open
 
-- Plattformgebühr und PayPal-Gebühren.
-- Abgelaufene `CREATED`-Aufladungen aufräumen; `UNKNOWN`-Auszahlungen im Betreiber-UI auflösen.
-- Pflicht zu verifiziertem PayPal-Konto (wird gespeichert, aber nicht erzwungen).
+- Platform fee and PayPal fees.
+- Clean up expired `CREATED` top-ups; resolve `UNKNOWN` payouts in the operator UI.
+- Requirement for a verified PayPal account (stored, but not enforced).

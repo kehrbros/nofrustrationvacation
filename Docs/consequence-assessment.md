@@ -1,115 +1,115 @@
-# Bewertung von Consequences – Entwurf
+# Assessment of consequences – draft
 
-- **Status:** Backend umgesetzt (`V35`, siehe [Umsetzung](#umsetzung)), Frontend noch offen. Ergänzt die Zuordnung (`ConsequenceMatcher`, [domain.md](domain.md#zuordnungslogik-consequencematcher)) um eine Bewertung gegen die Stops.
-- **Ziel:** Jede Consequence bekommt eine Kategorie, damit der Nutzer sieht, was für seine Reise zählt:
-  - `TOO_LATE`: Mit dem Incident kommt der Nutzer nach der Ankunftszeit am Ziel-Stop an (oder kommt gar nicht durch).
-  - `DELAYED`: spürbare Verzögerung, die Ankunftszeit wird trotzdem gehalten.
-  - `NO_IMPACT`: Incident auf der Route zur Zeit der Durchfahrt, aber ohne nennenswerte Verzögerung (z. B. NZTA `Caution`).
-- **Nicht Teil dieses Entwurfs:** Lösungen und Alternativen (Umfahrung, spätere Abfahrt, andere Unterkunft). Die Bewertung beschreibt nur die Lage. Lösungen schlägt das Modul `advisor` vor, siehe [advisor.md](advisor.md).
+- **Status:** backend implemented (`V35`, see [Implementation](#implementation)), frontend still open. Extends the matching (`ConsequenceMatcher`, [domain.md](domain.md#matching-logic-consequencematcher)) with an assessment against the stops.
+- **Goal:** every consequence gets a category so that the user sees what matters for their trip:
+  - `TOO_LATE`: with the incident the user arrives at the target stop after the arrival time (or does not get through at all).
+  - `DELAYED`: noticeable delay, but the arrival time is still met.
+  - `NO_IMPACT`: incident on the route at the time of passage, but without significant delay (e.g. NZTA `Caution`).
+- **Not part of this draft:** solutions and alternatives (detour, later departure, other accommodation). The assessment only describes the situation. Solutions are proposed by the module `advisor`, see [advisor.md](advisor.md).
 
-## Referenzzeit
+## Reference time
 
-- **Frist = Ankunft des Ziel-Stops** (`Stop.arrivalAt` von `Route.toStop`): der Zeitpunkt, an dem der Nutzer spätestens dort sein muss (Start des Aufenthalts).
-- **Planankunft** = `expectedPassageEnd` der letzten Section der Route (Abfahrt am Start-Stop plus Fahrzeit, aus `RoutePlanning`).
-- **Puffer** = Frist − Planankunft.
-- **Ohne Frist** (Ziel-Stop ohne Ankunft): keine Kategorie `TOO_LATE`, nur `DELAYED` oder `NO_IMPACT`, Hinweis „Ankunftszeit fehlt“.
-- **Planankunft schon nach der Frist** (Route ohne Incidents zu spät, offener Punkt „Abgleich mit der geplanten Ankunft“ in [domain.md](domain.md#trips)): `TOO_LATE` nur, wenn ein Incident die Verspätung vergrößert. Die Route trägt den Hinweis „Ankunft nicht erreichbar laut Planung“, die Consequences werden nach ihrer Verzögerung als `DELAYED` oder `NO_IMPACT` bewertet.
+- **Deadline = arrival of the target stop** (`Stop.arrivalAt` of `Route.toStop`): the time by which the user must be there at the latest (start of the stay).
+- **Planned arrival** = `expectedPassageEnd` of the last section of the route (departure at the start stop plus driving time, from `RoutePlanning`).
+- **Slack** = deadline − planned arrival.
+- **Without deadline** (target stop without arrival): no category `TOO_LATE`, only `DELAYED` or `NO_IMPACT`, note "arrival time missing".
+- **Planned arrival already after the deadline** (route too late even without incidents, open point "comparison with the planned arrival" in [domain.md](domain.md#trips)): `TOO_LATE` only if an incident increases the delay. The route carries the note "arrival not reachable according to planning", the consequences are assessed as `DELAYED` or `NO_IMPACT` according to their delay.
 
-## Verzögerung je Consequence
+## Delay per consequence
 
-- Die Bewertung läuft je **Route**, nicht je Consequence: Verzögerungen addieren sich, und eine Verzögerung verschiebt die Durchfahrt aller späteren Sections. Damit ist auch der offene Punkt „Verzögerung fortschreiben“ ([domain.md](domain.md#offen)) für die Bewertung gelöst. Die erwarteten Durchfahrten an den Sections bleiben unverändert (Planung).
-- Ablauf (`ConsequenceAssessment.assessRoute(routeId)`, `incidents.logic`):
-  1. Sections der Route in Reihenfolge, aktive Incidents auf ihren Segmenten (wie `matchRoute`).
-  2. `shift` = 0. Je Section mit Incident: verschobene Durchfahrt = erwartete Durchfahrt + `shift`.
-  3. Trifft die verschobene Durchfahrt den Incident (`IncidentOverlap`, mit Zeitfenstern), Verzögerung bestimmen (Tabelle unten), `shift` += Verzögerung.
-  4. Erwartete Ankunft nach diesem Incident = Planankunft + `shift`.
-- Die Kategorie wird **der Consequence** zugeordnet, die die Lage verursacht: die erste, nach der die erwartete Ankunft die Frist überschreitet, ist `TOO_LATE`, ebenso alle danach mit eigener Verzögerung. Davor `DELAYED` oder `NO_IMPACT` nach eigener Verzögerung.
+- The assessment runs per **route**, not per consequence: delays add up, and a delay shifts the passage of all later sections. This also resolves the open point "propagate delay" ([domain.md](domain.md#open)) for the assessment. The expected passages at the sections stay unchanged (planning).
+- Flow (`ConsequenceAssessment.assessRoute(routeId)`, `incidents.logic`):
+  1. Sections of the route in order, active incidents on their segments (like `matchRoute`).
+  2. `shift` = 0. For each section with an incident: shifted passage = expected passage + `shift`.
+  3. If the shifted passage hits the incident (`IncidentOverlap`, with time windows), determine the delay (table below), `shift` += delay.
+  4. Expected arrival after this incident = planned arrival + `shift`.
+- The category is assigned to **the consequence** that causes the situation: the first one after which the expected arrival exceeds the deadline is `TOO_LATE`, as are all later ones with their own delay. Before that `DELAYED` or `NO_IMPACT` according to their own delay.
 
-| Incident | Verzögerung |
+| Incident | Delay |
 |---|---|
-| Sperrung (`BLOCKED`) mit Zeitfenstern | Warten bis Ende des getroffenen Fensters: `windowEnd` − verschobene Durchfahrt |
-| Sperrung ohne Fenster, mit `validTo` | `validTo` − verschobene Durchfahrt |
-| Sperrung ohne Ende (bis auf Weiteres) oder Wartezeit über `max-wait` (Standard 12 h) | nicht passierbar → `TOO_LATE` (ohne Frist: `DELAYED`, Verzögerung „unbekannt“) |
-| Verzögerung (`DELAYED`) mit `expectedDelay` (Quelle oder Anreicherung) | `expectedDelay` |
-| Verzögerung ohne Angabe | Annahme der Quelle (`assumedDelay` am Incident, für NZTA z. B. `Caution` 0, `Delays` 15 min, `Crash` 30 min, siehe [traffic-feed.md](traffic-feed.md#verzögerung-ohne-angabe)), als „geschätzt“ markiert; ohne Annahme 0 |
+| Closure (`BLOCKED`) with time windows | wait until the end of the hit window: `windowEnd` − shifted passage |
+| Closure without window, with `validTo` | `validTo` − shifted passage |
+| Closure without end (until further notice) or waiting time above `max-wait` (default 12 h) | not passable → `TOO_LATE` (without deadline: `DELAYED`, delay "unknown") |
+| Delay (`DELAYED`) with `expectedDelay` (source or enrichment) | `expectedDelay` |
+| Delay without value | assumption of the source (`assumedDelay` on the incident, for NZTA e.g. `Caution` 0, `Delays` 15 min, `Crash` 30 min, see [traffic-feed.md](traffic-feed.md#delay-without-a-value)), marked as "estimated"; without assumption 0 |
 
-- **Kategorie aus der eigenen Verzögerung:** unter `no-impact-below` (Standard 5 min) → `NO_IMPACT`, sonst `DELAYED`, bei überschrittener Frist `TOO_LATE`.
-- **Nur für Pkw relevant:** `vehicleScope` `HEAVY_ONLY` aus der Anreicherung ([traffic-feed.md](traffic-feed.md#anreicherung-messageenrichment)) → Verzögerung 0, `NO_IMPACT`.
-- **Zeiten unbestätigt:** `timesUnconfirmed` (Sperrung mit Uhrzeiten nur im Text, noch nicht gelesen, [traffic-feed.md](traffic-feed.md#verarbeitung-trafficeventprocessor)) → `DELAYED` mit Verzögerung 0, keine Verschiebung, nie `TOO_LATE`, Hinweis „Zeiten prüfen“.
-- **Neue Treffer durch Verschiebung:** Eine Verzögerung kann eine spätere Durchfahrt in ein Zeitfenster schieben (z. B. 20:40 geplant, 30 min Stau davor, Tunnel ab 21:00 gesperrt). Die Bewertung findet das, weil sie alle aktiven Incidents der Route prüft. Der `ConsequenceMatcher` legt dafür eine Consequence an (Treffer `BY_SHIFT`), damit sie angezeigt wird.
+- **Category from the own delay:** below `no-impact-below` (default 5 min) → `NO_IMPACT`, otherwise `DELAYED`, with exceeded deadline `TOO_LATE`.
+- **Relevant for cars only:** `vehicleScope` `HEAVY_ONLY` from the enrichment ([traffic-feed.md](traffic-feed.md#enrichment-messageenrichment)) → delay 0, `NO_IMPACT`.
+- **Times unconfirmed:** `timesUnconfirmed` (closure with times only in the text, not read yet, [traffic-feed.md](traffic-feed.md#processing-trafficeventprocessor)) → `DELAYED` with delay 0, no shift, never `TOO_LATE`, note "check times".
+- **New hits through shifting:** a delay can push a later passage into a time window (e.g. 20:40 planned, 30 min traffic jam before, tunnel closed from 21:00). The assessment finds this because it checks all active incidents of the route. The `ConsequenceMatcher` creates a consequence for it (hit `BY_SHIFT`) so that it is displayed.
 
-## Toleranz der Durchfahrt (beschlossen 2026-11-04)
+## Passage tolerance (decided 2026-11-04)
 
-- **Problem:** Die Durchfahrt ist ein berechneter Wert. Wer um 20:55 am Tunnel sein soll, wird bei einer Sperre ab 21:00 sonst nicht gewarnt, obwohl 10 min Verspätung reichen.
-- **Regel:** Für die Prüfung auf Überschneidung wird die (verschobene) Durchfahrt nach beiden Seiten erweitert um `max(min-tolerance, tolerance-ratio × Zeit seit Abfahrt)`, Standard `max(15 min, 10 %)`. Beispiel: 2 h nach Abfahrt ±15 min, 4 h nach Abfahrt ±24 min.
-- Die Wartezeit wird weiter aus der Durchfahrt ohne Toleranz berechnet. Liegt die Durchfahrt ohne Toleranz vor dem Fenster, ist die Wartezeit die Zeit vom Fensterbeginn bis zum Fensterende (Annahme: der Nutzer kommt knapp zu spät).
-- **Treffer nur durch die Toleranz:** `match` `MARGINAL`, Kategorie höchstens `DELAYED`, nie `TOO_LATE`, Hinweis „knapp: Sperrung beginnt 21:00, Durchfahrt geplant 20:55“. Verzögert eine solche Consequence die Ankunft, zählt ihre Wartezeit nicht in `shift` (sonst würde ein unsicherer Treffer spätere Bewertungen verfälschen).
-- Gilt in `IncidentOverlap` als eigener Aufruf mit Toleranz; `ConsequenceMatcher` legt Consequences auch für knappe Treffer an. Die Abfragen auf die Hülle (`findPassing`) erweitern ihr Zeitfenster um die größte mögliche Toleranz (`tolerance-max`, Standard 2 h).
+- **Problem:** the passage is a calculated value. Someone who is supposed to be at the tunnel at 20:55 would otherwise not be warned about a closure from 21:00, although 10 min of delay are enough.
+- **Rule:** for the overlap check the (shifted) passage is extended on both sides by `max(min-tolerance, tolerance-ratio × time since departure)`, default `max(15 min, 10 %)`. Example: 2 h after departure ±15 min, 4 h after departure ±24 min.
+- The waiting time is still calculated from the passage without tolerance. If the passage without tolerance lies before the window, the waiting time is the time from window start to window end (assumption: the user arrives just too late).
+- **Hit only through the tolerance:** `match` `MARGINAL`, category at most `DELAYED`, never `TOO_LATE`, note "tight: closure starts 21:00, passage planned 20:55". If such a consequence delays the arrival, its waiting time does not count towards `shift` (otherwise an uncertain hit would distort later assessments).
+- Applies in `IncidentOverlap` as a separate call with tolerance; `ConsequenceMatcher` creates consequences also for tight hits. The queries on the hull (`findPassing`) extend their time window by the largest possible tolerance (`tolerance-max`, default 2 h).
 
-## Rangfolge
+## Ranking
 
-- Innerhalb eines Trips und einer Route:
-  1. `TOO_LATE`, absteigend nach Verspätung an der Frist (nicht passierbar zuerst).
-  2. `DELAYED`, absteigend nach eigener Verzögerung.
-  3. `NO_IMPACT`, aufsteigend nach Durchfahrt.
-  - Bei Gleichstand: frühere Durchfahrt zuerst.
-- Je Route eine Zusammenfassung: schlechteste Kategorie, erwartete Ankunft, Puffer bzw. Verspätung.
-- Zähler der Reiseliste (`GET /incidents/trip-counts`): nur `TOO_LATE` und `DELAYED`. `NO_IMPACT` erscheint in der Liste, zählt aber nicht.
+- Within a trip and a route:
+  1. `TOO_LATE`, descending by delay at the deadline (not passable first).
+  2. `DELAYED`, descending by own delay.
+  3. `NO_IMPACT`, ascending by passage.
+  - On a tie: earlier passage first.
+- One summary per route: worst category, expected arrival, slack or delay.
+- Counter of the trip list (`GET /incidents/trip-counts`): only `TOO_LATE` and `DELAYED`. `NO_IMPACT` appears in the list but does not count.
 
-## Datenmodell (Abweichung von [domain.md](domain.md#incidents), mit diesem Entwurf beschlossen)
+## Data model (deviation from [domain.md](domain.md#incidents), decided with this draft)
 
-- `Consequence` zusätzlich (abgeleitet, nicht historisiert wie bisher):
+- `Consequence` additionally (derived, not historised as before):
   - `category` (`TOO_LATE`, `DELAYED`, `NO_IMPACT`)
-  - `assessedDelay` (Dauer, leer = nicht passierbar), `delayAssumed` (ja/nein)
-  - `expectedArrival` (Zeitpunkt, leer ohne Planankunft), `deadline` (Kopie der Frist zum Zeitpunkt der Bewertung)
-  - `match` (`DIRECT`, `BY_SHIFT`, `MARGINAL`, Spalte `match_kind`)
-  - `passageAt` (verschobene Durchfahrt der getroffenen Section, für Rangfolge und Hinweis „knapp“)
+  - `assessedDelay` (duration, empty = not passable), `delayAssumed` (yes/no)
+  - `expectedArrival` (point in time, empty without planned arrival), `deadline` (copy of the deadline at the time of assessment)
+  - `match` (`DIRECT`, `BY_SHIFT`, `MARGINAL`, column `match_kind`)
+  - `passageAt` (shifted passage of the hit section, for ranking and the "tight" note)
   - `assessedAt`
-- `Incident` zusätzlich `assumedDelay` (Annahme der Quelle ohne Zahl, historisiert, `V33`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historisiert, `V35`) und `timesUnconfirmed` (historisiert, `V36`)
-- `impact` (`BLOCKED`, `DELAYED`) beschreibt den Incident an der Stelle, die Kategorie die Folge für die Reise. Es folgt aus dem Typ des Incidents (`Incident.impact()`, `Consequence.impact()`) und wird seit `V42` nicht mehr je Consequence gespeichert, die API liefert es unverändert. `delay` bleibt die Angabe des Incidents.
-- Schema: eigene Migration `V35` (statt mit den Zeitfenstern, die schon in `V34` kamen).
+- `Incident` additionally `assumedDelay` (assumption of the source without a number, historised, `V33`), `vehicleScope` (`ALL`, `HEAVY_ONLY`, `LIGHT_ONLY`, historised, `V35`) and `timesUnconfirmed` (historised, `V36`)
+- `impact` (`BLOCKED`, `DELAYED`) describes the incident at the location, the category the consequence for the trip. It follows from the type of the incident (`Incident.impact()`, `Consequence.impact()`) and is no longer stored per consequence since `V42`, the API returns it unchanged. `delay` remains the value of the incident.
+- Schema: separate migration `V35` (instead of with the time windows, which already came in `V34`).
 
-## Wann bewertet wird
+## When the assessment runs
 
-- Immer die ganze Route, synchron in derselben Transaktion wie die Zuordnung:
-  - nach `matchIncident` für jede Route mit neuer, geänderter oder entfernter Consequence
-  - nach `matchRoute` (`RouteChanged`)
-  - **neu:** Ankunft des Ziel-Stops geändert → `trips` veröffentlicht `StopArrivalChanged(stopId, routeIds)`, `incidents` bewertet die Routen zum Stop neu. Heute löst eine Änderung der Ankunft keine Planung aus ([domain.md](domain.md#trips)), daher ein eigenes Event statt `RouteChanged`.
-- **Vorschläge auslösen (umgesetzt, Läufe vorerst ausgeschaltet):** Wechselt eine Consequence bei der Bewertung zu `TOO_LATE` oder entsteht neu mit `TOO_LATE` und ist ihre Durchfahrt nicht vorbei, veröffentlicht `assessRoute` `RouteTooLate(routeId, incidentIds, deadline)`. Doppelte Läufe, auch nach einer Neuplanung (dort gelten alle Consequences als neu), verhindert `advisor`, siehe [advisor.md](advisor.md#automatisch-nur-too_late).
-- Zeit vergeht: keine Neubewertung, die Durchfahrten sind geplant. Abgelaufene Incidents fallen wie bisher aus der Anzeige.
-- **Durchfahrt vorbei (umgesetzt 2026-11-05):** Consequences fallen aus Liste, Zusammenfassung und Zähler (`TripIncidents`), sobald `passageAt` + eigene Verzögerung vorbei ist (nicht passierbar: `max-wait`), gespeichert bleiben sie. Solange die Wartezeit läuft, bleiben sie sichtbar. Grenze: Sind alle Consequences einer Route vorbei, zeigt die Zusammenfassung wieder die Planankunft, auch wenn die Route noch unterwegs ist.
+- Always the whole route, synchronously in the same transaction as the matching:
+  - after `matchIncident` for every route with a new, changed or removed consequence
+  - after `matchRoute` (`RouteChanged`)
+  - **new:** arrival of the target stop changed → `trips` publishes `StopArrivalChanged(stopId, routeIds)`, `incidents` reassesses the routes to the stop. Today a change of the arrival does not trigger planning ([domain.md](domain.md#trips)), hence a separate event instead of `RouteChanged`.
+- **Triggering proposals (implemented, runs switched off for now):** if a consequence changes to `TOO_LATE` during the assessment or is newly created with `TOO_LATE` and its passage is not over, `assessRoute` publishes `RouteTooLate(routeId, incidentIds, deadline)`. Duplicate runs, also after a replanning (where all consequences count as new), are prevented by `advisor`, see [advisor.md](advisor.md#automatic-only-too_late).
+- Time passes: no reassessment, the passages are planned. Expired incidents drop out of the display as before.
+- **Passage over (implemented 2026-11-05):** consequences drop out of the list, summary and counter (`TripIncidents`) as soon as `passageAt` + own delay is over (not passable: `max-wait`), they remain stored. As long as the waiting time is running, they stay visible. Limit: if all consequences of a route are over, the summary shows the planned arrival again, even if the route is still under way.
 
-## Abhängigkeiten
+## Dependencies
 
-- `incidents` liest Frist und Planankunft über `trips.logic` (wie `TripIncidents` über `TripLogic`) und die Sections über `RouteSectionRepository` (besteht).
-- `trips -.->|StopArrivalChanged| incidents` neu, Richtung wie `RouteChanged`.
-- `incidents -.->|RouteTooLate| advisor`: `incidents` kennt `advisor` nicht.
+- `incidents` reads deadline and planned arrival via `trips.logic` (like `TripIncidents` via `TripLogic`) and the sections via `RouteSectionRepository` (exists).
+- `trips -.->|StopArrivalChanged| incidents` new, same direction as `RouteChanged`.
+- `incidents -.->|RouteTooLate| advisor`: `incidents` does not know `advisor`.
 
-## API und Frontend
+## API and frontend
 
-- `GET /trips/{id}/incidents`: je Hinweis zusätzlich `category`, `match`, `assessedDelayMinutes` (leer = nicht passierbar), `delayAssumed`, `passageAt`, `expectedArrival`, `deadline`, `windowStart`/`windowEnd`; sortiert nach der [Rangfolge](#rangfolge).
-- **Abweichung (umgesetzt):** Die Zusammenfassung je Route steht in einem eigenen Endpunkt `GET /trips/{id}/incidents/routes` (`routeId`, `worstCategory`, `plannedArrival`, `expectedArrival`, `deadline`, `slackMinutes` negativ = zu spät, `unpassable`, `plannedTooLate`), damit `GET /trips/{id}/incidents` eine Liste bleibt und das bestehende Frontend unverändert läuft. Nur geplante Routen oder Routen mit Hinweisen.
-- „Zeiten prüfen“ = `timesUnconfirmed` an `GET /trips/{id}/incidents`.
-- Erledigte Hinweise (Incident beendet) folgen am Ende der Liste mit `resolved`/`resolvedAt` und zählen nirgends, siehe [domain.md](domain.md#incidents).
-- Hinweise ohne eigene Felder: „Ankunftszeit fehlt“ = `deadline` leer; „Ankunft nicht erreichbar laut Planung“ = `plannedTooLate`; „knapp“ = `match` `MARGINAL` mit `windowStart` und `passageAt`.
-- Frontend (**noch offen**): Kategorie als Farbe und Text („Zu spät: 1 Std. 10 Min. nach Ankunft“, „Verzögerung 25 Min., Ankunft 17:40 noch erreichbar“, „Keine Auswirkung“), geschätzte Werte mit ✦. Der generierte Client (`frontend/src/generated`) ist noch nicht neu erzeugt; `frontend/openapi.json` schon (aus `mvn verify`).
+- `GET /trips/{id}/incidents`: per notice additionally `category`, `match`, `assessedDelayMinutes` (empty = not passable), `delayAssumed`, `passageAt`, `expectedArrival`, `deadline`, `windowStart`/`windowEnd`; sorted by the [ranking](#ranking).
+- **Deviation (implemented):** the summary per route is in a separate endpoint `GET /trips/{id}/incidents/routes` (`routeId`, `worstCategory`, `plannedArrival`, `expectedArrival`, `deadline`, `slackMinutes` negative = too late, `unpassable`, `plannedTooLate`), so that `GET /trips/{id}/incidents` stays a list and the existing frontend keeps working unchanged. Only planned routes or routes with notices.
+- "Check times" = `timesUnconfirmed` on `GET /trips/{id}/incidents`.
+- Resolved notices (incident ended) follow at the end of the list with `resolved`/`resolvedAt` and count nowhere, see [domain.md](domain.md#incidents).
+- Notices without their own fields: "arrival time missing" = `deadline` empty; "arrival not reachable according to planning" = `plannedTooLate`; "tight" = `match` `MARGINAL` with `windowStart` and `passageAt`.
+- Frontend (**still open**): category as colour and text ("Too late: 1 h 10 min after arrival", "Delay 25 min, arrival 17:40 still reachable", "No impact"), estimated values with ✦. The generated client (`frontend/src/generated`) has not been regenerated yet; `frontend/openapi.json` has (from `mvn verify`).
 
-## Beispiel Terrace Tunnel (`566003`, nordwärts gesperrt So–Do 21:00–04:30)
+## Example Terrace Tunnel (`566003`, closed northbound Sun–Thu 21:00–04:30)
 
-| Fahrt | Frist am Ziel | Bewertung |
+| Drive | Deadline at destination | Assessment |
 |---|---|---|
-| Mi 4.11. Durchfahrt 22:00, Planankunft 23:30 | 23:45 | Warten bis 04:30, 6 h 30 min → Ankunft 06:00 → `TOO_LATE` |
-| Mi 4.11. Durchfahrt 22:00, Planankunft 23:30 | Do 5.11. 10:00 | 6 h 30 min, Ankunft 06:00 → `DELAYED` |
-| Mi 4.11. Durchfahrt 12:00 | – | kein Treffer, keine Consequence |
-| Mi 4.11. Durchfahrt 20:55, 2 h nach Abfahrt | 23:00 | knapp (±15 min), `MARGINAL`, `DELAYED` mit Hinweis |
-| Mi 4.11. Durchfahrt 20:40, davor Stau 30 min (`DELAYED`) | 22:00 | Stau `DELAYED`; verschoben 21:10 im Fenster → Tunnel `TOO_LATE` (`BY_SHIFT`) |
+| Wed 4 Nov passage 22:00, planned arrival 23:30 | 23:45 | wait until 04:30, 6 h 30 min → arrival 06:00 → `TOO_LATE` |
+| Wed 4 Nov passage 22:00, planned arrival 23:30 | Thu 5 Nov 10:00 | 6 h 30 min, arrival 06:00 → `DELAYED` |
+| Wed 4 Nov passage 12:00 | – | no hit, no consequence |
+| Wed 4 Nov passage 20:55, 2 h after departure | 23:00 | tight (±15 min), `MARGINAL`, `DELAYED` with note |
+| Wed 4 Nov passage 20:40, traffic jam 30 min before (`DELAYED`) | 22:00 | jam `DELAYED`; shifted 21:10 within the window → tunnel `TOO_LATE` (`BY_SHIFT`) |
 
 ## Tests
 
-- Reine Bewertung als Funktion (Sections, Incidents, Planankunft, Frist → Kategorien), Tabelle der Beispiele oben plus: Toleranz wächst mit der Zeit seit Abfahrt, knapper Treffer nie `TOO_LATE`, `Caution` ohne Zahl → `NO_IMPACT`, ohne Frist, Planankunft schon zu spät, Sperrung ohne Ende, Verzögerung ohne Angabe (`delayAssumed`), `HEAVY_ONLY`, zwei Verzögerungen addieren sich über die Frist.
-- Integration wie `ConsequenceMatchingTest`: Ankunft am Ziel-Stop ändern → Kategorie wechselt `DELAYED` ↔ `TOO_LATE`.
+- Pure assessment as a function (sections, incidents, planned arrival, deadline → categories), table of the examples above plus: tolerance grows with the time since departure, tight hit never `TOO_LATE`, `Caution` without a number → `NO_IMPACT`, without deadline, planned arrival already too late, closure without end, delay without value (`delayAssumed`), `HEAVY_ONLY`, two delays add up beyond the deadline.
+- Integration like `ConsequenceMatchingTest`: change the arrival at the target stop → category changes `DELAYED` ↔ `TOO_LATE`.
 
-## Konfiguration
+## Configuration
 
 ```properties
 nfv.incidents.assessment.no-impact-below=5m
@@ -117,28 +117,28 @@ nfv.incidents.assessment.max-wait=12h
 nfv.incidents.assessment.min-tolerance=15m
 nfv.incidents.assessment.tolerance-ratio=0.10
 nfv.incidents.assessment.tolerance-max=2h
-# Annahmen ohne Zahl kommen von der Quelle, z. B. nfv.input.sources.nz-nzta.assumed-delay.*
+# Assumptions without a number come from the source, e.g. nfv.input.sources.nz-nzta.assumed-delay.*
 ```
 
-## Umsetzung
+## Implementation
 
-- `incidents.logic.RouteAssessor` (reine Funktion), `ConsequenceAssessment.assessRoute` (speichert), `ConsequenceMatcher` (findet die Routen), Konfiguration `incidents.config.AssessmentProperties`.
-- Frist und Planankunft über `trips.logic.RouteSchedules` (`RouteSchedule`: Abfahrt = Beginn der ersten Section, Planankunft = Ende der letzten, Frist = `arrivalAt` des Ziel-Stops). `TripLogic.updateStop` veröffentlicht `StopArrivalChanged`, wenn sich die Ankunft ändert.
-- **Auslegungen (beim Bau entschieden):**
-  - Toleranz bezogen auf die verschobene Durchfahrt; `BY_SHIFT`, wenn die verschobene Durchfahrt ohne Toleranz trifft, die geplante nicht; `MARGINAL`, wenn nur mit Toleranz.
-  - Ein Incident wird je Route einmal bewertet, an der ersten Section, die er trifft.
-  - `TOO_LATE` nur mit eigener Verzögerung ab `no-impact-below` (eine Verzögerung unter 5 min bleibt `NO_IMPACT`, auch wenn sie die Frist knapp reißt).
-  - Planankunft schon nach der Frist: Verzögerungen nach eigener Größe `DELAYED`/`NO_IMPACT`, nur „nicht passierbar“ ist `TOO_LATE`.
-  - Nach „nicht passierbar“ sind alle späteren Consequences mit eigener Verzögerung `TOO_LATE`, ihre `expectedArrival` ist leer.
-  - Wartezeit nach dem Ende eines Fensters (Treffer nur durch Toleranz danach): 0.
-  - `matchIncident` sucht Routen in der Hülle erweitert um `max-wait + tolerance-max` davor und `tolerance-max` danach; eine Verschiebung um mehr als `max-wait` in einen neuen Incident findet erst die nächste Bewertung der Route.
-  - `HEAVY_ONLY` kommt aus der Anreicherung (`EnrichmentModel.Answer.vehicleScope`) oder von der Testquelle.
-- Tests: `RouteAssessorTest` (Beispieltabelle und alle Sonderfälle oben, `timesUnconfirmed`), `ConsequenceMatchingTest` (Ankunft ändern → `DELAYED` ↔ `TOO_LATE`, `NO_IMPACT` gelistet, nicht gezählt, Zusammenfassung, Durchfahrt vorbei, laufende Wartezeit, vor dem Beginn beendet), `TripApiTest` (neue Felder, Endpunkt je Route).
+- `incidents.logic.RouteAssessor` (pure function), `ConsequenceAssessment.assessRoute` (stores), `ConsequenceMatcher` (finds the routes), configuration `incidents.config.AssessmentProperties`.
+- Deadline and planned arrival via `trips.logic.RouteSchedules` (`RouteSchedule`: departure = start of the first section, planned arrival = end of the last, deadline = `arrivalAt` of the target stop). `TripLogic.updateStop` publishes `StopArrivalChanged` when the arrival changes.
+- **Interpretations (decided during implementation):**
+  - Tolerance relative to the shifted passage; `BY_SHIFT` if the shifted passage hits without tolerance and the planned one does not; `MARGINAL` if only with tolerance.
+  - An incident is assessed once per route, at the first section it hits.
+  - `TOO_LATE` only with an own delay from `no-impact-below` (a delay below 5 min stays `NO_IMPACT`, even if it narrowly misses the deadline).
+  - Planned arrival already after the deadline: delays `DELAYED`/`NO_IMPACT` according to their own size, only "not passable" is `TOO_LATE`.
+  - After "not passable" all later consequences with their own delay are `TOO_LATE`, their `expectedArrival` is empty.
+  - Waiting time after the end of a window (hit only through tolerance afterwards): 0.
+  - `matchIncident` searches routes in the hull extended by `max-wait + tolerance-max` before and `tolerance-max` after; a shift by more than `max-wait` into a new incident is only found by the next assessment of the route.
+  - `HEAVY_ONLY` comes from the enrichment (`EnrichmentModel.Answer.vehicleScope`) or from the test source.
+- Tests: `RouteAssessorTest` (example table and all special cases above, `timesUnconfirmed`), `ConsequenceMatchingTest` (change arrival → `DELAYED` ↔ `TOO_LATE`, `NO_IMPACT` listed, not counted, summary, passage over, running waiting time, ended before the start), `TripApiTest` (new fields, endpoint per route).
 
-## Offen
+## Open
 
-- Frontend (Kategorie, Verzögerung, erwartete Ankunft, ✦), siehe [API und Frontend](#api-und-frontend).
-- Toleranz und Annahmen der Quellen an echten Daten kalibrieren.
-- Frist aus der Buchung (spätester Check-in `checkInUntil` der Unterkunft) statt oder neben `Stop.arrivalAt`.
-- Folgen über den Stop hinaus: Verspätung am Ziel-Stop verschiebt die Abfahrt zur nächsten Route nicht (Abfahrt ist eine Nutzerangabe).
-- Benachrichtigung je Kategorie (z. B. sofort bei `TOO_LATE`, gesammelt bei `DELAYED`, nie bei `NO_IMPACT`).
+- Frontend (category, delay, expected arrival, ✦), see [API and frontend](#api-and-frontend).
+- Calibrate tolerance and source assumptions on real data.
+- Deadline from the booking (latest check-in `checkInUntil` of the accommodation) instead of or in addition to `Stop.arrivalAt`.
+- Consequences beyond the stop: a delay at the target stop does not shift the departure to the next route (departure is a user input).
+- Notification per category (e.g. immediately for `TOO_LATE`, batched for `DELAYED`, never for `NO_IMPACT`).

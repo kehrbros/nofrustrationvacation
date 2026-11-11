@@ -16,7 +16,7 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-/** Segment details on central Wellington, see Docs/network.md#schnittstellen-networklogic. */
+/** Segment details on central Wellington, see Docs/network.md#interfaces-networklogic. */
 @SpringBootTest
 class SegmentQueriesTest {
     @Autowired

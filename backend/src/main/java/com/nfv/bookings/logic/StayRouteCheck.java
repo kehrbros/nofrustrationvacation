@@ -27,7 +27,7 @@ import java.util.Optional;
  * Checks the way to the hotel of a reservation before it is paid: if the hotel lies in another place than the stop,
  * the stop moves there after booking, so the route to it changes. Computed like a route suggestion (incidents
  * included) and not stored; only a hint, booking stays possible. See
- * Docs/accommodation-alternatives.md#route-vor-dem-buchen-pruefen.
+ * Docs/accommodation-alternatives.md#checking-the-route-before-booking.
  */
 @Service
 @RequiredArgsConstructor

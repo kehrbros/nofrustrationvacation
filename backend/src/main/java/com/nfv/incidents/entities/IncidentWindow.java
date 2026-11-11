@@ -8,7 +8,7 @@ import lombok.Getter;
 import java.time.OffsetDateTime;
 import java.util.Objects;
 
-/** Window of an {@link Incident}, stored in {@code incident_window}, see Docs/traffic-feed.md#zeitfenster. */
+/** Window of an {@link Incident}, stored in {@code incident_window}, see Docs/traffic-feed.md#time-windows. */
 @Getter
 @Embeddable
 public class IncidentWindow {

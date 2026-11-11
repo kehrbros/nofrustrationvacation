@@ -30,7 +30,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Pays all hotels of a plan with one approval at PayPal, see Docs/incident-plans.md#ausführen-mit-einem-klick: every
+ * Pays all hotels of a plan with one approval at PayPal, see Docs/incident-plans.md#one-click-execution: every
  * hotel is prebooked, one order with a purchase unit per hotel; after the approval all are authorized and booked at
  * LiteAPI ({@link #secure}). If one hotel fails, the others are cancelled at LiteAPI and every authorization voided,
  * nothing is paid and the trip stays as it is. Only then the plan changes the trip (the caller, {@code advisor}) and
