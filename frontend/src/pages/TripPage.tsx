@@ -21,7 +21,7 @@ import type { LinePoint, RouteLine, TripIncident } from '../trips/model';
 import { formatDuration } from '../trips/routeOptionText';
 import { fetchRouteLines } from '../trips/routesApi';
 import { routeName, type RoutePreview, type TripContext } from '../trips/tripContext';
-import { formatDateTime, formatPeriod } from '../trips/time';
+import { formatDateTime, formatPeriod, stopDays } from '../trips/time';
 import { deleteTrip, fetchTrip, fetchTripIncidents, removeStop, TripsApiError } from '../trips/tripsApi';
 
 // MapLibre needs the browser (WebGL), load it only there
@@ -293,12 +293,7 @@ export default function TripPage() {
                       <span className="va-column va-grow">
                         <span className="va-strong">{stop.name}</span>
                         <span className="va-small va-muted">
-                          {[
-                            stop.arrivalAt && t('trip.arrives', { time: formatDateTime(stop.arrivalAt) }),
-                            stop.departureAt && t('trip.departs', { time: formatDateTime(stop.departureAt) }),
-                          ]
-                            .filter(Boolean)
-                            .join(' · ') || t('trip.noTimes')}
+                          {stopDays(stop.arrivalAt, stop.departureAt) ?? t('trip.noTimes')}
                           {stop.latitude == null && ` · ${t('trip.notOnMap')}`}
                         </span>
                       </span>

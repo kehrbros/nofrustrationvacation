@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { endOfDayIso, formatAgo, formatPeriod, localDateTimeIso, startOfDayIso, toOffsetIso, tripDay, untilStart } from './time';
+import { endOfDayIso, formatAgo, formatPeriod, stopDays, localDateTimeIso, startOfDayIso, toOffsetIso, tripDay, untilStart } from './time';
 
 describe('points in time with the offset of the system time zone (Europe/Berlin in tests)', () => {
   it('uses the offset valid on that day', () => {
@@ -25,6 +25,14 @@ describe('formatting', () => {
     expect(formatPeriod('2027-07-12T00:00:00+02:00', '2027-07-26T23:59:59+02:00')).toBe('12.–26. Juli 2027');
     expect(formatPeriod('2027-07-30T00:00:00+02:00', '2027-08-02T23:59:59+02:00')).toBe('30. Juli – 2. August 2027');
     expect(formatPeriod('2027-12-30T00:00:00+01:00', '2028-01-02T23:59:59+01:00')).toBe('30. Dezember 2027 – 2. Januar 2028');
+  });
+
+  it('shows the days of a stop without times', () => {
+    expect(stopDays('2027-07-09T22:20:00+02:00', '2027-07-11T22:20:00+02:00')).toBe('9.–11. Juli');
+    expect(stopDays('2027-07-30T18:00:00+02:00', '2027-08-02T10:00:00+02:00')).toBe('30. Juli – 2. Aug.');
+    expect(stopDays('2027-07-09T22:20:00+02:00', null)).toBe('ab 9. Juli');
+    expect(stopDays(null, '2027-07-11T10:00:00+02:00')).toBe('bis 11. Juli');
+    expect(stopDays(null, null)).toBeNull();
   });
 
   it('shows points in time entered elsewhere in the system time zone', () => {
