@@ -9,10 +9,18 @@ const svg = (body: string) =>
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" stroke="#111111" stroke-width="2.2" ' +
   `stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${body}</svg>`;
 
-/** Warning triangle: general alert and traffic jam. */
+/** Warning triangle: general alert. */
 const WARNING = svg(
   '<path d="M12 3 L22 20 H2 Z"/><path d="M12 10 V14" fill="none"/><circle cx="12" cy="17" r="0.8" fill="#111111"/>',
 );
+
+const frontCar = (x: number, y: number) =>
+  `<g transform="translate(${x} ${y})"><path d="M0.5 5 L2.5 1 H9.5 L11.5 5 V9 H0.5 Z"/>` +
+  '<path d="M0.5 5 H11.5 M1.8 9 V10.5 M10.2 9 V10.5" fill="none"/>' +
+  '<circle cx="3.2" cy="7" r="0.5" fill="#111111"/><circle cx="8.8" cy="7" r="0.5" fill="#111111"/></g>';
+
+/** Cars seen from the front, one behind the other: traffic jam. */
+const JAM = svg(frontCar(11, 1.5) + frontCar(1.5, 10.5));
 
 /** Car with an impact mark: accident. */
 const ACCIDENT = svg(
@@ -34,7 +42,7 @@ const CLOSED = svg(
 
 const ICONS: Record<IncidentType, string> = {
   OTHER: WARNING,
-  CONGESTION: WARNING,
+  CONGESTION: JAM,
   ACCIDENT,
   ROADWORKS: BARRIER,
   CLOSURE: CLOSED,
