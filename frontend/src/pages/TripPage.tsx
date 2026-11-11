@@ -16,6 +16,7 @@ import { useCurrentPosition } from '../map/useCurrentPosition';
 import ProposalsBanner from '../proposals/ProposalsBanner';
 import ProfileButton from '../profile/ProfileButton';
 import { stopDeletionText, tripDeletionText } from '../trips/deletion';
+import { incidentIcon } from '../trips/incidentIcon';
 import { impactLabel, incidentTypeLabel } from '../trips/incidentText';
 import type { LinePoint, RouteLine, TripIncident } from '../trips/model';
 import { formatDuration } from '../trips/routeOptionText';
@@ -367,9 +368,11 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
         </span>
       </span>
       {incident && (
-        <span className="va-route-chips">
-          <span className="va-chip va-chip-soft">{impactLabel(incident.impact)}</span>
-          <span className="va-chip va-chip-soft">{incidentTypeLabel(incident.type)}</span>
+        <span className="va-chip va-chip-soft va-route-impact" title={incidentTypeLabel(incident.type)}>
+          {/* same icon per kind of incident as on the map, static markup from incidentIcon */}
+          <span className="va-route-impact-icon" role="img" aria-label={incidentTypeLabel(incident.type)}
+            dangerouslySetInnerHTML={{ __html: incidentIcon(incident.type) }} />
+          {impactLabel(incident.impact)}
         </span>
       )}
     </Link>

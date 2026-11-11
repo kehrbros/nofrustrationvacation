@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 
 import { t } from '../i18n';
 
+import { incidentIcon } from '../trips/incidentIcon';
 import { incidentTitle } from '../trips/incidentText';
 import { pawnElement } from './pawn';
 import { metersPerPixel } from './scale';
@@ -60,11 +61,6 @@ export interface TripMapProps {
 
 type Located = Stop & { latitude: number; longitude: number };
 const located = (stop: Stop | undefined): stop is Located => stop?.latitude != null && stop.longitude != null;
-
-const WARNING_ICON =
-  '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" stroke="#111111" stroke-width="2.2" ' +
-  'stroke-linejoin="round" aria-hidden="true"><path d="M12 3 L22 20 H2 Z"/><path d="M12 10 V14" fill="none"/>' +
-  '<circle cx="12" cy="17" r="0.8" fill="#111111"/></svg>';
 
 const CHECK_BADGE =
   '<svg class="va-map-incident-check" width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">' +
@@ -344,8 +340,8 @@ export default function TripMap({
         const chip = document.createElement('button');
         chip.type = 'button';
         chip.className = chipClass(consequence);
-        // only the icon in a circle, the title is in the tooltip and for screen readers
-        chip.innerHTML = WARNING_ICON;
+        // only the icon for the kind of incident in a circle, the title is in the tooltip and for screen readers
+        chip.innerHTML = incidentIcon(consequence.type);
         chip.title = incidentTitle(consequence);
         chip.setAttribute('aria-label', t('map.alternatives', { title: incidentTitle(consequence) }));
         chip.addEventListener('click', (event) => {
@@ -372,7 +368,7 @@ export default function TripMap({
         const icon = document.createElement('button');
         icon.type = 'button';
         icon.className = 'va-map-incident va-map-incident-resolved';
-        icon.innerHTML = `${WARNING_ICON}${CHECK_BADGE}`;
+        icon.innerHTML = `${incidentIcon(consequence.type)}${CHECK_BADGE}`;
         icon.title = t('map.resolved', { title: incidentTitle(consequence) });
         icon.setAttribute('aria-label', t('map.resolved', { title: incidentTitle(consequence) }));
         icon.addEventListener('click', (event) => {
