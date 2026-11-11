@@ -1588,3 +1588,8 @@ a.va-button {
   accent-color: var(--ink);
   flex: none;
 }
+
+/* ---------- dates of an alternative accommodation ---------- */
+.va-dates-fix {
+  align-self: flex-start;
+}

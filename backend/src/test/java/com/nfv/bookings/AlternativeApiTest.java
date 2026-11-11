@@ -111,6 +111,7 @@ class AlternativeApiTest {
                 .andExpect(jsonPath("$.radiusMeters").value(5000))
                 .andExpect(jsonPath("$.checkIn").value("2027-07-12"))
                 .andExpect(jsonPath("$.checkOut").value("2027-07-15"))
+                .andExpect(jsonPath("$.earliestCheckIn").isNotEmpty())
                 .andExpect(jsonPath("$.guests").value(2))
                 .andExpect(jsonPath("$.rooms").value(1))
                 .andExpect(jsonPath("$.maxPrice").value("412.50"))

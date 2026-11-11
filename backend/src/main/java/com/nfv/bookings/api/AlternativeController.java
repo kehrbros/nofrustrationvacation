@@ -65,7 +65,8 @@ public class AlternativeController {
                                                       @PathVariable long bookingId) {
         CriteriaProposal proposal = search.criteriaFor(user.appUserId(), bookingId);
         return new AlternativeCriteriaDto(proposal.latitude(), proposal.longitude(), proposal.placeName(),
-                proposal.radiusMeters(), proposal.checkIn(), proposal.checkOut(), proposal.guests(), proposal.rooms(),
+                proposal.radiusMeters(), proposal.checkIn(), proposal.checkOut(), proposal.earliestCheckIn(),
+                proposal.guests(), proposal.rooms(),
                 proposal.maxPrice(), proposal.currency(), proposal.excludeHotelId(), proposal.minStars(),
                 proposal.missing());
     }
