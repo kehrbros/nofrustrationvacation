@@ -300,8 +300,6 @@ export const de = {
     addBooking: '+ Buchung',
     viewRoute: 'Route {{route}} ansehen',
     via: 'über {{via}}',
-    departure: 'Abfahrt {{time}}',
-    departureOpen: 'Abfahrt offen',
   },
   incidentSheet: {
     outdated: 'Hinweis nicht mehr aktuell',

@@ -732,6 +732,14 @@ a {
   flex-direction: column;
   gap: 8px;
 }
+.va-route-impact {
+  flex: none;
+  align-self: center;
+  padding-left: 6px;
+}
+.va-route-impact-icon {
+  display: inline-flex;
+}
 .va-stop-list .va-route-row {
   margin-left: 40px;
   padding-left: 12px;

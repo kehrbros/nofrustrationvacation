@@ -302,8 +302,6 @@ export const en: Messages<typeof de> = {
     addBooking: '+ Booking',
     viewRoute: 'View route {{route}}',
     via: 'via {{via}}',
-    departure: 'Departure {{time}}',
-    departureOpen: 'Departure not set',
   },
   incidentSheet: {
     outdated: 'Alert no longer current',
