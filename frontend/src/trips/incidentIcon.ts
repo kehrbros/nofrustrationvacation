@@ -19,8 +19,8 @@ const frontCar = (x: number, y: number) =>
   '<path d="M0.5 5 H11.5 M1.8 9 V10.5 M10.2 9 V10.5" fill="none"/>' +
   '<circle cx="3.2" cy="7" r="0.5" fill="#111111"/><circle cx="8.8" cy="7" r="0.5" fill="#111111"/></g>';
 
-/** Cars seen from the front, one behind the other: traffic jam. */
-const JAM = svg(frontCar(11, 1.5) + frontCar(1.5, 10.5));
+/** Cars seen from the front, three overlapping one behind the other: traffic jam. */
+const JAM = svg(frontCar(11, 1) + frontCar(6.25, 5.75) + frontCar(1.5, 10.5));
 
 /** Car with an impact mark: accident. */
 const ACCIDENT = svg(
