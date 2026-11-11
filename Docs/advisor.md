@@ -323,4 +323,4 @@ nfv.recommendations.stopover.max-areas=5
 - **Texte des Modells:** `summary` und `reason` sind Englisch und werden nicht gezeigt. Sollen sie sichtbar werden, braucht es Deutsch bzw. eine Sprache je Nutzer.
 - **Gleichzeitige Anfragen:** Zwei `POST` im selben Moment können zwei Läufe starten, der zweite kostet nur Modellaufrufe, der letzte Lauf gewinnt in der Anzeige.
 - **Ein Lauf je Route:** Folgen für spätere Routen des Trips stehen nur als Kontext im Modell, siehe [recommendations.md](recommendations.md#offen).
-- **Pläne aus mehreren Schritten** (Übernachtung + Weiterfahrt + Ziel umbuchen, ein Klick): Analyse und offene Entscheidungen in [incident-plans.md](incident-plans.md).
+- **Pläne aus mehreren Schritten** (Übernachtung + Weiterfahrt + Ziel umbuchen, ein Klick): Zielbild in [incident-plans.md](incident-plans.md).
