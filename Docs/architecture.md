@@ -153,7 +153,7 @@ flowchart LR
 - Links neben dem Plus-Button zwei kleine Kartenbuttons (ohne Schatten): „Ganze Reiseroute zeigen“ (alle Stops über dem Sheet) und „Zu meiner Position“ (Zoom 14, etwa 2 km Breite auf dem Handy: Straße, nächste Kreuzungen und Orte bleiben erkennbar; wartet bei Bedarf auf die erste Position).
 - Ortssuche für Stops: Photon (OpenStreetMap, `VITE_GEOCODING_URL`), direkt aus dem Browser. Nur Orte in Neuseeland (`bbox` und `countrycode`, auch für die Unterkunftssuche), ein Stop braucht einen gewählten Vorschlag, siehe [domain.md](domain.md#trips).
 - **Sprachen:** Deutsch und Englisch per i18next (`src/i18n/`), alle UI-Texte als Schlüssel in `de.ts` und `en.ts`, Umschalter im Profilmenü, siehe [i18n.md](i18n.md).
-- **Ladeanzeige:** Dauert etwas länger, zeigt die App das Kiwi-Logo aus der README klein und pulsierend (`src/components/KiwiLoader.tsx`, Bild `src/assets/kiwi.svg`, ohne Schatten, ohne Animation bei `prefers-reduced-motion`).
+- **Ladeanzeige:** Dauert etwas länger, zeigt die App den wartenden Kiwi (`kiwi-waiting.svg` im Repository, Kopie in `frontend/src/assets/kiwi.svg`, Animation steckt im SVG, ruht bei `prefers-reduced-motion`) über `src/components/KiwiLoader.tsx`, ohne Schatten.
   - Ist über `ConfigProvider` (`main.tsx`) Indikator jedes antd-`Spin`, also auch ganzseitig (`Spin fullscreen`).
   - Sonst direkt einsetzen: Größe `small` neben einem Text (z. B. in Buttons während „Wird gespeichert …“, dann `decorative`), `medium` in Boxen, `large` für leere Flächen (Reiseliste, Karte beim Laden).
   - Keine eigenen Spinner (`LoadingOutlined`, Skeletons) mehr für Wartezeiten.

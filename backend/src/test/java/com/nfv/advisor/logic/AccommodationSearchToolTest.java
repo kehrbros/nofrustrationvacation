@@ -79,7 +79,8 @@ class AccommodationSearchToolTest {
         assertThat(option.path("stay").path("price").decimalValue()).isEqualByComparingTo("189.00");
         assertThat(option.path("stay").path("stars").asDouble()).isEqualTo(3.0);
         assertThat(option.path("stay").path("replaces_booked_stay").asBoolean()).isFalse();
-        verify(stayOptions, never()).bookedStay(anyLong(), anyLong(), anyLong());
+        // only for the currency: one currency for all hotels of a plan
+        verify(stayOptions).bookedStay(1, 7, 8);
     }
 
     @Test
@@ -242,7 +243,7 @@ class AccommodationSearchToolTest {
     }
 
     private static AdvisorProperties properties(boolean enabled) {
-        return new AdvisorProperties(8, 3, Duration.ofMinutes(15), false, enabled);
+        return new AdvisorProperties(8, 3, Duration.ofMinutes(15), false, enabled, true, false);
     }
 
     private static RunContext run(boolean relevant, RunContext.Target target) {

@@ -5,6 +5,7 @@ import com.tngtech.archunit.core.importer.ClassFileImporter;
 import com.tngtech.archunit.core.importer.ImportOption;
 import com.nfv.bookings.entities.Booking;
 import com.nfv.bookings.entities.BookingReservation;
+import com.nfv.bookings.entities.PlanPayment;
 import com.nfv.common.money.CurrencyAmount;
 import com.nfv.currency.dto.MoneyDto;
 import jakarta.persistence.Entity;
@@ -38,9 +39,11 @@ class MoneyArchitectureTest {
         fields().that().areDeclaredInClassesThat().areAnnotatedWith(Entity.class)
                 .and().areDeclaredInClassesThat().resideOutsideOfPackage(CURRENCY_MODULE)
                 // price of a booking: informative, in the currency it was booked in, never calculated with;
-                // price of a reservation: in the currency of the offer, paid with PayPal as it is
+                // price of a reservation: in the currency of the offer, paid with PayPal as it is; the payment of a
+                // plan is the sum of its reservations in that currency
                 .and().areNotDeclaredIn(Booking.class)
                 .and().areNotDeclaredIn(BookingReservation.class)
+                .and().areNotDeclaredIn(PlanPayment.class)
                 .should().notHaveRawType(BigDecimal.class)
                 .because("monetary values are persisted as Money, see Docs/money.md")
                 .check(classes);

@@ -87,7 +87,33 @@ public class AlternativeReservations {
         long tripId = stop.getTrip().getId();
         BookingReservation.Holder holder = validate(input);
         checkout.requireConfigured();
+        BookingReservation reservation = prebooked(appUserId, stop.getId(), bookingId, input, holder, null, null);
+        String hotelName = reservation.getHotel().name();
 
+        String page = properties.frontendUrl() + pagePath;
+        PayPalCheckout.CheckoutOrder order;
+        try {
+            order = checkout.createOrder(reference(reservation), new PayPalAmount(reservation.getCurrency(),
+                            reservation.getPrice()),
+                    description(hotelName, input.checkIn(), input.checkOut()), PayPalCheckout.Intent.AUTHORIZE,
+                    URI.create(page + "?reservierung=" + reservation.getId()),
+                    URI.create(page + "?reservierung=" + reservation.getId() + "&abgebrochen=1"));
+        } catch (PayPalRejectedException e) {
+            steps.failed(reservation.getId(), "PayPal order refused: " + e.getIssue());
+            throw new PaymentFailedException("PAYMENT_DECLINED", "PayPal refused the order");
+        }
+        reservation = steps.awaitPayment(reservation.getId(), order.orderId());
+        return new ReservationView(reservation, tripId, order.approveUrl(), null);
+    }
+
+    /**
+     * Prebooks the offer at LiteAPI and stores the reservation with the locked price, nothing paid yet.
+     *
+     * @param planPaymentId the payment of a plan the reservation belongs to, {@code null} on its own
+     */
+    BookingReservation prebooked(long appUserId, long stopId, @Nullable Long bookingId, NewReservation input,
+                                 BookingReservation.Holder holder, @Nullable Long planPaymentId,
+                                 @Nullable String planKey) {
         LiteApi.Prebook prebook = liteApi.prebook(input.offerId());
         if (!prebook.currency().equalsIgnoreCase(input.currency())) {
             throw new OfferUnavailableException("currency", "offer is in " + prebook.currency());
@@ -97,29 +123,14 @@ public class AlternativeReservations {
             throw new PriceExceededException(price.toPlainString(), input.maxPrice().toPlainString());
         }
         LiteApi.HotelDetails hotel = liteApi.hotel(input.hotelId());
-        BookingReservation reservation = steps.create(appUserId, stop.getId(), bookingId,
+        return steps.create(appUserId, stopId, bookingId,
                 new BookingReservation.Offer(input.hotelId(), input.offerId(), prebook.prebookId(), input.checkIn(),
                         input.checkOut(), input.guests(), input.rooms(), prebook.netPrice(), price,
                         prebook.currency().toUpperCase(), prebook.refundable(), prebook.freeCancellationUntil()),
                 new ReservationHotel(hotel.name(), address(hotel), hotel.countryCode(), hotel.latitude(),
                         hotel.longitude(), hotel.phone(), hotel.email(), hotel.website(), hotel.checkInFrom(),
                         hotel.checkInUntil(), hotel.checkOutUntil()),
-                holder);
-
-        String page = properties.frontendUrl() + pagePath;
-        PayPalCheckout.CheckoutOrder order;
-        try {
-            order = checkout.createOrder(reference(reservation), new PayPalAmount(reservation.getCurrency(),
-                            reservation.getPrice()),
-                    description(hotel.name(), input.checkIn(), input.checkOut()), PayPalCheckout.Intent.AUTHORIZE,
-                    URI.create(page + "?reservierung=" + reservation.getId()),
-                    URI.create(page + "?reservierung=" + reservation.getId() + "&abgebrochen=1"));
-        } catch (PayPalRejectedException e) {
-            steps.failed(reservation.getId(), "PayPal order refused: " + e.getIssue());
-            throw new PaymentFailedException("PAYMENT_DECLINED", "PayPal refused the order");
-        }
-        reservation = steps.awaitPayment(reservation.getId(), order.orderId());
-        return new ReservationView(reservation, tripId, order.approveUrl(), null);
+                holder, planPaymentId, planKey);
     }
 
     /**
@@ -340,7 +351,7 @@ public class AlternativeReservations {
         return steps.authorized(reservation.getId(), authorization.id());
     }
 
-    private BookingReservation book(BookingReservation reservation) {
+    BookingReservation book(BookingReservation reservation) {
         if (reservation.getHolderFirstName() == null) {
             throw new IllegalStateException("reservation " + reservation.getId() + " has no holder");
         }
@@ -370,7 +381,7 @@ public class AlternativeReservations {
      * @return the capture id; null if PayPal refused it: the room is booked (and charged to us), the reservation
      * needs attention instead of turning into a booking without payment
      */
-    private @Nullable String capture(BookingReservation reservation) {
+    @Nullable String capture(BookingReservation reservation) {
         PayPalCheckout.Payment capture;
         try {
             capture = checkout.captureAuthorization(reservation.getPayPalAuthorizationId(),
@@ -388,7 +399,7 @@ public class AlternativeReservations {
         return capture.id();
     }
 
-    private void voidQuietly(String authorizationId, BookingReservation reservation) {
+    void voidQuietly(String authorizationId, BookingReservation reservation) {
         try {
             checkout.voidAuthorization(authorizationId, "void-" + reference(reservation));
         } catch (PayPalException e) {
@@ -408,15 +419,15 @@ public class AlternativeReservations {
                 .orElseThrow(() -> new ReservationNotFoundException(reservation.getId()));
     }
 
-    private static String reference(BookingReservation reservation) {
+    static String reference(BookingReservation reservation) {
         return "stay-" + reservation.getId();
     }
 
-    private static String clientReference(BookingReservation reservation) {
+    static String clientReference(BookingReservation reservation) {
         return "nfv-" + reference(reservation);
     }
 
-    private static String description(String hotel, LocalDate checkIn, LocalDate checkOut) {
+    static String description(String hotel, LocalDate checkIn, LocalDate checkOut) {
         String text = hotel + ", " + DATE.format(checkIn) + " – " + DATE.format(checkOut);
         return text.length() > 127 ? text.substring(0, 127) : text;
     }
@@ -428,7 +439,7 @@ public class AlternativeReservations {
         return address == null || address.length() <= 500 ? address : address.substring(0, 500);
     }
 
-    private static BookingReservation.Holder validate(NewReservation input) {
+    static BookingReservation.Holder validate(NewReservation input) {
         if (input.hotelId() == null || input.hotelId().isBlank() || input.hotelId().length() > 64
                 || input.offerId() == null || input.offerId().isBlank() || input.offerId().length() > 1000) {
             throw new InvalidBookingInputException("hotel and offer are required");

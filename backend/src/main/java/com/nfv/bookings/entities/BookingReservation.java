@@ -95,7 +95,31 @@ public class BookingReservation extends AbstractEntity {
     @Column(name = "paypal_refund_id", length = 64)
     private @Nullable String payPalRefundId;
 
+    /** The payment of a plan with several hotels this belongs to, see Docs/incident-plans.md. */
+    private @Nullable Long planPaymentId;
+    /** Which stay of the plan, e.g. {@code overnight}. */
+    @Column(length = 32)
+    private @Nullable String planKey;
+
     protected BookingReservation() {
+    }
+
+    /** Part of the payment of a plan, before the PayPal order. */
+    public void partOf(long planPaymentId, @Nullable String planKey) {
+        require(ReservationStatus.PREBOOKED);
+        this.planPaymentId = planPaymentId;
+        this.planKey = planKey;
+    }
+
+    /**
+     * The plan created the stop of the stay (a night on the way) or moved the stay to it: the booking is made there.
+     * Only before the booking exists.
+     */
+    public void assignStop(long stopId) {
+        if (status == ReservationStatus.BOOKED || status == ReservationStatus.CANCELLED) {
+            throw new IllegalStateException("reservation " + getId() + " is " + status);
+        }
+        this.stopId = stopId;
     }
 
     public BookingReservation(long appUserId, long stopId, @Nullable Long replacesBookingId, Offer offer,
@@ -201,6 +225,17 @@ public class BookingReservation extends AbstractEntity {
         if (status == ReservationStatus.BOOKED || status == ReservationStatus.PROVIDER_BOOKED) {
             throw new IllegalStateException("reservation " + getId() + " is booked already");
         }
+        this.failure = reason.length() > 500 ? reason.substring(0, 500) : reason;
+        this.status = ReservationStatus.FAILED;
+        forgetHolder();
+    }
+
+    /**
+     * Booked at LiteAPI as part of a plan, but another hotel of the plan failed: cancelled at LiteAPI again before the
+     * money was captured, the authorization voided. Nothing paid.
+     */
+    public void providerCancelled(String reason) {
+        require(ReservationStatus.PROVIDER_BOOKED);
         this.failure = reason.length() > 500 ? reason.substring(0, 500) : reason;
         this.status = ReservationStatus.FAILED;
         forgetHolder();

@@ -67,14 +67,35 @@ class ReservationSteps {
                         ReservationStatus.PROVIDER_BOOKED, ReservationStatus.CANCELLED)).stream()
                 .filter(reservation -> reservation.getStatus() != ReservationStatus.CANCELLED
                         || reservation.isRefundOpen())
+                // the payment of a plan continues them together, a refund is still done here
+                .filter(reservation -> reservation.getPlanPaymentId() == null
+                        || reservation.getStatus() == ReservationStatus.CANCELLED)
                 .toList();
     }
 
     @Transactional
     BookingReservation create(long appUserId, long stopId, @Nullable Long replacesBookingId, BookingReservation.Offer offer,
-                              ReservationHotel hotel, BookingReservation.Holder holder) {
-        return repository.save(new BookingReservation(appUserId, stopId, replacesBookingId, offer, hotel, holder,
-                OffsetDateTime.now(clock)));
+                              ReservationHotel hotel, BookingReservation.Holder holder, @Nullable Long planPaymentId,
+                              @Nullable String planKey) {
+        BookingReservation reservation = new BookingReservation(appUserId, stopId, replacesBookingId, offer, hotel,
+                holder, OffsetDateTime.now(clock));
+        if (planPaymentId != null) {
+            reservation.partOf(planPaymentId, planKey);
+        }
+        return repository.save(reservation);
+    }
+
+    @Transactional(readOnly = true)
+    List<BookingReservation> ofPlanPayment(long planPaymentId) {
+        return repository.findByPlanPaymentIdOrderById(planPaymentId);
+    }
+
+    /** The stop a reservation of a plan belongs to, known only once the plan changed the trip. */
+    @Transactional
+    BookingReservation assignStop(long reservationId, long stopId) {
+        BookingReservation reservation = repository.findById(reservationId).orElseThrow();
+        reservation.assignStop(stopId);
+        return reservation;
     }
 
     @Transactional
@@ -127,6 +148,13 @@ class ReservationSteps {
     BookingReservation providerBooked(long reservationId, String providerBookingId, String confirmation) {
         BookingReservation reservation = repository.findById(reservationId).orElseThrow();
         reservation.providerBooked(providerBookingId, confirmation);
+        return reservation;
+    }
+
+    @Transactional
+    BookingReservation providerCancelled(long reservationId, String reason) {
+        BookingReservation reservation = repository.findById(reservationId).orElseThrow();
+        reservation.providerCancelled(reason);
         return reservation;
     }
 

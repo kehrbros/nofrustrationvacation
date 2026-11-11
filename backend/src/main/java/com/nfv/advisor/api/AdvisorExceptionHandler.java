@@ -1,6 +1,13 @@
 package com.nfv.advisor.api;
 
 import com.nfv.advisor.logic.InvalidProposalInputException;
+import com.nfv.bookings.logic.BookingNotFoundException;
+import com.nfv.bookings.logic.InvalidBookingInputException;
+import com.nfv.bookings.logic.LiteApiUnavailableException;
+import com.nfv.bookings.logic.OfferUnavailableException;
+import com.nfv.bookings.logic.PaymentFailedException;
+import com.nfv.bookings.logic.PriceExceededException;
+import com.nfv.bookings.logic.ReservationNotFoundException;
 import com.nfv.advisor.logic.NoActiveConsequenceException;
 import com.nfv.advisor.logic.ProposalNotApplicableException;
 
@@ -41,6 +48,41 @@ public class AdvisorExceptionHandler {
     @ExceptionHandler(ProposalNotApplicableException.class)
     public ResponseEntity<ProblemDetail> handleNotApplicable(ProposalNotApplicableException exception) {
         return problem(HttpStatus.CONFLICT, "PROPOSAL_NOT_APPLICABLE", exception.getMessage());
+    }
+
+    @ExceptionHandler(ReservationNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleReservationNotFound(ReservationNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, "RESERVATION_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    public ResponseEntity<ProblemDetail> handleBookingNotFound(BookingNotFoundException exception) {
+        return problem(HttpStatus.NOT_FOUND, exception.getCode(), exception.getMessage());
+    }
+
+    @ExceptionHandler(InvalidBookingInputException.class)
+    public ResponseEntity<ProblemDetail> handleInvalidBooking(InvalidBookingInputException exception) {
+        return problem(HttpStatus.BAD_REQUEST, "INVALID_BOOKING_INPUT", exception.getMessage());
+    }
+
+    @ExceptionHandler(OfferUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleOfferUnavailable(OfferUnavailableException exception) {
+        return problem(HttpStatus.CONFLICT, "OFFER_UNAVAILABLE", exception.getMessage());
+    }
+
+    @ExceptionHandler(PriceExceededException.class)
+    public ResponseEntity<ProblemDetail> handlePriceExceeded(PriceExceededException exception) {
+        return problem(HttpStatus.CONFLICT, "PRICE_EXCEEDED", exception.getMessage());
+    }
+
+    @ExceptionHandler(PaymentFailedException.class)
+    public ResponseEntity<ProblemDetail> handlePaymentFailed(PaymentFailedException exception) {
+        return problem(HttpStatus.UNPROCESSABLE_CONTENT, exception.getCode(), exception.getMessage());
+    }
+
+    @ExceptionHandler(LiteApiUnavailableException.class)
+    public ResponseEntity<ProblemDetail> handleLiteApi(LiteApiUnavailableException exception) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "ALTERNATIVES_UNAVAILABLE", exception.getMessage());
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)

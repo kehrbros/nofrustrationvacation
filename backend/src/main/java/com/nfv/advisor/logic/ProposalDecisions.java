@@ -47,6 +47,7 @@ public class ProposalDecisions {
     private final TripEditing tripEditing;
     private final TripLogic tripLogic;
     private final BookingTodos todos;
+    private final PlanExecutions planExecutions;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -62,7 +63,8 @@ public class ProposalDecisions {
                            @Nullable Long stayStopId, @Nullable Long replacesBookingId, int todosAdded) {
     }
 
-    private record Chosen(long routeId, AdvisorProposal proposal, int position, List<SuggestedOption.Point> points) {
+    private record Chosen(long routeId, AdvisorProposal proposal, int position, List<SuggestedOption.Point> points,
+                          @Nullable PlanSnapshot plan) {
     }
 
     /**
@@ -96,7 +98,8 @@ public class ProposalDecisions {
             AdvisorProposal proposal = run.getProposals().get(rank - 1);
             return new Chosen(routeId, proposal, rank - 1, proposal.getPoints().stream()
                     .map(p -> new SuggestedOption.Point(p.getLatitude(), p.getLongitude(), p.getRoadHint(),
-                            p.getWaypointId())).toList());
+                            p.getWaypointId())).toList(),
+                    proposal.getKind() == ProposalKind.PLAN ? PlanSnapshot.of(proposal) : null);
         }));
         AdvisorProposal proposal = chosen.proposal();
         Accepted accepted;
@@ -115,6 +118,16 @@ public class ProposalDecisions {
                 case TARGET_STAY -> new Accepted(runId, rank, proposal.getKind(), tripId, List.of(), ends.to().getId(),
                         stay(proposal).replacesBookingId(), 0);
                 case STOPOVER -> stopover(appUserId, runId, rank, tripId, ends, proposal);
+                case PLAN -> {
+                    PlanSnapshot plan = Objects.requireNonNull(chosen.plan());
+                    if (!plan.stays().isEmpty()) {
+                        throw new ProposalNotApplicableException("the plan books hotels, take it with plan-checkout");
+                    }
+                    PlanExecutions.Outcome outcome = planExecutions.applyFree(appUserId, tripId, routeId, runId, rank,
+                            plan);
+                    yield new Accepted(runId, rank, ProposalKind.PLAN, tripId, outcome.plannedRouteIds(), null, null,
+                            outcome.todosAdded());
+                }
             };
         } catch (InvalidSuggestionInputException | InvalidTripInputException e) {
             throw new ProposalNotApplicableException(e.getMessage());

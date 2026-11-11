@@ -130,7 +130,7 @@ class OvernightAreaToolTest {
     }
 
     private static AdvisorProperties properties(boolean enabled) {
-        return new AdvisorProperties(8, 3, Duration.ofMinutes(15), false, enabled);
+        return new AdvisorProperties(8, 3, Duration.ofMinutes(15), false, enabled, true, false);
     }
 
     private static RunContext run(boolean relevant) {

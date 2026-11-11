@@ -2,6 +2,7 @@ package com.nfv.advisor.entities;
 
 import com.nfv.common.data.AbstractEntity;
 import jakarta.annotation.Nullable;
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
@@ -12,6 +13,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.OrderColumn;
 import lombok.Getter;
 
@@ -57,8 +60,28 @@ public class AdvisorProposal extends AbstractEntity {
     /** {@code STOPOVER} and {@code TARGET_STAY} only. */
     @Embedded
     private @Nullable ProposalStay stay;
+    /** {@code PLAN} only. */
+    @Embedded
+    private @Nullable PlanResult plan;
+    /** {@code PLAN} only, in order. */
+    @OneToMany(mappedBy = "proposal", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("position")
+    private List<AdvisorProposalStep> steps = new ArrayList<>();
 
     protected AdvisorProposal() {
+    }
+
+    /** A plan of several steps; its first drive and conflicts are also the fields of the proposal. */
+    public AdvisorProposal(int position, @Nullable String reason, @Nullable OffsetDateTime departureAt,
+                           @Nullable OffsetDateTime arrivalAt, @Nullable Duration delay, @Nullable Boolean meetsDeadline,
+                           List<ProposalConflict> conflicts, PlanResult plan, List<AdvisorProposalStep> steps) {
+        this(position, ProposalKind.PLAN, reason, null, departureAt, arrivalAt, null, null, delay, null,
+                meetsDeadline, List.of(), conflicts, null);
+        this.plan = plan;
+        steps.forEach(step -> {
+            step.belongsTo(this);
+            this.steps.add(step);
+        });
     }
 
     public AdvisorProposal(int position, ProposalKind kind, @Nullable String reason, @Nullable String via,

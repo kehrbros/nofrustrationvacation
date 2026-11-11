@@ -95,6 +95,7 @@
   3. Buchung bei LiteAPI mit `ACC_CREDIT_CARD`.
   4. Erfolgreich → Capture der Autorisierung, Reservierung `BOOKED`, `Booking` anlegen. Gescheitert (`2001`, Preisänderung) → Autorisierung freigeben (void), kein Geld bewegt, keine Erstattungsgebühr.
   - Bricht der Ablauf zwischen 3 und 4 ab, gleicht ein Poller (wie beim Top-up in `accounting`) Reservierungen mit Autorisierung über `clientReference` bei LiteAPI ab und captured oder gibt frei. Autorisierungen laufen nach einigen Tagen ab, das reicht für den Abgleich.
+- **Mehrere Hotels eines Plans (2026-11-11):** eine Order mit einer `purchase_unit` je Hotel (`reference_id` = Reservierung), eine Freigabe, Autorisierung je Einheit, LiteAPI-Buchung je Hotel, Capture erst nachdem der Plan die Reise geändert hat. Scheitert ein Hotel, werden die übrigen storniert und alle Autorisierungen freigegeben (`bookings.PlanPayments`), siehe [incident-plans.md](incident-plans.md#ausführen-mit-einem-klick).
 - **Storno einer per App gebuchten Alternative:** LiteAPI erstattet laut Bedingungen auf unsere Karte, wir erstatten per PayPal (Refund der Capture). Provision bei Storno einbehalten oder erstatten: offen.
 - **Anpassungen am Modul `paypal`** (bleibt technische Anbindung ohne Fachwissen, `PayPalModuleTest` gilt weiter):
   - Return- und Cancel-URL je Aufruf statt fest konfiguriert (`checkout-return-url` zeigt auf eine entfernte Seite von `accounting`).

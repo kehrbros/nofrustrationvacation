@@ -15,7 +15,8 @@ interface KiwiLoaderProps {
 }
 
 /**
- * Loading indicator for anything that takes longer: the kiwi logo from the README, pulsing gently. Also the default
+ * Loading indicator for anything that takes longer: the waiting kiwi (kiwi-waiting.svg in the repository root, animated
+ * in the SVG itself, at rest with prefers-reduced-motion). Also the default
  * indicator of every antd Spin (ConfigProvider in main.tsx). See Docs/architecture.md (Frontend, Ladeanzeige).
  */
 export default function KiwiLoader({ size = 'medium', label, decorative = false, className }: KiwiLoaderProps) {
