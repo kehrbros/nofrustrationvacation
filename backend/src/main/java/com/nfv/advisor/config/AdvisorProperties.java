@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 import java.time.Duration;
 
 /**
- * Limits of the agent, see Docs/advisor.md#konfiguration.
+ * Limits of the agent, see Docs/advisor.md#configuration.
  *
  * @param maxTurns     requests to the model per run, in the last one it has to finish
  * @param maxProposals most proposals per run

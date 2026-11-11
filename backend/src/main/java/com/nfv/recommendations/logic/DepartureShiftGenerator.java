@@ -23,7 +23,7 @@ import java.util.stream.Stream;
 
 /**
  * The planned route with another departure, at most one in each direction: past the end of all incidents or before
- * the start of all of them, see Docs/recommendations.md#generatoren. No routing, only other passage times. The
+ * the start of all of them, see Docs/recommendations.md#generators. No routing, only other passage times. The
  * evaluation drops a departure that runs into another closure.
  */
 @Component

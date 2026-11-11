@@ -22,7 +22,7 @@ import java.util.Optional;
 
 /**
  * Asks the model through {@code assistant.StructuredExtraction}, against the system quota. Only the text and the
- * validity of the source go to the model, no user or trip data. See Docs/traffic-feed.md#anreicherung-messageenrichment.
+ * validity of the source go to the model, no user or trip data. See Docs/traffic-feed.md#enrichment-messageenrichment.
  */
 @Component
 public class AssistantEnrichmentModel implements EnrichmentModel {

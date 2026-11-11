@@ -16,7 +16,7 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.stream.Collectors;
 
-/** Hash of what proposals depend on, to see whether stored ones are out of date, see Docs/advisor.md#veraltete-vorschläge. */
+/** Hash of what proposals depend on, to see whether stored ones are out of date, see Docs/advisor.md#outdated-proposals. */
 @Component
 @RequiredArgsConstructor
 class RouteSituations {

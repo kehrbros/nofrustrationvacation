@@ -10,7 +10,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Road numbers of a source and of OpenStreetMap in one comparable form, see Docs/network.md#schnittstellen-networklogic.
+ * Road numbers of a source and of OpenStreetMap in one comparable form, see Docs/network.md#interfaces-networklogic.
  * New Zealand: {@code SH 1}, {@code SH1}, {@code State Highway 1}, {@code 01N}, {@code 01S} → {@code 1};
  * {@code 006} → {@code 6}; {@code SH 20A} → {@code 20A}. Elsewhere spaces are dropped ({@code A 6} → {@code A6}).
  * One rule set for all regions until a region needs its own; the region is part of the signature for that.

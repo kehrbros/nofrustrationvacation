@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 /**
- * Reads one NZTA {@code roadevent}, field table and type rules in Docs/traffic-feed.md#erste-quelle-nzta.
+ * Reads one NZTA {@code roadevent}, field table and type rules in Docs/traffic-feed.md#first-source-nzta.
  * Direction is left open (both directions): the suffix in {@code locations} does not match the text reliably, the
  * direction comes from the enrichment later. A local road ({@code SH N/A}) has no road number; events on a ramp or
  * link alone are marked {@code linkOnly}.

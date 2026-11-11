@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 /**
  * Stores the suggestion the user chose: its points become the waypoints of the route, which is planned again via
  * {@link TripEditing}. Suggestions are not stored, the client sends the points of the chosen option back, see
- * Docs/recommendations.md#auswahl-speichern. No check for concurrent changes yet, the last choice wins.
+ * Docs/recommendations.md#saving-the-choice. No check for concurrent changes yet, the last choice wins.
  */
 @Service
 @RequiredArgsConstructor

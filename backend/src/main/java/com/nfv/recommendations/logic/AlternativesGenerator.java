@@ -24,7 +24,7 @@ import java.util.stream.Stream;
 
 /**
  * Alternatives from GraphHopper {@code alternative_route}, which only takes two points: one request per leg, then the
- * legs are combined and the best kept, see Docs/recommendations.md#generatoren.
+ * legs are combined and the best kept, see Docs/recommendations.md#generators.
  */
 @Component
 @RequiredArgsConstructor

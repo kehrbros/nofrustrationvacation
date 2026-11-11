@@ -1,62 +1,62 @@
-# Geldbeträge und Währungen
+# Money amounts and currencies
 
-- **Grundsatz:** Logik, Persistenz und Abrechnung rechnen ausschließlich in der Basiswährung. Fremdwährungen existieren nur an der API (`api`/`dto`) und im Modul `com.nfv.currency`.
-- **Basiswährung: USD**, fest in `Money.BASE_CURRENCY`. Nicht konfigurierbar: ein Wechsel erfordert eine Datenmigration.
-- **Warum nur eine Währung:** Vergleiche und Summen sind ohne Kurs eindeutig, die Envers-Historie bleibt kursunabhängig.
+- **Principle:** logic, persistence and accounting calculate exclusively in the base currency. Foreign currencies exist only at the API (`api`/`dto`) and in the module `com.nfv.currency`.
+- **Base currency: USD**, fixed in `Money.BASE_CURRENCY`. Not configurable: a change requires a data migration.
+- **Why only one currency:** comparisons and sums are unambiguous without a rate, the Envers history stays independent of rates.
 
-## Typ `Money` (`com.nfv.common.money`)
+## Type `Money` (`com.nfv.common.money`)
 
-- `record Money(BigDecimal amount)`, immer Basiswährung, daher ohne Währungsfeld. Für alle Geldbeträge in Entities, Logik und Repositories, nie rohe `BigDecimal`.
-- **Skala:** fest 8 Nachkommastellen (`Money.SCALE`), im Konstruktor per `HALF_EVEN` normiert, daher ist `equals` sicher.
-- **Operationen:** `plus`, `minus`, `times`, `dividedBy` (intern `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Nie `double`.
-- **Fremdwährungsbetrag:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, nur an der API und im Modul `currency`.
+- `record Money(BigDecimal amount)`, always base currency, hence without a currency field. For all money amounts in entities, logic and repositories, never raw `BigDecimal`.
+- **Scale:** fixed 8 decimal places (`Money.SCALE`), normalised in the constructor with `HALF_EVEN`, so `equals` is safe.
+- **Operations:** `plus`, `minus`, `times`, `dividedBy` (internally `MathContext.DECIMAL128`), `isNegative`, `isZero`, `isGreaterThan`, `isLessThan`, `compareTo`, `Money.ZERO`, `Money.of(...)`. Never `double`.
+- **Foreign currency amount:** `record CurrencyAmount(BigDecimal amount, Currency currency)`, only at the API and in the module `currency`.
 
-## Ausnahme: Preise von Buchungen
+## Exception: prices of bookings
 
-- `Booking.price` + `currency` (Modul `bookings`) ist der Preis, wie er in der Bestätigung steht (z. B. 412,50 EUR), in beliebiger Währung, `NUMERIC(12, 2)`. Er ist nur Information für den Nutzer, die App rechnet und rechnet nicht um. Eine Umrechnung in die Basiswährung würde den gebuchten Betrag verfälschen.
-- Ebenso `BookingReservation` (Tabelle `booking_reservation`, Buchung einer Alternative über LiteAPI): Nettopreis, Provision und Endpreis in der Währung des Angebots, so an PayPal übergeben, keine Umrechnung, siehe [accommodation-alternatives.md](accommodation-alternatives.md#zahlung). Gerechnet wird nur Nettopreis + Provision (`Pricing`).
-- Ebenso das Angebot eines Vorschlags des Agenten (`advisor_proposal.stay_price`, `ProposalStay`): der Preis, den die Suche geliefert hat, in der Währung des Angebots, beim Buchen wird er neu geprüft, siehe [advisor.md](advisor.md#search_accommodations).
-- Ebenso Pläne (`V50`): Angebote der Schritte (`advisor_proposal_step.stay_price`), Mehrkosten des Plans (`advisor_proposal.extra_cost`) und die gemeinsame Zahlung (`PlanPayment.total`, Tabelle `plan_payment`, Summe der Reservierungen in ihrer einen Währung), siehe [incident-plans.md](incident-plans.md).
-- `MoneyArchitectureTest` und `MoneyPersistenceTest` nehmen `Booking.price`, `BookingReservation`, `PlanPayment` bzw. die Tabellen `booking`, `booking_aud`, `booking_reservation`, `advisor_proposal`, `advisor_proposal_step`, `plan_payment` ausdrücklich aus (`ProposalStay` ist kein `@Entity`, fällt also nicht unter `MoneyArchitectureTest`).
+- `Booking.price` + `currency` (module `bookings`) is the price as stated in the confirmation (e.g. 412.50 EUR), in any currency, `NUMERIC(12, 2)`. It is only information for the user, the app neither calculates with it nor converts it. A conversion to the base currency would distort the booked amount.
+- Likewise `BookingReservation` (table `booking_reservation`, booking of an alternative via LiteAPI): net price, commission and final price in the currency of the offer, passed to PayPal as is, no conversion, see [accommodation-alternatives.md](accommodation-alternatives.md#payment). The only calculation is net price + commission (`Pricing`).
+- Likewise the offer of an agent proposal (`advisor_proposal.stay_price`, `ProposalStay`): the price the search returned, in the currency of the offer, re-checked when booking, see [advisor.md](advisor.md#search_accommodations).
+- Likewise plans (`V50`): offers of the steps (`advisor_proposal_step.stay_price`), extra cost of the plan (`advisor_proposal.extra_cost`) and the combined payment (`PlanPayment.total`, table `plan_payment`, sum of the reservations in their single currency), see [incident-plans.md](incident-plans.md).
+- `MoneyArchitectureTest` and `MoneyPersistenceTest` explicitly exclude `Booking.price`, `BookingReservation`, `PlanPayment` and the tables `booking`, `booking_aud`, `booking_reservation`, `advisor_proposal`, `advisor_proposal_step`, `plan_payment` (`ProposalStay` is not an `@Entity`, so it is not covered by `MoneyArchitectureTest`).
 
-## Persistenz
+## Persistence
 
-- **Mapping:** `common.data.MoneyConverter` (`@Converter(autoApply = true)`, analog `DurationConverter`). Eine Spalte pro Betrag, keine Währungsspalte. Entity-Feld: `@Column(precision = 19, scale = Money.SCALE) private Money ...;`
-- **Spaltentyp:** `NUMERIC(19, 8)`. Neue Geldspalten in Migrationen ebenso anlegen, in `_aud`-Tabellen auch.
-- **Umgestellt durch `V4__money.sql`** (vorher Entities `scale = 6`, Schema `NUMERIC(38, 2)`):
-  - Preise von Markt, Angeboten und Aufträgen (entfernt mit `V18__drop_market_and_llm.sql`)
-  - `AppUser.accountBalance` (seit `V11__accounting.sql` ersetzt durch `accounting_account.balance`), zusätzlich neues Feld `AppUser.preferredCurrency`
-- **Buchungen mit Umrechnung** (Ein-/Auszahlung, siehe [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` liefert eine `CurrencyConversion` (Originalbetrag, Basisbetrag, Kurs, Kursdatum). In der API zu `common.money.OriginalAmount` (`@Embeddable`, Spalten `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) gemappt und mit der Buchung gespeichert, nie neu berechnet.
+- **Mapping:** `common.data.MoneyConverter` (`@Converter(autoApply = true)`, analogous to `DurationConverter`). One column per amount, no currency column. Entity field: `@Column(precision = 19, scale = Money.SCALE) private Money ...;`
+- **Column type:** `NUMERIC(19, 8)`. Create new money columns in migrations the same way, in `_aud` tables as well.
+- **Converted by `V4__money.sql`** (previously entities `scale = 6`, schema `NUMERIC(38, 2)`):
+  - prices of market, offers and orders (removed with `V18__drop_market_and_llm.sql`)
+  - `AppUser.accountBalance` (replaced by `accounting_account.balance` since `V11__accounting.sql`), additionally new field `AppUser.preferredCurrency`
+- **Bookings with conversion** (top-up/payout, see [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` returns a `CurrencyConversion` (original amount, base amount, rate, rate date). In the API it is mapped to `common.money.OriginalAmount` (`@Embeddable`, columns `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) and stored with the booking, never recalculated.
 
-## Wechselkurse (`com.nfv.currency`)
+## Exchange rates (`com.nfv.currency`)
 
-- **Quelle:** `EcbExchangeRateProvider`, EZB-Referenzkurse (ohne API-Key, werktags ~16:00 MEZ, Basis EUR). Kurse zur Basiswährung als Kreuzkurs `EUR→X / EUR→USD`. Andere Quelle: weitere Implementierung von `ExchangeRateProvider`.
-- **Speicherung:** Tabelle `exchange_rate(currency, rate NUMERIC(19, 10), rate_date, fetched_at, source)`, eindeutig auf `(currency, rate_date)`. `rate` = Einheiten Fremdwährung je 1 USD. Nicht auditiert, die Tabelle ist selbst die Historie.
-- **Abruf:** `ExchangeRateUpdater` beim Start und per Cron (`nfv.money.exchange-rates.update-cron`, Mo–Fr 17:00 Europe/Berlin). Fehler werden nur geloggt, es gilt dann der letzte gespeicherte Kurs. Abschaltbar mit `nfv.money.exchange-rates.update-enabled=false` (in Tests gesetzt über `src/test/resources/config/application.properties`).
-- **Cache:** neuester Kurs je Währung im `CurrencyConversionService`, nach jedem Abruf geleert.
-- **Veraltete Kurse:** Anzeige nutzt immer den letzten Kurs (Wochenende/Feiertage). Buchungswirksame Umrechnung (`toBaseForBooking`) lehnt Kurse älter als `nfv.money.exchange-rates.max-age-days` (4) mit `ExchangeRateUnavailableException` ab.
-- **Unterstützte Währungen:** `nfv.money.currencies=USD,EUR,GBP,CHF`. Andere Währung → `UnsupportedCurrencyException` → HTTP 400 (`CurrencyExceptionHandler`).
+- **Source:** `EcbExchangeRateProvider`, ECB reference rates (no API key, weekdays ~16:00 CET, base EUR). Rates to the base currency as cross rate `EUR→X / EUR→USD`. Another source: another implementation of `ExchangeRateProvider`.
+- **Storage:** table `exchange_rate(currency, rate NUMERIC(19, 10), rate_date, fetched_at, source)`, unique on `(currency, rate_date)`. `rate` = units of foreign currency per 1 USD. Not audited, the table itself is the history.
+- **Fetching:** `ExchangeRateUpdater` at startup and via cron (`nfv.money.exchange-rates.update-cron`, Mon–Fri 17:00 Europe/Berlin). Errors are only logged, the last stored rate then applies. Can be disabled with `nfv.money.exchange-rates.update-enabled=false` (set in tests via `src/test/resources/config/application.properties`).
+- **Cache:** latest rate per currency in `CurrencyConversionService`, cleared after every fetch.
+- **Outdated rates:** display always uses the last rate (weekend/holidays). Conversion that affects bookings (`toBaseForBooking`) rejects rates older than `nfv.money.exchange-rates.max-age-days` (4) with `ExchangeRateUnavailableException`.
+- **Supported currencies:** `nfv.money.currencies=USD,EUR,GBP,CHF`. Other currency → `UnsupportedCurrencyException` → HTTP 400 (`CurrencyExceptionHandler`).
 
-## Umrechnung an den Schnittstellen
+## Conversion at the interfaces
 
-- **Ort:** nur in Controllern/DTO-Mapping über `CurrencyConversionService`. `logic`, `data` und `entities` kennen nur `Money` (ArchUnit-Test `MoneyArchitectureTest`).
-- **API-Format:** `MoneyDto { amount, currency, exchangeRate?, exchangeRateDate? }`. `amount` und `exchangeRate` sind Dezimal-Strings (`type: string, format: decimal` in OpenAPI), nie JSON-Zahlen. `exchangeRate`/`exchangeRateDate` nur bei umgerechneten Werten, für „Kurs vom …“ im Frontend.
-- **Eingehend:** `Money fromDto(MoneyDto)` bzw. `toBase(CurrencyAmount)`: `base = amount / rate`, Skala 8, `HALF_EVEN`.
-- **Ausgehend:** `toDto(money, currency, rounding)`: `amount = base × rate`. Ziel-Währung über `responseCurrency(requested, preferred)`: Query-Parameter `currency`, sonst `AppUser.preferredCurrency`, sonst USD.
-- **Rundung ausgehend (`MoneyRounding`):**
-  - `PRICE`: Preise mit kleinen Beträgen: 6 Nachkommastellen, `HALF_EVEN`.
-  - `AMOUNT`: Kontostände, Rechnungs- und Zahlbeträge: Nachkommastellen der Währung (2 für EUR, 0 für JPY), `HALF_EVEN`.
-  - `PAYOUT`: Auszahlungen: wie `AMOUNT`, aber `DOWN`, damit nie mehr ausgezahlt wird als das Guthaben deckt.
-  - Formatierung (Tausendertrenner, Symbol) macht das Frontend.
-- **Zeitbezug des Kurses:** aktuelle Werte mit dem neuesten Kurs, historische Werte mit `toDto(..., at)` zum Kurs am Ereignisdatum, Buchungen mit dem gespeicherten Kurs.
-- **Roundtrip:** Hin- und Rückrechnung kann minimal abweichen. Wo das stört, die Originaleingabe zusätzlich zur Anzeige speichern.
-- **Beispiel:** `GET /api/v1/accounting/balances?currency=EUR` liefert Guthaben und Einnahmen in EUR. `PUT /api/v1/users/me/preferred-currency` mit `{"currency": "EUR"}` (oder `null` für USD) setzt die Standardwährung.
+- **Location:** only in controllers/DTO mapping via `CurrencyConversionService`. `logic`, `data` and `entities` only know `Money` (ArchUnit test `MoneyArchitectureTest`).
+- **API format:** `MoneyDto { amount, currency, exchangeRate?, exchangeRateDate? }`. `amount` and `exchangeRate` are decimal strings (`type: string, format: decimal` in OpenAPI), never JSON numbers. `exchangeRate`/`exchangeRateDate` only for converted values, for "rate as of …" in the frontend.
+- **Incoming:** `Money fromDto(MoneyDto)` or `toBase(CurrencyAmount)`: `base = amount / rate`, scale 8, `HALF_EVEN`.
+- **Outgoing:** `toDto(money, currency, rounding)`: `amount = base × rate`. Target currency via `responseCurrency(requested, preferred)`: query parameter `currency`, otherwise `AppUser.preferredCurrency`, otherwise USD.
+- **Outgoing rounding (`MoneyRounding`):**
+  - `PRICE`: prices with small amounts: 6 decimal places, `HALF_EVEN`.
+  - `AMOUNT`: balances, invoice and payment amounts: decimal places of the currency (2 for EUR, 0 for JPY), `HALF_EVEN`.
+  - `PAYOUT`: payouts: like `AMOUNT`, but `DOWN`, so that never more is paid out than the balance covers.
+  - Formatting (thousands separator, symbol) is done by the frontend.
+- **Point in time of the rate:** current values with the latest rate, historical values with `toDto(..., at)` at the rate of the event date, bookings with the stored rate.
+- **Round trip:** converting there and back may deviate minimally. Where this matters, store the original input in addition to the display value.
+- **Example:** `GET /api/v1/accounting/balances?currency=EUR` returns credit and earnings in EUR. `PUT /api/v1/users/me/preferred-currency` with `{"currency": "EUR"}` (or `null` for USD) sets the default currency.
 
 ## Tests
 
-- `MoneyTest` (Skala, Rundung, Arithmetik), `CurrencyConversionServiceTest` (Umrechnung, Rundungsregeln, veraltete Kurse), `EcbExchangeRateProviderTest` (Kreuzkurse)
-- `MoneyPersistenceTest` (alle Geldspalten inkl. `_aud` sind `NUMERIC(19, 8)`), `AccountingFlowTest` (API-Umrechnung der Kontostände), `MoneyArchitectureTest`
+- `MoneyTest` (scale, rounding, arithmetic), `CurrencyConversionServiceTest` (conversion, rounding rules, outdated rates), `EcbExchangeRateProviderTest` (cross rates)
+- `MoneyPersistenceTest` (all money columns incl. `_aud` are `NUMERIC(19, 8)`), `AccountingFlowTest` (API conversion of balances), `MoneyArchitectureTest`
 
-## Offen
+## Open
 
-- Wechselkursaufschlag/Spread bei Ein- und Auszahlungen.
+- Exchange rate markup/spread for top-ups and payouts.

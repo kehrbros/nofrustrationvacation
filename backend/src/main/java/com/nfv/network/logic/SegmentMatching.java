@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Locates traffic events on road segments, see Docs/network.md#schnittstellen-networklogic. Unlike snapping stops,
+ * Locates traffic events on road segments, see Docs/network.md#interfaces-networklogic. Unlike snapping stops,
  * tunnels and bridges are included (an event inside the Terrace Tunnel is on the tunnel); the road number keeps
  * events off roads above or below.
  * <ul>

@@ -9,7 +9,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 /**
- * An incident as a source reports it, before it is located, see Docs/traffic-feed.md#verarbeitung-trafficeventprocessor.
+ * An incident as a source reports it, before it is located, see Docs/traffic-feed.md#processing-trafficeventprocessor.
  *
  * @param description   shown to users, at most 2000 characters are kept
  * @param validTo       {@code null}: until further notice

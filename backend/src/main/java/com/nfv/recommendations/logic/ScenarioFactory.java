@@ -23,7 +23,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.IntStream;
 
-/** Builds the {@link Scenario}, the only part that depends on the trigger, see Docs/recommendations.md#szenario-recommendationslogic. */
+/** Builds the {@link Scenario}, the only part that depends on the trigger, see Docs/recommendations.md#scenario-recommendationslogic. */
 final class ScenarioFactory {
     private ScenarioFactory() {
     }

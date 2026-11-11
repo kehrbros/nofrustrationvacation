@@ -19,7 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One run of the agent for a route, with the proposals it ended with, see Docs/advisor.md#datenmodell. Derived, not
+ * One run of the agent for a route, with the proposals it ended with, see Docs/advisor.md#data-model. Derived, not
  * audited. Route and consequence are referenced by id; the database removes the run with the route.
  */
 @Getter
@@ -44,7 +44,7 @@ public class AdvisorRun extends AbstractEntity {
     private RunStatus status = RunStatus.PENDING;
     /** Prevents a second automatic run for the same situation, {@code null} for runs of the user. */
     private @Nullable String autoKey;
-    /** Hash of the situation the proposals were made for, see Docs/advisor.md#veraltete-vorschläge. */
+    /** Hash of the situation the proposals were made for, see Docs/advisor.md#outdated-proposals. */
     @Column(nullable = false, length = 64)
     private String situation;
     @Column(length = MAX_SUMMARY)

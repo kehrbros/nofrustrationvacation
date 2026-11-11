@@ -7,7 +7,7 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 
 /**
- * Situation of one route, see Docs/consequence-assessment.md#rangfolge.
+ * Situation of one route, see Docs/consequence-assessment.md#ranking.
  *
  * @param worstCategory   worst category of its current consequences, {@code null} without any
  * @param plannedArrival  arrival without incidents, {@code null} if not planned

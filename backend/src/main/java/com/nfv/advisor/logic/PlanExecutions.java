@@ -41,7 +41,7 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Takes a plan with one click, see Docs/incident-plans.md#ausführen-mit-einem-klick: hotels first (one PayPal approval,
+ * Takes a plan with one click, see Docs/incident-plans.md#one-click-execution: hotels first (one PayPal approval,
  * {@link PlanPayments}), then the trip changes, then the hotels are paid at the stops the plan made. A plan without
  * hotels changes the trip right away. The model is not involved.
  */

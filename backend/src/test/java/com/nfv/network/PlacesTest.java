@@ -16,7 +16,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
 
-/** Places along segments on central Wellington, see Docs/network.md#orte. */
+/** Places along segments on central Wellington, see Docs/network.md#places. */
 @SpringBootTest
 class PlacesTest {
     private static final String REGION = "wellington";

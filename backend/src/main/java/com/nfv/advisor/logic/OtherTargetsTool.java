@@ -18,7 +18,7 @@ import java.time.format.DateTimeParseException;
 
 /**
  * {@code find_other_targets}: places around the target that can be reached when the target cannot, see
- * Docs/incident-plans.md#regeln. Each becomes a {@code place_} for {@code search_accommodations} and
+ * Docs/incident-plans.md#rules. Each becomes a {@code place_} for {@code search_accommodations} and
  * {@code compose_plan}.
  */
 @Component

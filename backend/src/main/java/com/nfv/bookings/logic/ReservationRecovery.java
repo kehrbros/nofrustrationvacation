@@ -13,7 +13,7 @@ import java.time.OffsetDateTime;
 /**
  * Continues reservations nobody finished: the user approved at PayPal but never came back to the app (closed it, lost
  * the connection, the PayPal window ended up in another browser), the answer of a step got lost, or a refund failed.
- * Without this, money would stay reserved at PayPal until the authorization expires. See Docs/paypal.md#stabilität.
+ * Without this, money would stay reserved at PayPal until the authorization expires. See Docs/paypal.md#stability.
  */
 @Slf4j
 @Component

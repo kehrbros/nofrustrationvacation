@@ -21,7 +21,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * Scenario → candidates of the generators → evaluation → ranking → via points, see Docs/recommendations.md#ablauf.
+ * Scenario → candidates of the generators → evaluation → ranking → via points, see Docs/recommendations.md#flow.
  * Routes outside of transactions, nothing is stored here.
  */
 @Component

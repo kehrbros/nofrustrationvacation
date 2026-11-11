@@ -14,7 +14,7 @@ import java.time.OffsetDateTime;
 
 /**
  * What the model answered for one text and validity of one event at a source, so the same is not asked twice, see
- * Docs/traffic-feed.md#anreicherung-messageenrichment. Stored as answered, checked on every use.
+ * Docs/traffic-feed.md#enrichment-messageenrichment. Stored as answered, checked on every use.
  */
 @Getter
 @Entity

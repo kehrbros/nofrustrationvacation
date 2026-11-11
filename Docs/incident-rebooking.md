@@ -1,138 +1,138 @@
-# Konzept: Vom Reiseplaner zur Umplanungs-App
+# Concept: from trip planner to replanning app
 
-- **Status:** Entwurf (2026-11-05). Umgesetzt 2026-11-06: PayPal stabil (Button im Sheet, Abschluss im Hintergrund, Sonderfälle, Storno mit Erstattung), PayPal-Mehrwert in der Oberfläche, Teile der UX-Überarbeitung. Bei der LiteAPI-Sandbox geblieben (Philipp: keine Demo-Hotels). Der Plan nach einem Incident wird separat umgesetzt.
-- **Ziel:** Die App wird zur Hilfe für den Moment, in dem eine Reise schiefgeht. Ein Incident trifft die Route oder eine Unterkunft fällt aus, die App hat schon einen fertigen Plan B, der Nutzer bestätigt ihn mit einem Tipp und zahlt mit PayPal.
-- **Reiseplanung bleibt Mittel zum Zweck:** Sie liefert Stops, Routen und Buchungen, damit die App die Lage bewerten kann. Sie soll schnell gehen und rückt in der Oberfläche nach hinten.
-- **KI bleibt unsichtbar:** Der Nutzer sieht Empfehlungen und Begründungen in Klartext, aber keine Hinweise auf einen Assistenten. Harte Fakten wie Preis, Verfügbarkeit und Erreichbarkeit prüft weiter das Backend. Das Modell wählt nur aus und begründet ([accommodation-alternatives.md](accommodation-alternatives.md#rollen-assistant-und-litepi)).
-- Baut auf dem Bestehenden auf: Bewertung der Consequences ([consequence-assessment.md](consequence-assessment.md)), Streckenvorschläge ([recommendations.md](recommendations.md)), Suche und Buchung alternativer Unterkünfte ([accommodation-alternatives.md](accommodation-alternatives.md)), Consequences auf der Karte und `TripAlternativesSheet`.
+- **Status:** draft (2026-11-05). Implemented 2026-11-06: PayPal stable (button in the sheet, completion in the background, special cases, cancellation with refund), PayPal added value in the UI, parts of the UX revision. Stayed with the LiteAPI sandbox (Philipp: no demo hotels). The plan after an incident is implemented separately.
+- **Goal:** the app becomes the help for the moment a trip goes wrong. An incident hits the route or an accommodation falls through, the app already has a ready plan B, the user confirms it with one tap and pays with PayPal.
+- **Trip planning remains a means to an end:** it provides stops, routes and bookings so that the app can assess the situation. It should be quick and moves into the background in the UI.
+- **AI stays invisible:** the user sees recommendations and reasons in plain text, but no hints of an assistant. Hard facts such as price, availability and reachability are still checked by the backend. The model only selects and justifies ([accommodation-alternatives.md](accommodation-alternatives.md#roles-assistant-and-liteapi)).
+- Builds on what exists: assessment of consequences ([consequence-assessment.md](consequence-assessment.md)), route suggestions ([recommendations.md](recommendations.md)), search and booking of alternative accommodations ([accommodation-alternatives.md](accommodation-alternatives.md)), consequences on the map and `TripAlternativesSheet`.
 
-## Kernversprechen
+## Core promise
 
-> „Auf deiner Strecke ist etwas passiert. Wir haben schon eine Lösung, tippe auf Bestätigen.“
+> "Something happened on your route. We already have a solution, tap confirm."
 
-| Schritt | heute | Ziel |
+| Step | today | goal |
 |---|---|---|
-| Erkennen | Verkehrsfeed → Incident → Consequence mit Kategorie (`TOO_LATE`, `DELAYED`, `NO_IMPACT`) | bleibt |
-| Informieren | nur sichtbar, wenn der Nutzer die Reise öffnet | Push-Benachrichtigung mit Lage und Lösung in einem Satz, Banner auf der Reise |
-| Lösung finden | Dialog mit zwei Wegen (Route, Unterkunft), jeder öffnet ein eigenes Sheet mit Formular | **ein empfohlener Plan** je Consequence, fertig berechnet, Alternativen eingeklappt darunter |
-| Entscheiden | Kriterien prüfen, suchen, Treffer wählen, Gastdaten eintippen | ein Tipp auf „Umbuchen für 142 NZD“, alles vorbelegt, Anpassen nur auf Wunsch |
-| Bezahlen | Weiterleitung zu PayPal und zurück | PayPal-Button im Sheet (Popup), später mit gespeichertem PayPal ohne Weiterleitung |
-| Abschließen | neue Buchung angelegt, alte nur auf Wunsch als storniert markiert | Bestätigung mit Wegbeschreibung, alte Buchung markiert, Link zum Stornieren beim alten Anbieter, Nachricht an die alte Unterkunft vorformuliert |
+| Detect | traffic feed → incident → consequence with category (`TOO_LATE`, `DELAYED`, `NO_IMPACT`) | stays |
+| Inform | only visible when the user opens the trip | push notification with situation and solution in one sentence, banner on the trip |
+| Find solution | dialog with two ways (route, accommodation), each opens its own sheet with a form | **one recommended plan** per consequence, fully calculated, alternatives collapsed below |
+| Decide | check criteria, search, pick a hit, type guest data | one tap on "Rebook for 142 NZD", everything prefilled, adjusting only on request |
+| Pay | redirect to PayPal and back | PayPal button in the sheet (popup), later with saved PayPal without redirect |
+| Complete | new booking created, old one marked as cancelled only on request | confirmation with directions, old booking marked, link to cancel at the old provider, message to the old accommodation pre-written |
 
-## Zwei Einstiege, ein Ablauf
+## Two entry points, one flow
 
-1. **Incident auf der Route** (automatisch): Consequence `TOO_LATE` oder `DELAYED` ab einer Schwelle (z. B. 30 min). Push und Banner öffnen den Plan.
-2. **„Problem mit meiner Unterkunft“** (vom Nutzer, vor Ort): großer Knopf am aktuellen Stop, sobald der Check-in-Tag erreicht ist. Gründe als Chips („Keine Buchung gefunden“, „Überbucht“, „Komme nicht hin“), kein Formular. Danach derselbe Plan-Bildschirm.
+1. **Incident on the route** (automatic): consequence `TOO_LATE` or `DELAYED` above a threshold (e.g. 30 min). Push and banner open the plan.
+2. **"Problem with my accommodation"** (by the user, on site): big button at the current stop as soon as the check-in day is reached. Reasons as chips ("No booking found", "Overbooked", "Can't get there"), no form. Then the same plan screen.
 
-Beide enden im selben **Plan-Sheet**. Es ersetzt `TripAlternativesSheet` als Ziel und bündelt `RouteSheet` und `AlternativesSheet`. Die beiden bleiben als Detailansicht hinter „Andere Möglichkeiten“.
+Both end in the same **plan sheet**. It replaces `TripAlternativesSheet` as the target and bundles `RouteSheet` and `AlternativesSheet`. Those two remain as detail views behind "Other options".
 
-## Der Plan (Backend)
+## The plan (backend)
 
-- **Neu:** `GET /api/v1/consequences/{routeId}/{incidentId}/plan` und `POST /api/v1/stops/{stopId}/accommodation-problem` (Einstieg 2). Beide liefern einen `RescuePlan`, berechnet bei jedem Aufruf und nie gespeichert (Prinzip [route-choice](recommendations.md): gespeichert wird nur die Wahl).
-- `RescuePlan`: `situation` (Kategorie, Verspätung an der Frist, Klartext), `recommended` (eine Option), `others` (bis zu drei), `computedAt`.
-- **Option-Typen** und wann sie gebaut werden (Regeln deterministisch, in dieser Reihenfolge):
+- **New:** `GET /api/v1/consequences/{routeId}/{incidentId}/plan` and `POST /api/v1/stops/{stopId}/accommodation-problem` (entry point 2). Both return a `RescuePlan`, calculated on every call and never stored (principle [route-choice](recommendations.md): only the choice is stored).
+- `RescuePlan`: `situation` (category, delay at the deadline, plain text), `recommended` (one option), `others` (up to three), `computedAt`.
+- **Option types** and when they are built (deterministic rules, in this order):
 
-| Lage | Option | Quelle |
+| Situation | Option | Source |
 |---|---|---|
-| Umfahrung erreicht die Frist | `REROUTE`: andere Strecke, kostenlos | `Suggestions.forConsequence` (Entwurf in recommendations.md, noch offen) |
-| Sperrung mit Ende, spätere/frühere Abfahrt reicht | `SHIFT_DEPARTURE` | `DepartureShiftGenerator` (offen) |
-| Ziel nicht rechtzeitig erreichbar, Unterkunft am Ziel gebucht | `STAY_BEFORE`: Unterkunft vor der Sperrung, an der Route, erreichbar vor dem spätesten Check-in | LiteAPI-Suche mit Region = Punkt auf der Route vor der betroffenen Section (neuer Use-Case „anderer Ort“) |
-| Unterkunft nicht nutzbar (Einstieg 2) | `STAY_NEARBY`: gleichwertige Unterkunft in der Nähe | `AlternativeSearch` mit vorbefüllten Kriterien, unverändert |
-| Verspätung, Frist hält aber knapp | `NOTIFY_HOST`: Nachricht „komme ca. 21:30“ an die Unterkunft, vorformuliert | Kontakt aus `AccommodationDetails` |
-| immer | `KEEP`: „So weiterfahren (+1 h 10 min)“ | `KEEP_ROUTE` |
+| Detour meets the deadline | `REROUTE`: other route, free of charge | `Suggestions.forConsequence` (draft in recommendations.md, still open) |
+| Closure with end, later/earlier departure suffices | `SHIFT_DEPARTURE` | `DepartureShiftGenerator` (open) |
+| Destination not reachable in time, accommodation booked at the destination | `STAY_BEFORE`: accommodation before the closure, on the route, reachable before the latest check-in | LiteAPI search with region = point on the route before the affected section (new use case "other place") |
+| Accommodation not usable (entry point 2) | `STAY_NEARBY`: equivalent accommodation nearby | `AlternativeSearch` with prefilled criteria, unchanged |
+| Delay, but the deadline is narrowly met | `NOTIFY_HOST`: message "arriving around 21:30" to the accommodation, pre-written | contact from `AccommodationDetails` |
+| always | `KEEP`: "Continue as is (+1 h 10 min)" | `KEEP_ROUTE` |
 
-- **Auswahl der Empfehlung:** kostenlos vor kostenpflichtig, sofern die Frist gehalten wird. Sonst die günstigste Unterkunft, die alle Kriterien erfüllt, in der Reihenfolge des Rankings. Das Modell schreibt nur den Begründungssatz („Gleiche Kategorie, 18 km vor der Sperrung, Check-in bis 23 Uhr“).
-- **Kriterien ohne Formular:** Max. Preis = bisheriger Preis + Aufschlag (Vorschlag +25 %), Gäste/Zimmer aus der Buchung bzw. `Trip.travelers`, Zeitraum aus der Buchung. Der Nutzer sieht die Werte erst unter „Anpassen“.
-- **Gastdaten** (Name, E-Mail, Telefon) einmal im Profil hinterlegen, beim ersten Umbuchen abfragen und merken. Heute startet `AlternativesSheet` mit leeren Gastdaten.
-- **Zeitbudget:** Der Plan muss in wenigen Sekunden stehen. LiteAPI und Routing parallel abfragen, das Ranking mit Timeout (heute fällt es ohne Assistant schon auf Preis/Abstand zurück).
-- **Vorberechnen für die Push:** Beim Anlegen einer Consequence `TOO_LATE` rechnet ein Listener den Plan einmal aus, nur um den Text der Push zu bauen („Umfahrung über SH 7, +20 min“). Beim Öffnen wird neu gerechnet.
+- **Choice of the recommendation:** free before paid, provided the deadline is met. Otherwise the cheapest accommodation that meets all criteria, in the order of the ranking. The model only writes the justification sentence ("Same category, 18 km before the closure, check-in until 23:00").
+- **Criteria without a form:** max. price = previous price + markup (suggestion +25 %), guests/rooms from the booking or `Trip.travelers`, period from the booking. The user sees the values only under "Adjust".
+- **Guest data** (name, email, phone) stored once in the profile, asked for on the first rebooking and remembered. Today `AlternativesSheet` starts with empty guest data.
+- **Time budget:** the plan must be ready within a few seconds. Query LiteAPI and routing in parallel, the ranking with a timeout (today it already falls back to price/distance without the assistant).
+- **Precompute for the push:** when a consequence `TOO_LATE` is created, a listener calculates the plan once, only to build the text of the push ("Detour via SH 7, +20 min"). On opening it is recalculated.
 
-## PayPal stabil machen
+## Making PayPal stable
 
-### Was heute instabil ist
+### What is unstable today
 
-Aus dem Code abgeleitet. Gegen die Sandbox ist der Ablauf noch nie gelaufen.
+Derived from the code. The flow has never run against the sandbox.
 
-1. **Vollständige Weiterleitung zu PayPal in einer installierten PWA.** Der Button ist ein Link auf `approveUrl` (`AlternativesSheet.tsx`). In der installierten App (`display: standalone`) öffnet sich PayPal als fremde Seite in einem Browser-Fenster außerhalb der App, die Rückkehr-URL landet dort, nicht in der App. Die Anmeldung liegt in `sessionStorage` (`oidcConfig.ts`), dort gibt es sie nicht. Folge: erneuter Login, und in der App selbst hängt der Ablauf beim Schritt „Bezahlen“. Das ist der wahrscheinlichste Grund für Abbrüche in der Demo am Handy.
-2. **Rückkehr-URL hängt an `nfv.frontend-url`.** Lokal braucht es ngrok, die URL ändert sich bei jedem Tunnelstart. Login-Redirect, CORS und PayPal-Rückkehr müssen dann zusammen umgestellt werden.
-3. **Abschluss nur, wenn der Nutzer zurückkommt.** Autorisieren, Buchen bei LiteAPI und Capture laufen synchron in `POST /booking-reservations/{id}/booking`. Schließt der Nutzer die Seite nach der Freigabe bei PayPal, bleibt die Reservierung in `PAYMENT_PENDING` oder `AUTHORIZED` stehen. Ein Abgleich im Hintergrund fehlt (Doku: „Kein Poller“).
-4. **Sonderfälle enden im Log.** LiteAPI `4005` (schon gebucht, Antwort verloren) und ein abgelehnter Capture nach erfolgter Buchung werden nur geloggt. Die Reservierung bleibt stehen, der Nutzer sieht einen Fehler, obwohl das Zimmer gebucht sein kann.
-5. **Zwei externe Sandboxes hintereinander.** LiteAPI-Sandbox (`ACC_CREDIT_CARD` mit versteckter Testkarte) und PayPal-Sandbox müssen beide gleichzeitig funktionieren. Fällt eine aus oder ändert Antworten, scheitert die Vorführung, und PayPal sieht schuldig aus.
-6. **Keine Webhooks.** Der Zustand bei PayPal wird nur aktiv gelesen.
-7. **Nie Ende-zu-Ende getestet.** Die Tests mocken PayPal und LiteAPI. Feldnamen und Status (z. B. `payer-action`-Link, `firstAuthorization`) sind nur gegen die Doku gebaut.
+1. **Full redirect to PayPal in an installed PWA.** The button is a link to `approveUrl` (`AlternativesSheet.tsx`). In the installed app (`display: standalone`) PayPal opens as a foreign page in a browser window outside the app, the return URL lands there, not in the app. The login is in `sessionStorage` (`oidcConfig.ts`), which does not exist there. Consequence: login again, and in the app itself the flow hangs at the "Pay" step. This is the most likely reason for aborts in the demo on the phone.
+2. **Return URL depends on `nfv.frontend-url`.** Locally ngrok is needed, the URL changes with every tunnel start. Login redirect, CORS and PayPal return must then be changed together.
+3. **Completion only if the user comes back.** Authorising, booking at LiteAPI and capture run synchronously in `POST /booking-reservations/{id}/booking`. If the user closes the page after approval at PayPal, the reservation remains in `PAYMENT_PENDING` or `AUTHORIZED`. A reconciliation in the background is missing (docs: "No poller").
+4. **Special cases end in the log.** LiteAPI `4005` (already booked, response lost) and a declined capture after a successful booking are only logged. The reservation stays, the user sees an error although the room may be booked.
+5. **Two external sandboxes in a row.** LiteAPI sandbox (`ACC_CREDIT_CARD` with hidden test card) and PayPal sandbox must both work at the same time. If one fails or changes responses, the demo fails, and PayPal looks guilty.
+6. **No webhooks.** The state at PayPal is only read actively.
+7. **Never tested end to end.** The tests mock PayPal and LiteAPI. Field names and status (e.g. `payer-action` link, `firstAuthorization`) are built only against the docs.
 
-### Maßnahmen, in dieser Reihenfolge
+### Measures, in this order
 
-1. **PayPal JS SDK statt Weiterleitung (Smart Buttons).** Der PayPal-Button wird im Plan-Sheet gerendert, `createOrder` ruft unser `POST …/alternative-reservations` (gibt die Order-Id zurück), `onApprove` ruft `POST /booking-reservations/{id}/booking`. Der Nutzer bleibt in der App, ohne Rückkehr-URL, ohne ngrok und ohne Verlust des Logins. Die Weiterleitung bleibt als Fallback. Dafür: Script von `www.paypal.com/sdk/js` (Client-Id ist öffentlich), CSP und Service Worker (nicht cachen) anpassen, `intent=authorize` im Script-Parameter.
-2. **Resumable im Hintergrund.** Ein `@Scheduled`-Job (jede Minute) führt jede Reservierung in `PAYMENT_PENDING` (Order-Status bei PayPal `APPROVED`), `AUTHORIZED` oder `PROVIDER_BOOKED` mit derselben Logik wie `complete` weiter. Abgelaufene oder abgebrochene (`PAYMENT_PENDING` > 3 h) gehen auf `FAILED`. Das Frontend fragt beim Öffnen der Reise offene Reservierungen ab und zeigt „Umbuchung läuft“ bzw. das Ergebnis.
-3. **Sonderfälle auflösen statt loggen.** `4005`: Buchung über `GET /bookings?clientReference=…` bei LiteAPI suchen, bei Erfolg weiter mit Capture. Capture abgelehnt: Reservierung `NEEDS_ATTENTION`, im Frontend als „Wird geprüft“ mit Hinweis statt Fehler.
-4. **Demo-Anbieter für Unterkünfte.** Eine zweite Implementierung hinter `LiteApi` (`nfv.bookings.alternatives.provider=demo`) mit festen, realistischen Hotels in Neuseeland, Prebook und Buchung immer erfolgreich. PayPal läuft dabei echt gegen die Sandbox. So hängt die Vorführung nur an PayPal, und genau das soll zu sehen sein. Für den echten Betrieb bleibt LiteAPI.
-5. **Ende-zu-Ende-Lauf gegen die Sandbox** auf dem Test-Server (feste Domain, kein ngrok): einmal mit Demo-Anbieter, einmal mit LiteAPI-Sandbox. Dabei Feldnamen und Status prüfen und als Test-Fixture für `PayPalClientTest` festhalten.
-6. **Webhooks** (`CHECKOUT.ORDER.APPROVED`, `PAYMENT.AUTHORIZATION.VOIDED`, `PAYMENT.CAPTURE.COMPLETED/DENIED/REFUNDED`) auf dem Test-Server, sie stoßen nur den Job aus 2 an. Optional, der Job reicht.
+1. **PayPal JS SDK instead of redirect (Smart Buttons).** The PayPal button is rendered in the plan sheet, `createOrder` calls our `POST …/alternative-reservations` (returns the order id), `onApprove` calls `POST /booking-reservations/{id}/booking`. The user stays in the app, without return URL, without ngrok and without losing the login. The redirect remains as a fallback. For this: script from `www.paypal.com/sdk/js` (client id is public), adapt CSP and service worker (do not cache), `intent=authorize` in the script parameter.
+2. **Resumable in the background.** A `@Scheduled` job (every minute) continues every reservation in `PAYMENT_PENDING` (order status at PayPal `APPROVED`), `AUTHORIZED` or `PROVIDER_BOOKED` with the same logic as `complete`. Expired or aborted ones (`PAYMENT_PENDING` > 3 h) go to `FAILED`. When opening the trip, the frontend queries open reservations and shows "Rebooking in progress" or the result.
+3. **Resolve special cases instead of logging.** `4005`: look up the booking at LiteAPI via `GET /bookings?clientReference=…`, on success continue with capture. Capture declined: reservation `NEEDS_ATTENTION`, in the frontend as "Being checked" with a note instead of an error.
+4. **Demo provider for accommodations.** A second implementation behind `LiteApi` (`nfv.bookings.alternatives.provider=demo`) with fixed, realistic hotels in New Zealand, prebook and booking always successful. PayPal runs for real against the sandbox. That way the demo depends only on PayPal, and exactly that should be visible. For real operation LiteAPI stays.
+5. **End-to-end run against the sandbox** on the test server (fixed domain, no ngrok): once with the demo provider, once with the LiteAPI sandbox. Check field names and status and record them as a test fixture for `PayPalClientTest`.
+6. **Webhooks** (`CHECKOUT.ORDER.APPROVED`, `PAYMENT.AUTHORIZATION.VOIDED`, `PAYMENT.CAPTURE.COMPLETED/DENIED/REFUNDED`) on the test server, they only trigger the job from 2. Optional, the job is enough.
 
-## PayPal-Mehrwert sichtbar machen
+## Making PayPal's added value visible
 
-- **Ein Tipp in der Notlage:** Smart Buttons im Sheet (oben, 1). Für die Präsentation der wichtigste Punkt: kein Formular, keine Kartendaten, kein Verlassen der App.
-- **Geld erst bewegen, wenn das Zimmer sicher ist:** Autorisieren → buchen → capturen, sonst freigeben. Gibt es schon, muss nur in der Oberfläche erklärt werden („Betrag ist reserviert, abgebucht wird erst, wenn das Hotel bestätigt“).
-- **PayPal merken für das nächste Mal (Vault):** Beim ersten Umbuchen „PayPal für Notfälle speichern“ (`payment_source.paypal.attributes.vault`), danach Umbuchen ohne Freigabefenster. Passt genau zum Fall „abends an der Rezeption“. Vor dem Bau prüfen, ob Vaulting in der Sandbox-App freigeschaltet werden kann und mit `intent=AUTHORIZE` geht. Stretch-Ziel.
-- **Erstattung automatisch:** Storniert der Nutzer eine in der App gebuchte Alternative innerhalb der Frist, LiteAPI-Storno und PayPal-Refund (`refundCapture` gibt es) in einem Schritt.
-- **Kosten teilen** (später, braucht geteilte Trips): Mitreisende zahlen ihren Anteil per PayPal-Link, Weiterleitung per Payouts (gibt es).
-- **Pay Later** für teure Notfallbuchungen: im JS SDK nur ein Parameter, Verfügbarkeit je Land, für Neuseeland vor der Demo prüfen.
+- **One tap in an emergency:** Smart Buttons in the sheet (above, 1). The most important point for the presentation: no form, no card data, no leaving the app.
+- **Move money only when the room is secured:** authorise → book → capture, otherwise release. Already exists, only needs to be explained in the UI ("The amount is reserved, it is charged only when the hotel confirms").
+- **Remember PayPal for next time (vault):** on the first rebooking "Save PayPal for emergencies" (`payment_source.paypal.attributes.vault`), afterwards rebooking without an approval window. Fits exactly the case "in the evening at the reception". Before building, check whether vaulting can be enabled in the sandbox app and works with `intent=AUTHORIZE`. Stretch goal.
+- **Automatic refund:** if the user cancels an alternative booked in the app within the deadline, LiteAPI cancellation and PayPal refund (`refundCapture` exists) in one step.
+- **Splitting costs** (later, needs shared trips): fellow travellers pay their share via a PayPal link, forwarding via Payouts (exists).
+- **Pay Later** for expensive emergency bookings: only one parameter in the JS SDK, availability per country, check for New Zealand before the demo.
 
-## Zusatzfeatures
+## Additional features
 
-Sortiert nach Nutzen für die Kernidee.
+Sorted by benefit for the core idea.
 
-1. **Push-Benachrichtigungen** (Web Push, Service Worker gibt es schon): bei neuer oder verschärfter Consequence `TOO_LATE`/`DELAYED`, mit Lösung im Text. Ohne Push bleibt die App passiv, und die Kernidee kommt nicht zur Geltung. iOS nur für installierte PWAs.
-2. **Incidents nahe der Unterkunft** (`booking_accommodation.location`, GIST-Index aus `V28`): Ereignisse im Umkreis (z. B. 2 km, `ST_DWithin`) während des Aufenthalts, etwa Sperrung der Zufahrt, Unwetter, Überflutung. Neue Consequence-Art am Stop statt an der Route, Plan-Option `STAY_NEARBY`. Schließt „Incidents an Unterkünften“ aus [domain.md](domain.md#offen).
-3. **Späteste Ankunft aus der Buchung:** Frist = `checkInUntil` der Unterkunft statt nur `Stop.arrivalAt` (offen in consequence-assessment.md). Damit wird „komme nicht mehr rein“ präzise und `NOTIFY_HOST` sinnvoll.
-4. **Nachricht an die Unterkunft:** vorformulierte E-Mail/SMS in der Landessprache („Wir kommen wegen einer Sperrung auf SH 6 erst gegen 22 Uhr“) bzw. Storno-Bitte an die alte Unterkunft nach dem Umbuchen. Öffnet `mailto:`/`sms:`, die App sendet nichts selbst.
-5. **Demo-Knopf „Störung simulieren“** für die Präsentation (nur für Testkonten, `TestTrafficEventController` gibt es): legt eine Sperrung vor dem nächsten Stop an, Push kommt, Plan zeigt eine Unterkunft davor.
-6. **Assistent per MCP lesend:** `get_rescue_plan` für Claude/ChatGPT, Bezahlen bleibt in der App.
+1. **Push notifications** (Web Push, the service worker already exists): on a new or worsened consequence `TOO_LATE`/`DELAYED`, with the solution in the text. Without push the app stays passive, and the core idea does not come into its own. iOS only for installed PWAs.
+2. **Incidents near the accommodation** (`booking_accommodation.location`, GIST index from `V28`): events in the vicinity (e.g. 2 km, `ST_DWithin`) during the stay, such as closure of the access road, storms, flooding. New consequence kind at the stop instead of at the route, plan option `STAY_NEARBY`. Closes "incidents at accommodations" from [domain.md](domain.md#open).
+3. **Latest arrival from the booking:** deadline = `checkInUntil` of the accommodation instead of only `Stop.arrivalAt` (open in consequence-assessment.md). This makes "can't get in any more" precise and `NOTIFY_HOST` meaningful.
+4. **Message to the accommodation:** pre-written email/SMS in the local language ("Due to a closure on SH 6 we will only arrive around 22:00") or cancellation request to the old accommodation after rebooking. Opens `mailto:`/`sms:`, the app sends nothing itself.
+5. **Demo button "Simulate disruption"** for the presentation (only for test accounts, `TestTrafficEventController` exists): creates a closure before the next stop, the push arrives, the plan shows an accommodation before it.
+6. **Assistant via MCP, read-only:** `get_rescue_plan` for Claude/ChatGPT, paying stays in the app.
 
-## UX-Überarbeitungen der bestehenden Oberfläche
+## UX revisions of the existing UI
 
-Aus Code und Mockups abgeleitet, nicht am Gerät durchgeklickt. Bitte ergänzen, was dir aufgefallen ist.
+Derived from code and mockups, not clicked through on a device. Please add what you noticed.
 
-- **Reiseansicht mit Lage oben:** Statuszeile über der Karte, „Alles im Plan · Ankunft Wanaka 17:40“ oder „1 Problem · Lösung ansehen“ (gelb). Heute erschließt sich die Lage nur über Chips auf der Karte.
-- **„Meine Reisen“:** laufende Reise groß mit Status, geplante darunter, Zähler nur für echte Probleme (gibt es schon im Backend).
-- **KI-Hinweise entfernen:** „Sortiert vom Assistenten nach Gleichwertigkeit ✦“, „Empfehlung ✦“, „Vom Assistenten im Web gefunden“. Statt ✦ eine neutrale Markierung „bitte prüfen“ nur dort, wo der Nutzer etwas bestätigen muss (ausgelesene Buchungen).
-- **Interne Sätze raus:** z. B. „Alternativen werden bei Bedarf neu berechnet. Gespeichert wird nur, was du auswählst.“ im `TripAlternativesSheet`.
-- **Formulare hinter „Anpassen“:** Kriterien und Gastdaten im Umbuchungsfluss einklappen, vorbelegt aus Buchung und Profil.
-- **Fortschritt beim Umbuchen:** drei Schritte sichtbar („Preis gesichert“, „Zahlung reserviert“, „Hotel bestätigt“), statt einem Spinner. Fehler in Alltagssprache mit nächstem Schritt.
-- **Bestätigungsseite:** neue Unterkunft mit Karte, „Navigation starten“ (Google/Apple Maps-Link), Buchungsnummer, „Alte Buchung stornieren“ mit Link.
-- **Planung schneller:** „Neue Reise“ direkt mit „Buchungsbestätigung einfügen“ starten, Stops und Zeiten daraus ableiten. Der schnellste Weg zu einer bewertbaren Reise.
-- **Kleinkram:** einheitliche Leer- und Ladezustände (Skeletons wie im `RouteSheet`), Ziel-Größe von Buttons ≥ 44 px im Sheet, Zurück-Verhalten der Sheets (Browser-Zurück schließt das Sheet).
+- **Trip view with situation at the top:** status line above the map, "All on track · arrival Wanaka 17:40" or "1 problem · view solution" (yellow). Today the situation is only apparent from chips on the map.
+- **"My trips":** current trip large with status, planned ones below, counter only for real problems (already exists in the backend).
+- **Remove AI hints:** "Sorted by the assistant by equivalence ✦", "Recommendation ✦", "Found by the assistant on the web". Instead of ✦ a neutral marker "please check" only where the user has to confirm something (extracted bookings).
+- **Remove internal sentences:** e.g. "Alternatives are recalculated when needed. Only what you select is stored." in `TripAlternativesSheet`.
+- **Forms behind "Adjust":** collapse criteria and guest data in the rebooking flow, prefilled from booking and profile.
+- **Progress while rebooking:** three visible steps ("Price secured", "Payment reserved", "Hotel confirmed") instead of a spinner. Errors in everyday language with the next step.
+- **Confirmation page:** new accommodation with map, "Start navigation" (Google/Apple Maps link), booking number, "Cancel old booking" with link.
+- **Faster planning:** start "New trip" directly with "Paste booking confirmation", derive stops and times from it. The fastest way to a trip that can be assessed.
+- **Small things:** consistent empty and loading states (skeletons as in `RouteSheet`), target size of buttons ≥ 44 px in the sheet, back behaviour of the sheets (browser back closes the sheet).
 
-## Priorisierte Umsetzung
+## Prioritised implementation
 
-**P0, Kern für die Demo**
+**P0, core for the demo**
 
-1. Demo-Anbieter für Unterkünfte + Ende-zu-Ende-Lauf mit PayPal-Sandbox auf dem Test-Server.
-2. PayPal Smart Buttons im Sheet statt Weiterleitung, Weiterleitung als Fallback.
-3. Hintergrund-Job für offene Reservierungen, Sonderfälle `4005` und Capture-Fehler auflösen.
-4. Plan-Endpunkt mit `STAY_NEARBY`, `STAY_BEFORE`, `KEEP` (Route zunächst über das bestehende `RouteSheet`), Plan-Sheet mit einem Tipp, Gastdaten im Profil.
-5. Einstieg „Problem mit meiner Unterkunft“ am aktuellen Stop.
-6. KI-Hinweise und interne Texte entfernen, Statuszeile auf der Reise.
+1. Demo provider for accommodations + end-to-end run with the PayPal sandbox on the test server.
+2. PayPal Smart Buttons in the sheet instead of redirect, redirect as fallback.
+3. Background job for open reservations, resolve special cases `4005` and capture errors.
+4. Plan endpoint with `STAY_NEARBY`, `STAY_BEFORE`, `KEEP` (route initially via the existing `RouteSheet`), plan sheet with one tap, guest data in the profile.
+5. Entry point "Problem with my accommodation" at the current stop.
+6. Remove AI hints and internal texts, status line on the trip.
 
-**P1, macht die Kernidee rund**
+**P1, rounds off the core idea**
 
-7. `Suggestions.forConsequence` (Umfahrung im Plan, `REROUTE`) und `SHIFT_DEPARTURE`.
-8. Web Push für `TOO_LATE`/`DELAYED`.
-9. Demo-Knopf „Störung simulieren“.
-10. Frist aus `checkInUntil`, Option `NOTIFY_HOST`.
-11. Storno einer in der App gebuchten Alternative mit automatischem Refund.
+7. `Suggestions.forConsequence` (detour in the plan, `REROUTE`) and `SHIFT_DEPARTURE`.
+8. Web Push for `TOO_LATE`/`DELAYED`.
+9. Demo button "Simulate disruption".
+10. Deadline from `checkInUntil`, option `NOTIFY_HOST`.
+11. Cancellation of an alternative booked in the app with automatic refund.
 
-**P2, danach**
+**P2, afterwards**
 
-12. Incidents nahe der Unterkunft (`V28`, `ST_DWithin`).
-13. PayPal Vault (ohne Freigabefenster), Pay Later.
-14. Webhooks, MCP-Tool `get_rescue_plan`, Kosten teilen.
+12. Incidents near the accommodation (`V28`, `ST_DWithin`).
+13. PayPal vault (without approval window), Pay Later.
+14. Webhooks, MCP tool `get_rescue_plan`, splitting costs.
 
-## Entscheidungen für Philipp
+## Decisions for Philipp
 
-1. **Demo-Anbieter für Unterkünfte:** einverstanden, dass die Vorführung mit festen Demo-Hotels läuft und PayPal echt? (Empfehlung: ja, LiteAPI bleibt für den Betrieb.)
-2. **Smart Buttons statt Weiterleitung:** einverstanden mit dem PayPal JS SDK im Frontend? (Empfehlung: ja, löst das PWA-Problem.)
-3. **Max. Preis ohne Formular:** bisheriger Preis + 25 % als Standard, oder ohne Obergrenze und nur nach Preis sortiert?
-4. **Wie unsichtbar ist die KI:** alle ✦ entfernen, auch bei ausgelesenen Buchungen, oder dort als neutrale „bitte prüfen“-Markierung behalten? (Empfehlung: neutrale Markierung.)
-5. **Push in P0 oder P1:** ohne Push wirkt die App in der Demo passiv; mit dem Demo-Knopf reicht für die Präsentation auch das Banner. (Empfehlung: P1.)
+1. **Demo provider for accommodations:** do you agree that the demo runs with fixed demo hotels and PayPal for real? (Recommendation: yes, LiteAPI stays for operation.)
+2. **Smart Buttons instead of redirect:** do you agree with the PayPal JS SDK in the frontend? (Recommendation: yes, solves the PWA problem.)
+3. **Max. price without a form:** previous price + 25 % as default, or no upper limit and only sorted by price?
+4. **How invisible is the AI:** remove all ✦, also for extracted bookings, or keep a neutral "please check" marker there? (Recommendation: neutral marker.)
+5. **Push in P0 or P1:** without push the app seems passive in the demo; with the demo button the banner is enough for the presentation. (Recommendation: P1.)

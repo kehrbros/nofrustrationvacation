@@ -12,7 +12,7 @@ import java.util.Set;
 
 /**
  * One route suggestion, computed per request and not stored. Only the option the user chooses is stored, as
- * waypoints of the route, see Docs/recommendations.md#auswahl-speichern.
+ * waypoints of the route, see Docs/recommendations.md#saving-the-choice.
  *
  * @param rank        1 is the best
  * @param via         main road of the part that differs from the fastest way, e.g. {@code SH 2}

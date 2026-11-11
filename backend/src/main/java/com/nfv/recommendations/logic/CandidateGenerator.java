@@ -5,7 +5,7 @@ import java.util.List;
 
 /**
  * Proposes ways for a scenario; one Spring bean per {@link OptionKind}. New generators (preferences, avoid ferries) are
- * a new bean, engine and schema stay, see Docs/recommendations.md#generatoren.
+ * a new bean, engine and schema stay, see Docs/recommendations.md#generators.
  */
 interface CandidateGenerator {
     OptionKind kind();

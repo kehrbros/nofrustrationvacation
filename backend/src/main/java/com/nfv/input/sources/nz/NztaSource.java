@@ -40,7 +40,7 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * NZTA Traffic and Travel REST API v4 (State Highways of New Zealand), see Docs/traffic-feed.md#erste-quelle-nzta.
+ * NZTA Traffic and Travel REST API v4 (State Highways of New Zealand), see Docs/traffic-feed.md#first-source-nzta.
  * The configured {@code url} is either the API ({@code http(s):}) or a JSON file with a response ({@code classpath:},
  * {@code file:}, for tests and development); both are parsed the same way.
  */
@@ -94,7 +94,7 @@ public class NztaSource implements TrafficSource {
         this.reader = new NztaReader(config == null ? Map.of() : config.assumedDelay());
     }
 
-    /** Field table and type rules in Docs/traffic-feed.md#erste-quelle-nzta, see {@link NztaReader}. */
+    /** Field table and type rules in Docs/traffic-feed.md#first-source-nzta, see {@link NztaReader}. */
     @Override
     public TrafficReport read(String payload) {
         return reader.read(payload);

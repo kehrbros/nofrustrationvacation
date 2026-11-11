@@ -33,7 +33,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/** See Docs/incident-plans.md#bausteine-und-compose_plan. */
+/** See Docs/incident-plans.md#building-blocks-and-tools. */
 class PlanToolTest {
     private static final JsonMapper JSON = JsonMapper.builder().build();
     private static final ZoneOffset NZ = ZoneOffset.ofHours(12);

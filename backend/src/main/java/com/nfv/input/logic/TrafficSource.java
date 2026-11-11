@@ -5,7 +5,7 @@ import com.nfv.input.entities.EventSourceType;
 import java.time.ZoneId;
 
 /**
- * Adapter of one traffic source, the only source-specific code, see Docs/traffic-feed.md#schnittstelle-trafficsource-inputlogic.
+ * Adapter of one traffic source, the only source-specific code, see Docs/traffic-feed.md#interface-trafficsource-inputlogic.
  * Implementations are beans in {@code input.sources.<country>} and know only the records of {@code input.logic}.
  * {@code parse} (webhooks) follows with the first webhook source.
  */

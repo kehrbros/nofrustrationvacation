@@ -1,27 +1,27 @@
 # CLAUDE.md
 
-Reise-Incident-App: Nutzer hinterlegen Reiserouten und werden über Ereignisse informiert, die den Reiseverlauf beeinflussen. Das Repository stammt aus Nfv (Paketname `com.nfv`).
+Travel incident app: users store travel routes and are informed about events that affect the course of their trip. The repository originates from Nfv (package name `com.nfv`).
 
-## Verbindliche Vorgaben
+## Binding requirements
 
-Vor jeder Änderung an Code, Schema oder Doku lesen und einhalten:
+Read and follow before every change to code, schema or docs:
 
-- [Docs/architecture.md](Docs/architecture.md): Module, Aufbau eines Moduls, Abhängigkeiten, Persistenz, Security, Tests, Altbestand.
-- [Docs/domain.md](Docs/domain.md): Bounded Contexts, Entitäten, Beziehungen, Historisierung, offene fachliche Punkte.
-- [Docs/network.md](Docs/network.md): Streckennetz, GraphHopper, Import, Schnittstellen.
-- [Docs/recommendations.md](Docs/recommendations.md): Streckenvorschläge bei Planung und Incidents (Entwurf).
-- [Docs/i18n.md](Docs/i18n.md): Mehrsprachigkeit des Frontends (Deutsch und Englisch), Texte, Plural, Formate, Sprachwahl.
+- [Docs/architecture.md](Docs/architecture.md): modules, structure of a module, dependencies, persistence, security, tests, legacy code.
+- [Docs/domain.md](Docs/domain.md): bounded contexts, entities, relationships, history tracking, open domain questions.
+- [Docs/network.md](Docs/network.md): road network, GraphHopper, import, interfaces.
+- [Docs/recommendations.md](Docs/recommendations.md): route suggestions during planning and for incidents (draft).
+- [Docs/i18n.md](Docs/i18n.md): multilingual frontend (German and English), texts, plurals, formats, language selection.
 
-Diese Dokumente sind verbindlich. Weicht eine Aufgabe davon ab oder ist sie damit nicht vereinbar, nicht stillschweigend abweichen, sondern nachfragen. Wird eine Abweichung beschlossen, das betroffene Dokument in derselben Änderung anpassen.
+These documents are binding. If a task deviates from them or is not compatible with them, do not deviate silently, ask instead. If a deviation is decided, update the affected document in the same change.
 
-## Kernregeln (Kurzfassung, Details in den Dokumenten)
+## Core rules (summary, details in the documents)
 
-- **Modulaufbau nach Vorbild `accounting`:** `entities`, `data`, `logic`, `api`/`dto`, `config`. Entities mit Lombok `@Getter`, Änderungen nur über fachliche Methoden, geschützter Default-Konstruktor.
-- **Referenzen über Modulgrenzen nur per Id** mit Fremdschlüssel in der Datenbank. `@ManyToOne` nur innerhalb eines Moduls.
-- **Abhängigkeitsrichtung einhalten**, keine Zyklen. Rückwärts nur über Spring-Events (z. B. `RouteChanged`).
-- **`auth` bleibt isoliert** (`AuthModuleIsolationTest`).
-- **Schema nur per Flyway**, Standard-SQL (`SMALLINT` statt `TINYINT`). Datenbank PostgreSQL mit PostGIS (auch in Tests), PostGIS nur für Geometrie, siehe [Docs/network.md](Docs/network.md). Bestehende Migrationen nie ändern, neue Version anlegen.
-- **Altbestand** (`accounting`, `onboarding`) nicht ändern, solange nicht entschieden ist, was davon bleibt. `paypal` bleibt und wird für Zahlungen von Buchungen angepasst, siehe [Docs/accommodation-alternatives.md](Docs/accommodation-alternatives.md#zahlung).
-- **UI-Texte immer zweisprachig:** jeder neue oder geänderte Text im Frontend (auch `aria-label`, Platzhalter, Fehlermeldungen) als Schlüssel in `frontend/src/i18n/de.ts` und `en.ts`, nie fest im Code; Zahlen, Preise und Daten über die Sprache formatieren. Details in [Docs/i18n.md](Docs/i18n.md).
-- **Keine Schatten unter Buttons:** Buttons und klickbare Chips (Plus-Button, Auswahl-Buttons, Karten-Chips) ohne `box-shadow`, Kontur nur über Rand.
-- **Doku** in `Docs/` auf Deutsch in Stichpunkten, mit dem Code aktuell halten.
+- **Module structure modelled on `accounting`:** `entities`, `data`, `logic`, `api`/`dto`, `config`. Entities with Lombok `@Getter`, changes only via domain methods, protected default constructor.
+- **References across module boundaries only by id** with a foreign key in the database. `@ManyToOne` only within a module.
+- **Respect the dependency direction**, no cycles. Backwards only via Spring events (e.g. `RouteChanged`).
+- **`auth` stays isolated** (`AuthModuleIsolationTest`).
+- **Schema only via Flyway**, standard SQL (`SMALLINT` instead of `TINYINT`). Database PostgreSQL with PostGIS (also in tests), PostGIS only for geometry, see [Docs/network.md](Docs/network.md). Never change existing migrations, create a new version.
+- **Legacy code** (`accounting`, `onboarding`): do not change as long as it has not been decided what of it stays. `paypal` stays and is adapted for payments of bookings, see [Docs/accommodation-alternatives.md](Docs/accommodation-alternatives.md#payment).
+- **UI texts always bilingual:** every new or changed text in the frontend (including `aria-label`, placeholders, error messages) as a key in `frontend/src/i18n/de.ts` and `en.ts`, never hard-coded; format numbers, prices and dates via the language. Details in [Docs/i18n.md](Docs/i18n.md).
+- **No shadows under buttons:** buttons and clickable chips (plus button, selection buttons, map chips) without `box-shadow`, outline only via border.
+- **Docs** in `Docs/` in English as bullet points, keep them up to date with the code.

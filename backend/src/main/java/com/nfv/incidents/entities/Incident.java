@@ -46,7 +46,7 @@ public class Incident extends AbstractEntity {
     private @Nullable Duration expectedDelay;
     /**
      * Delay the source assumes without giving a figure (e.g. NZTA "Delays": 15 min), shown as estimated; {@code null}
-     * without assumption. See Docs/traffic-feed.md#verzögerung-ohne-angabe.
+     * without assumption. See Docs/traffic-feed.md#delay-without-a-value.
      */
     private @Nullable Duration assumedDelay;
     @ElementCollection
@@ -55,7 +55,7 @@ public class Incident extends AbstractEntity {
     private Set<Long> segmentIds = new HashSet<>();
     /**
      * Periods within the validity in which the incident applies, e.g. closed at night only. Empty: the whole validity,
-     * which stays the envelope for queries. See Docs/traffic-feed.md#zeitfenster.
+     * which stays the envelope for queries. See Docs/traffic-feed.md#time-windows.
      */
     @ElementCollection
     @CollectionTable(name = "incident_window", joinColumns = @JoinColumn(name = "incident_id"))
@@ -66,7 +66,7 @@ public class Incident extends AbstractEntity {
     private VehicleScope vehicleScope = VehicleScope.ALL;
     /**
      * Closure whose times are only in the text and could not be read yet: reported as {@code OTHER}, assessed as
-     * {@code DELAYED} without a delay, "check times". See Docs/traffic-feed.md#verarbeitung-trafficeventprocessor.
+     * {@code DELAYED} without a delay, "check times". See Docs/traffic-feed.md#processing-trafficeventprocessor.
      */
     @Column(nullable = false)
     private boolean timesUnconfirmed;

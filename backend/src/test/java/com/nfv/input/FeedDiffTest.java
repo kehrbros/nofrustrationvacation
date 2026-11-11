@@ -28,7 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Polling and feed comparison: NZTA sample and derived files via {@link TrafficPolling#pollNow}, special cases with
- * hand-made snapshots directly on {@link FeedDiff}. See Docs/traffic-feed.md#abgleich-feeddiff.
+ * hand-made snapshots directly on {@link FeedDiff}. See Docs/traffic-feed.md#diffing-feeddiff.
  */
 @SpringBootTest
 class FeedDiffTest {

@@ -50,7 +50,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Events entered by hand through the normal flow, on a route through the Terrace Tunnel, see
- * Docs/traffic-feed.md#testquelle-manual.
+ * Docs/traffic-feed.md#test-source-manual.
  */
 @SpringBootTest(properties = {"nfv.input.sources.manual.enabled=true",
         "nfv.input.sources.manual.network-region=wellington",

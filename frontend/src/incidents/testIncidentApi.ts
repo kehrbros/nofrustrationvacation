@@ -3,7 +3,7 @@ import type { LinePoint } from '../trips/model';
 
 /**
  * Test tool: report a traffic event by hand (`POST /api/v1/test/traffic-events`, source `manual`), see
- * Docs/traffic-feed.md#testquelle-manual. Only with `nfv.input.sources.manual.enabled=true` and the role `tester`;
+ * Docs/traffic-feed.md#test-source-manual. Only with `nfv.input.sources.manual.enabled=true` and the role `tester`;
  * the endpoint is not in openapi.json, so it is called through the configured client without generated types.
  */
 

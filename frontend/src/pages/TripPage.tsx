@@ -54,7 +54,7 @@ export default function TripPage() {
   const [pointPicker, setPointPickerState] = useState<{ onPick: PointPicker } | null>(null);
   const setPointPicker = useCallback((onPick: PointPicker | null) => setPointPickerState(onPick ? { onPick } : null), []);
   const [pickedPoint, setPickedPoint] = useState<LinePoint | null>(null);
-  // test incidents only for the role tester, the endpoint needs it (Docs/traffic-feed.md#testquelle-manual)
+  // test incidents only for the role tester, the endpoint needs it (Docs/traffic-feed.md#test-source-manual)
   const [tester, setTester] = useState(false);
   useEffect(() => {
     let active = true;

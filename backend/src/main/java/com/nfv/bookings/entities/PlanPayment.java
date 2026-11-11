@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 /**
- * One PayPal payment for all hotels of a plan, see Docs/incident-plans.md#ausführen-mit-einem-klick. The hotels are
+ * One PayPal payment for all hotels of a plan, see Docs/incident-plans.md#one-click-execution. The hotels are
  * {@link BookingReservation}s that point here; each has its own purchase unit and authorization in the one order.
  * Not audited, like the reservations.
  */

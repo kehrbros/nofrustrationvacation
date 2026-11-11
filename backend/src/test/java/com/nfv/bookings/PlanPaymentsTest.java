@@ -48,7 +48,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * All hotels of a plan with one PayPal approval, see Docs/incident-plans.md#ausführen-mit-einem-klick. LiteAPI and
+ * All hotels of a plan with one PayPal approval, see Docs/incident-plans.md#one-click-execution. LiteAPI and
  * PayPal are mocked.
  */
 @SpringBootTest

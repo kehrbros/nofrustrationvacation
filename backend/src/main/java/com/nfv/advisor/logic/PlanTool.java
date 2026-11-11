@@ -30,7 +30,7 @@ import java.util.Optional;
 
 /**
  * {@code compose_plan}: builds a plan of several steps from options of the run and checks it, see
- * Docs/incident-plans.md#bausteine-und-compose_plan. The backend computes the timeline, the deadline, the costs and
+ * Docs/incident-plans.md#building-blocks-and-tools. The backend computes the timeline, the deadline, the costs and
  * the way on after a night; a plan with a problem gets no id. Never books, never changes the trip.
  */
 @Component

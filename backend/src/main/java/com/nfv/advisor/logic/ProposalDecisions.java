@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * What the user does with the proposals of a run, see Docs/advisor.md#auswählen-und-verwerfen: take one, the trip is
+ * What the user does with the proposals of a run, see Docs/advisor.md#choosing-and-dismissing: take one, the trip is
  * changed accordingly, or dismiss all and plan again by hand. Bookings are never made here, an accommodation is booked
  * by the user afterwards (PayPal). The model is not involved.
  */

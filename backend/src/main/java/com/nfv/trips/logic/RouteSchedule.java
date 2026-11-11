@@ -5,7 +5,7 @@ import jakarta.annotation.Nullable;
 import java.time.OffsetDateTime;
 
 /**
- * Times of a route for the assessment of its consequences, see Docs/consequence-assessment.md#referenzzeit.
+ * Times of a route for the assessment of its consequences, see Docs/consequence-assessment.md#reference-time.
  *
  * @param departure      start of the first planned section, {@code null} if not planned
  * @param plannedArrival end of the last planned section, {@code null} if not planned

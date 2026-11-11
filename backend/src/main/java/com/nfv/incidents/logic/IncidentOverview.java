@@ -13,7 +13,7 @@ import java.util.List;
 
 /**
  * An incident with the roads it was located on and its consequences on all routes, for diagnosis (test endpoints, see
- * Docs/traffic-feed.md#testquelle-manual), not for travellers.
+ * Docs/traffic-feed.md#test-source-manual), not for travellers.
  *
  * @param segments number of road segments
  */

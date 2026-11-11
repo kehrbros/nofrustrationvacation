@@ -19,7 +19,7 @@ import java.util.Set;
 
 /**
  * Places a spot tapped next to a planned route onto the route itself (nearest point of its sections, PostGIS), e.g.
- * for test incidents, see Docs/traffic-feed.md#testquelle-manual. A point on the route lies on the segment the route
+ * for test incidents, see Docs/traffic-feed.md#test-source-manual. A point on the route lies on the segment the route
  * drives, so locating it ({@code nfv.incidents.point-radius-meters}) always finds that segment.
  */
 @Service

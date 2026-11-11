@@ -31,7 +31,7 @@ import java.util.regex.Pattern;
  * Books an alternative accommodation: prebook at LiteAPI, PayPal order (intent {@code AUTHORIZE}), after the user's
  * approval authorize, book at LiteAPI with our account, capture; if booking fails the authorization is voided, so no
  * money moves. Each step is committed before the next external call; {@link #complete} picks up where a previous
- * attempt stopped. See Docs/accommodation-alternatives.md#zahlung.
+ * attempt stopped. See Docs/accommodation-alternatives.md#payment.
  */
 @Slf4j
 @Service
@@ -72,7 +72,7 @@ public class AlternativeReservations {
 
     /**
      * Like {@link #reserve(long, long, NewReservation)}, for a stop without accommodation to replace, e.g. a night on
-     * the way that the user took from a proposal of the agent (Docs/advisor.md#übernachtung-übernehmen). The booking
+     * the way that the user took from a proposal of the agent (Docs/advisor.md#accepting-an-overnight-stay). The booking
      * is created at the stop.
      *
      * @throws BookingNotFoundException unknown stop or one of another user
@@ -288,7 +288,7 @@ public class AlternativeReservations {
 
     /**
      * After booking: if the hotel lies in another place than the stop, the stop moves there (named after the town) and
-     * its routes are planned again, see Docs/accommodation-alternatives.md#route-nach-dem-umbuchen. The booking stays
+     * its routes are planned again, see Docs/accommodation-alternatives.md#route-after-rebooking. The booking stays
      * whatever happens here.
      *
      * @return the routes planned again, empty within the same place or if moving failed

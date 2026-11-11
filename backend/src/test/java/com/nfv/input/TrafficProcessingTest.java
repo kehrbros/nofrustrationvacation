@@ -72,7 +72,7 @@ import static org.mockito.Mockito.when;
 /**
  * End to end: NZTA sample → events → incidents on the Wellington extract → consequence on a planned route through
  * the Terrace Tunnel, then the end reported by NZTA. Fixed clock 2026-11-03 22:15 (NZ), shortly after the sample, see
- * Docs/traffic-feed.md#testumgebung.
+ * Docs/traffic-feed.md#test-environment.
  */
 @SpringBootTest(properties = "nfv.input.sources.test-unloaded.enabled=true")
 class TrafficProcessingTest {

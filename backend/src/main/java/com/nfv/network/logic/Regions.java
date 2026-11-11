@@ -4,7 +4,7 @@ import com.nfv.network.config.NetworkProperties;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-/** Configured regions of the road network, see Docs/network.md#schnittstellen. */
+/** Configured regions of the road network, see Docs/network.md#interfaces-networklogic. */
 @Service
 @RequiredArgsConstructor
 public class Regions {

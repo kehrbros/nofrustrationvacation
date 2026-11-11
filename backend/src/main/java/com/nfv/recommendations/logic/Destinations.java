@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 
 /**
  * Another target when the planned one cannot be reached: places around it that can be reached, see
- * Docs/incident-plans.md#regeln. Close to the planned target (the holiday that was planned) and to the next stop (the
+ * Docs/incident-plans.md#rules. Close to the planned target (the holiday that was planned) and to the next stop (the
  * rest of the trip stays possible), towns before villages. Computed per request, nothing stored, no transaction.
  */
 @Service

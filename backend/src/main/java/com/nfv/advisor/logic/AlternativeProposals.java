@@ -104,7 +104,7 @@ public class AlternativeProposals {
     }
 
     /**
-     * Runs the agent for a route that is too late, see Docs/advisor.md#automatisch-nur-too_late. Nobody is logged in,
+     * Runs the agent for a route that is too late, see Docs/advisor.md#automatic-only-too_late. Nobody is logged in,
      * so no ownership check. Blocks until the run has ended: call it on a thread of its own.
      *
      * @return id of the run, empty if there is nothing to do: the situation was handled already, or the route is no

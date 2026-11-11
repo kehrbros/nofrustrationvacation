@@ -255,7 +255,7 @@ export interface PlanHotel {
   bookingId: number | null;
 }
 
-/** Taking a plan with hotels, see Docs/incident-plans.md#ausführen-mit-einem-klick. */
+/** Taking a plan with hotels, see Docs/incident-plans.md#one-click-execution. */
 export interface PlanExecution {
   executionId: number;
   tripId: number;

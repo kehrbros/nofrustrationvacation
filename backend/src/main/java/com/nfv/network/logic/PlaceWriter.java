@@ -7,7 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
-/** Stores the places of a region, see Docs/network.md#orte. */
+/** Stores the places of a region, see Docs/network.md#places. */
 @Component
 @RequiredArgsConstructor
 class PlaceWriter {

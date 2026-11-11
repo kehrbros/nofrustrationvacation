@@ -7,7 +7,7 @@ import java.util.Optional;
 
 /**
  * Draft of a message to the accommodation about a late arrival, sending it stays with the user, see
- * Docs/advisor.md#später-unterkünfte-und-nachricht-an-die-unterkunft. Not implemented yet, so no tool uses it.
+ * Docs/advisor.md#later-accommodations-and-message-to-the-accommodation. Not implemented yet, so no tool uses it.
  */
 public interface LateArrivalNotices {
     /** Empty if the stop has no accommodation to write to. */

@@ -1,6 +1,6 @@
 package com.nfv.bookings.entities;
 
-/** Steps of paying a plan, see Docs/incident-plans.md#ausführen-mit-einem-klick. */
+/** Steps of paying a plan, see Docs/incident-plans.md#one-click-execution. */
 public enum PlanPaymentStatus {
     /** Every hotel prebooked, no order yet. */
     PREBOOKED,

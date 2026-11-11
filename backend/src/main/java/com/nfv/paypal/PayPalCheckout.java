@@ -89,7 +89,7 @@ public class PayPalCheckout {
 
     /**
      * One order for several payments, each its own purchase unit with its own authorization: one approval of the payer
-     * for e.g. all hotels of a plan, see Docs/incident-plans.md#ausführen-mit-einem-klick. Intent {@code AUTHORIZE}.
+     * for e.g. all hotels of a plan, see Docs/incident-plans.md#one-click-execution. Intent {@code AUTHORIZE}.
      * All units must have the same currency.
      *
      * @param reference our id of the whole payment, for idempotency

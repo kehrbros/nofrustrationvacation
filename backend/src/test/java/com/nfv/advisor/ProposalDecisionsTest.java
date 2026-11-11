@@ -81,7 +81,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/** Taking or dismissing the proposals of a run, see Docs/advisor.md#auswählen-und-verwerfen. */
+/** Taking or dismissing the proposals of a run, see Docs/advisor.md#choosing-and-dismissing. */
 @SpringBootTest
 @AutoConfigureMockMvc
 class ProposalDecisionsTest {

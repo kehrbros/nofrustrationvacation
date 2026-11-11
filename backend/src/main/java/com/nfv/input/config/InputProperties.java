@@ -7,7 +7,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Traffic sources and their polling, see Docs/traffic-feed.md#konfiguration.
+ * Traffic sources and their polling, see Docs/traffic-feed.md#configuration.
  *
  * @param horizon    a source is not polled unless a planned route passes its region within this time (or one of its
  *                   incidents is active)

@@ -8,7 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.sql.PreparedStatement;
 import java.util.List;
 
-/** Places along a route for other modules, see Docs/network.md#orte. */
+/** Places along a route for other modules, see Docs/network.md#places. */
 @Service
 @RequiredArgsConstructor
 public class Places {

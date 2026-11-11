@@ -1,7 +1,7 @@
 /**
  * Loads the PayPal JS SDK (https://www.paypal.com/sdk/js) once per client id, currency and intent. The PayPal button
  * opens PayPal in a popup over the app instead of leaving it: the login of the app, the open sheet and an installed
- * PWA stay as they are, and no return URL is needed. See Docs/paypal.md#paypal-button-im-sheet.
+ * PWA stay as they are, and no return URL is needed. See Docs/paypal.md#paypal-button-in-the-sheet.
  */
 
 import { currentLanguage } from '../i18n';
