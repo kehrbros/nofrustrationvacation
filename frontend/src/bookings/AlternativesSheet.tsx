@@ -1,8 +1,9 @@
-import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, LoadingOutlined, NodeIndexOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
+import { CheckCircleOutlined, CheckOutlined, EnvironmentOutlined, NodeIndexOutlined, SearchOutlined, StarFilled } from '@ant-design/icons';
 import { Alert, Spin } from 'antd';
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { formatMoney, formatNumber, t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
@@ -248,7 +249,7 @@ export default function AlternativesSheet() {
             <button type="button" className="va-button va-button-outline" onClick={back}>{t('alternatives.back')}</button>
             <button type="button" className="va-button va-grow" disabled={busy || !criteria || !canSearch(criteria) || !status?.searchAvailable}
               onClick={() => void search()}>
-              <SearchOutlined aria-hidden="true" /> {busy ? t('alternatives.searchRunning') : t('alternatives.search')}
+              {busy ? <KiwiLoader size="small" decorative /> : <SearchOutlined aria-hidden="true" />} {busy ? t('alternatives.searchRunning') : t('alternatives.search')}
             </button>
           </div>
         );
@@ -604,7 +605,7 @@ export function BookingProgress({ reservation }: { reservation: Reservation }) {
         <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> {t('payment.priceSecured')}</li>
         <li className="va-progress-done"><CheckOutlined aria-hidden="true" /> {t('payment.approved')}</li>
         <li>
-          <LoadingOutlined aria-hidden="true" />{' '}
+          <KiwiLoader size="small" decorative />{' '}
           {t('payment.hotelConfirms', { amount: money(reservation.price, reservation.currency) })}
         </li>
       </ol>

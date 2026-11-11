@@ -8,6 +8,7 @@ import { createAccommodationBooking } from '../bookings/bookingsApi';
 import { stopTimesFromForm, toInput, type AccommodationForm } from '../bookings/form';
 import type { BookingSource } from '../bookings/model';
 import { stayDefaults } from '../bookings/stayDefaults';
+import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
@@ -200,7 +201,7 @@ function StopForm({ edited }: { edited?: Stop }) {
       height="90vh"
       footer={
         <button type="submit" form="stop-form" className="va-button va-button-accent va-block" disabled={saving}>
-          {saving ? t('common.saving') : edited ? t('stop.saveChanges') : t('stop.save')}
+          {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('common.saving') : edited ? t('stop.saveChanges') : t('stop.save')}
         </button>
       }
     >

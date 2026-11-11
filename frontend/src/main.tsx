@@ -8,6 +8,7 @@ import { BrowserRouter } from 'react-router';
 
 import { configureApiClient } from './api/apiClient';
 import App from './App';
+import KiwiLoader from './components/KiwiLoader';
 import LanguageRoot from './i18n/LanguageRoot';
 import { userManager } from './auth/oidcConfig';
 import { CALLBACK_PATH } from './auth/paths';
@@ -28,7 +29,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         {/* rendered again when the language changes, see Docs/i18n.md */}
         <LanguageRoot>
           {(language) => (
-            <ConfigProvider locale={language === 'de' ? deDE : enGB} theme={theme}>
+            <ConfigProvider locale={language === 'de' ? deDE : enGB} theme={theme}
+              spin={{ indicator: <KiwiLoader size="fill" /> }}>
               <App />
             </ConfigProvider>
           )}

@@ -1525,3 +1525,44 @@ a.va-button {
   padding-left: 20px;
   font-weight: 700;
 }
+
+/* Loading indicator (KiwiLoader): animated waiting kiwi (src/assets/kiwi.svg animates itself); no shadow */
+.va-kiwi {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: -0.15em;
+  line-height: 0;
+}
+.va-kiwi img {
+  width: 100%;
+  height: 100%;
+}
+.va-kiwi-small {
+  width: 1.2em;
+  height: 1.2em;
+}
+.va-kiwi-medium {
+  width: 32px;
+  height: 32px;
+}
+.va-kiwi-large {
+  width: 64px;
+  height: 64px;
+}
+/* inside an antd Spin: antd sets the size (font-size of .ant-spin-dot, 1em square) */
+.va-kiwi-fill {
+  width: 1em;
+  height: 1em;
+}
+/* centred loading kiwi in an area that is still empty (trip list, map) */
+.va-loading-block {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+.va-map-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

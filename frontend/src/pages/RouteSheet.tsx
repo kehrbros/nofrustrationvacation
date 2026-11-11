@@ -3,6 +3,7 @@ import { Alert } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import { HOME_PATH } from '../layout/navigation';
@@ -141,7 +142,7 @@ export default function RouteSheet() {
             </button>
           ) : (
             <button type="button" className="va-button va-button-accent va-block" disabled={!chosen || saving} onClick={save}>
-              {saving ? t('common.saving') : options.length === 1 ? t('route.confirm') : t('route.take')}
+              {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('common.saving') : options.length === 1 ? t('route.confirm') : t('route.take')}
             </button>
           )}
           {isNew && !notPlanned && (
@@ -183,7 +184,7 @@ export default function RouteSheet() {
         <legend>{t('route.choose')}</legend>
         {loaded.state === 'loading' && (
           <>
-            <p className="va-muted">{t('route.searching')}</p>
+            <p className="va-muted"><KiwiLoader size="small" decorative /> {t('route.searching')}</p>
             {[0, 1, 2].map((index) => (
               <div key={index} className="va-option va-option-skeleton" aria-hidden="true" />
             ))}

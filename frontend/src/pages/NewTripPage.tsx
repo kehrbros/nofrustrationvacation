@@ -3,6 +3,7 @@ import { Alert } from 'antd';
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { endOfDayIso, startOfDayIso } from '../trips/time';
 import { createTrip, generateCoverImage, uploadCoverImage } from '../trips/tripsApi';
@@ -132,7 +133,7 @@ export default function NewTripPage() {
         {error && <Alert type="error" showIcon message={error} />}
         <div className="va-grow" />
         <button type="submit" className="va-button va-button-accent va-block" disabled={saving}>
-          {saving ? t('newTrip.creating') : t('newTrip.create')}
+          {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('newTrip.creating') : t('newTrip.create')}
         </button>
       </form>
     </div>

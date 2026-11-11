@@ -1,6 +1,4 @@
 import { CheckCircleFilled, WarningOutlined } from '@ant-design/icons';
-import { Alert } from 'antd';
-import { useState } from 'react';
 import { useParams } from 'react-router';
 
 import Sheet from '../components/Sheet';
@@ -8,7 +6,6 @@ import { t } from '../i18n';
 import { descriptionIsTitle, formatDelay, incidentTitle, incidentTypeLabel } from '../trips/incidentText';
 import { routeName, useTripContext } from '../trips/tripContext';
 import { formatAgo, formatDateTime } from '../trips/time';
-import { dismissIncident } from '../trips/tripsApi';
 
 /**
  * Incident as overlay dialog over the map: what it means for the trip, validity, delay, description. A resolved
@@ -16,29 +13,20 @@ import { dismissIncident } from '../trips/tripsApi';
  */
 export default function IncidentSheet() {
   const { routeId, incidentId } = useParams();
-  const { incidents, resolvedIncidents, trip, stopById, reload, close } = useTripContext();
+  const { incidents, resolvedIncidents, removeResolvedIncident, trip, stopById, close } = useTripContext();
   const matches = (candidate: { routeId: number; incidentId: number }) =>
     candidate.routeId === Number(routeId) && candidate.incidentId === Number(incidentId);
   const incident = incidents.find(matches) ?? resolvedIncidents.find(matches);
   const route = trip.routes.find((candidate) => candidate.id === Number(routeId));
   const resolved = incident?.resolved ?? false;
-  const [removing, setRemoving] = useState(false);
-  const [removeFailed, setRemoveFailed] = useState(false);
 
-  const remove = async () => {
+  // optimistic: the sheet closes and the icon leaves the map at once, a failure brings it back (TripPage)
+  const remove = () => {
     if (!incident) {
       return;
     }
-    setRemoving(true);
-    setRemoveFailed(false);
-    try {
-      await dismissIncident(trip.id, incident.routeId, incident.incidentId);
-      reload();
-      close();
-    } catch {
-      setRemoveFailed(true);
-      setRemoving(false);
-    }
+    close();
+    removeResolvedIncident(incident);
   };
 
   return (
@@ -55,9 +43,7 @@ export default function IncidentSheet() {
       footer={
         resolved ? (
           <div className="va-column va-sheet-actions">
-            {removeFailed && <Alert type="error" showIcon message={t('incidentSheet.removeFailed')} />}
-            <button type="button" className="va-button va-button-accent va-block" disabled={removing}
-              onClick={() => void remove()}>
+            <button type="button" className="va-button va-button-accent va-block" onClick={remove}>
               {t('incidentSheet.remove')}
             </button>
             <button type="button" className="va-button va-button-outline va-block" onClick={close}>

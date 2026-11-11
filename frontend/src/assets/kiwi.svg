@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>NoFrustrationVacation</title>
+  <style>
+    .breathe{transform-box:fill-box;transform-origin:50% 100%;animation:breathe 3s ease-in-out infinite}
+    @keyframes breathe{0%,100%{transform:scale(1,1)}50%{transform:scale(1.015,1.03)}}
+    .tap{transform-box:fill-box;transform-origin:30% 70%;animation:tap .8s ease-in-out infinite}
+    @keyframes tap{0%,50%,100%{transform:rotate(0)}25%{transform:rotate(-22deg)}}
+    .think{transform-box:fill-box;transform-origin:90% 100%;animation:think 3s ease-in-out infinite}
+    @keyframes think{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+    .dot{transform-box:fill-box;transform-origin:50% 50%;animation:dot 1.2s ease-in-out infinite;opacity:.3}
+    .dot.d2{animation-delay:.2s}.dot.d3{animation-delay:.4s}
+    @keyframes dot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-7px)}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important}.dot{opacity:1}}
+  </style>
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5EC4FF"/>
+      <stop offset="0.75" stop-color="#FFE3A8"/>
+    </linearGradient>
+    <linearGradient id="drink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB300"/>
+      <stop offset="1" stop-color="#FF4F7A"/>
+    </linearGradient>
+    <radialGradient id="fur" cx="0.4" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#A9764B"/>
+      <stop offset="1" stop-color="#6E4524"/>
+    </radialGradient>
+    <clipPath id="badge"><circle cx="256" cy="256" r="240"/></clipPath>
+  </defs>
+
+  <!-- Background scene -->
+  <g clip-path="url(#badge)">
+    <rect width="512" height="512" fill="url(#sky)"/>
+    <circle cx="395" cy="120" r="46" fill="#FFD54F"/>
+    <circle cx="395" cy="120" r="62" fill="#FFD54F" opacity="0.35"/>
+    <path d="M0 395 Q64 378 128 395 T256 395 T384 395 T512 395 V512 H0 Z" fill="#26A9E8"/>
+    <path d="M0 410 Q64 396 128 410 T256 410 T384 410 T512 410" fill="none" stroke="#fff" stroke-width="4" opacity="0.6"/>
+    <path d="M0 448 Q140 428 260 430 Q390 428 512 380 V512 H0 Z" fill="#FFD9A0"/>
+  </g>
+  <circle cx="256" cy="256" r="240" fill="none" stroke="#3B2314" stroke-width="10"/>
+
+  <g transform="translate(-30 0)" stroke="#2E1B0E" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Legs + feet (right foot taps) -->
+    <path d="M218 392 V444 M270 392 V444" stroke="#2E1B0E" stroke-width="20"/>
+    <path d="M218 392 V444 M270 392 V444" stroke="#D9C08A" stroke-width="11"/>
+    <path d="M196 450 L218 442 L222 456 M218 442 L240 452" fill="none" stroke="#2E1B0E" stroke-width="12"/>
+    <path d="M196 450 L218 442 L222 456 M218 442 L240 452" fill="none" stroke="#D9C08A" stroke-width="5"/>
+    <g class="tap">
+      <path d="M262 448 L270 442 L274 456 M270 442 L294 452" fill="none" stroke="#2E1B0E" stroke-width="12"/>
+      <path d="M262 448 L270 442 L274 456 M270 442 L294 452" fill="none" stroke="#D9C08A" stroke-width="5"/>
+    </g>
+    <g class="breathe">
+    <!-- Body + head (one fluffy shape, facing right) -->
+    <path d="M118 318 C112 248 170 206 236 204 C252 170 280 150 312 154 C350 158 372 190 368 226 C366 252 352 262 346 284 C342 360 292 412 226 412 C160 412 122 370 118 318 Z" fill="url(#fur)"/>
+    <!-- Feather texture -->
+    <g fill="none" stroke="#4E2F16" stroke-width="3" opacity="0.7">
+      <path d="M150 300 q8 10 2 22 M180 270 q8 10 2 22 M190 340 q8 10 2 22 M228 300 q8 10 2 22 M160 360 q8 10 2 22 M240 360 q8 10 2 22 M210 240 q8 10 2 22 M290 320 q8 10 2 22 M268 262 q8 10 2 22 M300 370 q6 8 2 18"/>
+    </g>
+
+    <!-- Beak -->
+    <path d="M358 232 C386 248 408 272 418 302 L411 305 C400 280 380 262 352 252 Z" fill="#E8C27A"/>
+    <circle cx="364" cy="238" r="2.5" fill="#2E1B0E" stroke="none"/>
+
+    </g>
+    <!-- Folding table standing in the sand -->
+    <path d="M362 382 L422 428 M422 382 L362 428" fill="none" stroke="#2E1B0E" stroke-width="11"/>
+    <path d="M362 382 L422 428 M422 382 L362 428" fill="none" stroke="#B07A45" stroke-width="5"/>
+    <path d="M352 431 H372 M412 431 H432" stroke="#2E1B0E" stroke-width="6"/>
+    <rect x="346" y="370" width="92" height="13" rx="4" fill="#D29A5C"/>
+
+    <!-- Tall cocktail on the table, straw up to the beak -->
+    <path d="M414 298 L408 336" fill="none" stroke="#2E1B0E" stroke-width="9"/>
+    <path d="M414 298 L408 336" fill="none" stroke="#FF5A8A" stroke-width="4"/>
+    <path d="M380 308 L432 308 L426 370 L386 370 Z" fill="url(#drink)"/>
+    <path d="M389 318 L393 362" stroke="#FFFFFF" stroke-width="4" opacity="0.6"/>
+    <circle cx="433" cy="306" r="12" fill="#9CDB3E" stroke-width="3"/>
+    <path d="M424 310 L432 276" fill="none" stroke-width="3"/>
+    <path d="M410 278 Q432 250 456 276 Q444 272 434 278 Q423 272 410 278 Z" fill="#29C7AC" stroke-width="3"/>
+
+    <g class="breathe">
+    <!-- Bag strap wrapping around the body -->
+    <path d="M122 342 C126 296 140 256 166 224" fill="none" stroke="#2E1B0E" stroke-width="12"/>
+    <path d="M122 342 C126 296 140 256 166 224" fill="none" stroke="#C99A52" stroke-width="6"/>
+    <path d="M345 290 C300 300 236 318 188 338" fill="none" stroke="#2E1B0E" stroke-width="12"/>
+    <path d="M345 290 C300 300 236 318 188 338" fill="none" stroke="#C99A52" stroke-width="6"/>
+    <!-- Shoulder bag -->
+    <g transform="rotate(-8 150 368)">
+      <rect x="104" y="334" width="92" height="70" rx="12" fill="#2F8F86"/>
+      <path d="M104 346 Q104 334 116 334 H184 Q196 334 196 346 V372 Q150 386 104 372 Z" fill="#23736B"/>
+      <rect x="140" y="368" width="20" height="16" rx="3" fill="#F4D06F" stroke-width="3"/>
+      <path d="M116 392 H184" stroke="#1E5F58" stroke-width="3" stroke-dasharray="6 5"/>
+      <circle cx="122" cy="352" r="7" fill="#FFD54F" stroke-width="3"/>
+    </g>
+
+    <!-- Sunglasses (3/4) -->
+    <path d="M268 206 H300" fill="none" stroke="#1C1C2E" stroke-width="6"/>
+    <path d="M300 196 H344 Q348 196 346 204 Q340 228 322 228 Q302 228 298 206 Q296 196 300 196 Z" fill="#1C1C2E"/>
+    <path d="M344 199 Q350 194 356 197" fill="none" stroke="#1C1C2E" stroke-width="5"/>
+    <path d="M356 194 H370 Q373 194 372 201 Q369 218 362 218 Q355 218 354 202 Q353 194 356 194 Z" fill="#1C1C2E"/>
+    <path d="M308 204 L322 204" stroke="#FFFFFF" stroke-width="4" opacity="0.8"/>
+
+    <!-- Sunhat (tilted) -->
+    <g transform="rotate(-10 306 162)">
+      <ellipse cx="306" cy="162" rx="98" ry="20" fill="#F4D06F"/>
+      <path d="M270 162 C268 122 284 106 306 106 C328 106 344 122 342 162 Z" fill="#F4D06F"/>
+      <path d="M271 142 H341 L342 158 H270 Z" fill="#E8394D"/>
+      <circle cx="284" cy="149" r="8" fill="#FFFFFF" stroke-width="3"/>
+      <circle cx="284" cy="149" r="3" fill="#FFC107" stroke="none"/>
+      <path d="M214 166 Q306 188 398 166" fill="none" stroke="#C9A341" stroke-width="3"/>
+    </g>
+    </g>
+  </g>
+  <g transform="translate(-30 0)">
+    <g class="think" fill="#FFFFFF" stroke="#2E1B0E" stroke-width="5" stroke-linejoin="round">
+      <circle cx="242" cy="96" r="5"/>
+      <circle cx="222" cy="108" r="8"/>
+      <path d="M100 150 C78 150 74 120 96 114 C92 92 120 82 134 96 C144 78 176 80 182 100 C204 96 214 120 198 132 C212 148 192 166 174 156 C166 172 136 172 128 158 C116 168 98 164 100 150 Z"/>
+      <g stroke="none" fill="#2E1B0E">
+        <circle class="dot" cx="118" cy="130" r="8"/>
+        <circle class="dot d2" cx="144" cy="130" r="8"/>
+        <circle class="dot d3" cx="170" cy="130" r="8"/>
+      </g>
+    </g>
+  </g>
+</svg>

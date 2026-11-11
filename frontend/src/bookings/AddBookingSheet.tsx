@@ -2,6 +2,7 @@ import { AudioOutlined, EditOutlined, SnippetsOutlined } from '@ant-design/icons
 import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 
+import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import Rich from '../i18n/Rich';
@@ -218,7 +219,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
     if (step === 'review') {
       return (
         <button type="button" className="va-button va-button-accent va-block" disabled={saving} onClick={() => void submit()}>
-          {saving ? t('common.saving') : (submitLabel ?? t('addBooking.save'))}
+          {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('common.saving') : (submitLabel ?? t('addBooking.save'))}
         </button>
       );
     }

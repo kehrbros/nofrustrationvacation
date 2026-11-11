@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { useAuth } from 'react-oidc-context';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import Sheet from '../components/Sheet';
 import { loginState, sessionRejections, subscribeSession } from './session';
@@ -38,7 +39,7 @@ export default function SessionExpiredDialog() {
       footer={
         <div className="va-actions">
           <button type="button" className="va-button va-button-accent va-block" disabled={busy} onClick={() => void loginInPopup()}>
-            {busy ? t('auth.loggingIn') : t('auth.login')}
+            {busy && <><KiwiLoader size="small" decorative />{' '}</>}{busy ? t('auth.loggingIn') : t('auth.login')}
           </button>
           {popupFailed && (
             <button

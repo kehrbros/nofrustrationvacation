@@ -1,8 +1,9 @@
 import { PlusOutlined, WarningOutlined } from '@ant-design/icons';
-import { Alert, Skeleton } from 'antd';
+import { Alert } from 'antd';
 import { useState } from 'react';
 import { Link } from 'react-router';
 
+import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
 import ProfileButton from '../profile/ProfileButton';
@@ -94,7 +95,7 @@ export default function TripsPage() {
       <InstallBanner />
 
       {error !== undefined && <Alert type="error" showIcon message={t('trips.loadFailed')} />}
-      {loading && !data && <Skeleton active paragraph={{ rows: 6 }} />}
+      {loading && !data && <div className="va-loading-block"><KiwiLoader size="large" /></div>}
 
       {data && (
         <>
