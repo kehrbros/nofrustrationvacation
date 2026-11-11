@@ -15,6 +15,7 @@ const trip: TripDetail = {
   endAt: '2027-07-20T00:00:00+02:00',
   phase: 'UPCOMING',
   travelers: null,
+  guest: null,
   hasCoverImage: false,
   stops: [stop(1, 'Rom'), stop(2, 'Florenz'), stop(3, 'Venedig')],
   routes: [],

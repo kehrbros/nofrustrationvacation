@@ -117,7 +117,7 @@ async function unwrap<T>(call: Promise<{ data?: T; error?: unknown; response?: R
   const { data, error, response } = await call;
   if (error !== undefined || !response?.ok) {
     const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : undefined;
-    throw new TripsApiError(response?.status, code);
+    throw new TripsApiError(response?.status, code, typeof error === 'object' && error ? (error as Record<string, unknown>) : undefined);
   }
   return data as T;
 }

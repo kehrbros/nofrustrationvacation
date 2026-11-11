@@ -1867,6 +1867,71 @@
         "tags" : [ "Trips" ]
       }
     },
+    "/api/v1/trips/{tripId}/guest" : {
+      "delete" : {
+        "operationId" : "forgetGuest",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Forget the guest of the trip",
+        "tags" : [ "Trips" ]
+      },
+      "put" : {
+        "description" : "Suggested for every booking of the trip until it is forgotten. 400 INVALID_TRIP_INPUT with field (firstName, lastName, email, phone).",
+        "operationId" : "rememberGuest",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "tripId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "requestBody" : {
+          "content" : {
+            "application/json" : {
+              "schema" : {
+                "$ref" : "#/components/schemas/TripGuestDto"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TripDetailDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Remember the guest for the bookings of the trip",
+        "tags" : [ "Trips" ]
+      }
+    },
     "/api/v1/trips/{tripId}/incidents" : {
       "get" : {
         "description" : "Incidents not ended yet, ranked: TOO_LATE by lateness (not passable first), DELAYED by own delay, NO_IMPACT by passage; ties by earlier passage. Then resolved ones (resolved = true, incident ended), most recently resolved first, until removed.",
@@ -4551,6 +4616,10 @@
             "type" : "string",
             "format" : "date-time"
           },
+          "guest" : {
+            "$ref" : "#/components/schemas/TripGuestDto",
+            "description" : "Guest remembered for the bookings of this trip, absent if none"
+          },
           "hasCoverImage" : {
             "type" : "boolean"
           },
@@ -4585,6 +4654,24 @@
             "type" : [ "integer", "null" ],
             "format" : "int32",
             "description" : "Number of travelers, suggested as guests of bookings"
+          }
+        }
+      },
+      "TripGuestDto" : {
+        "type" : "object",
+        "description" : "Person the hotels of the trip are booked for, remembered at the user's wish",
+        "properties" : {
+          "email" : {
+            "type" : "string"
+          },
+          "firstName" : {
+            "type" : "string"
+          },
+          "lastName" : {
+            "type" : "string"
+          },
+          "phone" : {
+            "type" : "string"
           }
         }
       },
