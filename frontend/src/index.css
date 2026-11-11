@@ -827,13 +827,11 @@ a {
   right: -6px;
   bottom: -5px;
 }
-/* chip per category of the consequence: too late in ink, delayed in the accent (default), no impact plain */
+/* chip per category of the consequence: too late in red (apart from the ink stop markers), delayed in the accent
+   (default), no impact plain; the icon keeps its white filling */
 .va-map-incident-too-late {
   color: #ffffff;
-  background: var(--ink);
-}
-.va-map-incident-too-late svg path:first-child {
-  fill: var(--accent);
+  background: var(--danger);
 }
 .va-map-incident-no-impact {
   background: #ffffff;

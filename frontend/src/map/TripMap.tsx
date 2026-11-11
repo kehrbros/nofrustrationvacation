@@ -97,7 +97,7 @@ function middleOf(line: LinePoint[]): LinePoint {
   }
   return line[Math.floor(line.length / 2)];
 }
-/** Chip look per category: too late in ink, delayed in the accent, no impact plain. */
+/** Chip look per category: too late in red, delayed in the accent, no impact plain. */
 const chipClass = (consequence: TripIncident) =>
   `va-map-incident va-map-incident-${(consequence.category ?? 'open').toLowerCase().replace('_', '-')}`;
 
@@ -185,7 +185,7 @@ export default function TripMap({
         filter: ['==', ['get', 'planned'], false],
         paint: { 'line-color': '#111111', 'line-width': 3, 'line-dasharray': [2, 2] },
       });
-      // the stretch an incident covers, on top of the route: ink casing, filling by category
+      // the stretch an incident covers, on top of the route: ink casing, filling by category (too late in red like its chip)
       instance.addLayer({
         id: 'consequences-casing',
         type: 'line',
@@ -199,7 +199,7 @@ export default function TripMap({
         source: 'consequences',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
         paint: {
-          'line-color': ['match', ['get', 'category'], 'NO_IMPACT', '#ffffff', '#f2b705'],
+          'line-color': ['match', ['get', 'category'], 'NO_IMPACT', '#ffffff', 'TOO_LATE', '#b3261e', '#f2b705'],
           'line-width': 7,
         },
       });
@@ -208,7 +208,7 @@ export default function TripMap({
         type: 'line',
         source: 'consequences',
         filter: ['==', ['get', 'category'], 'TOO_LATE'],
-        paint: { 'line-color': '#111111', 'line-width': 3, 'line-dasharray': [1, 1.5] },
+        paint: { 'line-color': '#ffffff', 'line-width': 3, 'line-dasharray': [1, 1.5] },
       });
       instance.addLayer({
         id: 'route-preview-other',

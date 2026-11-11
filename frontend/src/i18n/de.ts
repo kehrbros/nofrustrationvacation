@@ -344,6 +344,7 @@ export const de = {
     viewBooking: 'Buchung {{title}} ansehen',
     addBooking: '+ Buchung',
     viewRoute: 'Route {{route}} ansehen',
+    viewSolutions: 'Lösungen für {{route}} ansehen',
     via: 'über {{via}}',
   },
   incidentSheet: {
@@ -536,7 +537,7 @@ export const de = {
   map: {
     label: 'Karte mit Stops und Routen',
     stop: 'Stop {{position}}: {{name}}',
-    alternatives: 'Alternativen ansehen: {{title}}',
+    alternatives: 'Lösungen ansehen: {{title}}',
     resolved: 'Erledigt: {{title}}',
     showTrip: 'Ganze Reiseroute zeigen',
     position: {

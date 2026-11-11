@@ -116,7 +116,14 @@ export default function TripPage() {
   );
   // a tap on the map above the expanded list folds it back in, like the toggle
   const collapse = useCallback(() => setExpanded(false), []);
-  const openRoute = useCallback((routeId: number) => navigate(`/reisen/${id}/routen/${routeId}`), [navigate, id]);
+  // a route hit by an incident opens its solutions, like the chip and the row in the list; others the route sheet
+  const openRoute = useCallback(
+    (routeId: number) => {
+      const incident = incidentsByRoute.get(routeId)?.[0];
+      navigate(incident ? `/reisen/${id}/alternativen/${routeId}/${incident.incidentId}` : `/reisen/${id}/routen/${routeId}`);
+    },
+    [navigate, id, incidentsByRoute],
+  );
   const removeResolvedIncident = useCallback(
     (incident: TripIncident) => {
       const key = incidentKey(incident);
@@ -385,10 +392,16 @@ function RouteRow({ context, routeId }: { context: TripContext; routeId: number 
   const route = context.trip.routes.find((candidate) => candidate.id === routeId)!;
   const incident = context.incidentsByRoute.get(route.id)?.[0];
   const line = context.routeLines.get(route.id);
+  // with an incident the row leads to its solutions, like the chip on the map; the route itself is under "plan myself"
+  const name = routeName(route, context.stopById);
   return (
-    <Link to={`routen/${route.id}`} className="va-route-row" aria-label={t('trip.viewRoute', { route: routeName(route, context.stopById) })}>
+    <Link
+      to={incident ? `alternativen/${route.id}/${incident.incidentId}` : `routen/${route.id}`}
+      className="va-route-row"
+      aria-label={incident ? t('trip.viewSolutions', { route: name }) : t('trip.viewRoute', { route: name })}
+    >
       <span className="va-column va-grow">
-        <span className="va-strong">{routeName(route, context.stopById)}</span>
+        <span className="va-strong">{name}</span>
         <span className="va-small va-muted">
           {[
             line?.via && t('trip.via', { via: line.via }),

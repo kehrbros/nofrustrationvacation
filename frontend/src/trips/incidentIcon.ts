@@ -2,8 +2,8 @@ import type { IncidentType } from './model';
 
 /*
  * Icons per kind of incident, shared by the map chips and the route rows so both look the same.
- * Plain SVG strings, because the map builds its chips as DOM elements. White filling with an ink outline;
- * the first path is the main shape, the "too late" chip on the map fills it in the accent colour.
+ * Plain SVG strings, because the map builds its chips as DOM elements. White filling with an ink outline, also on
+ * the red "too late" chip on the map.
  */
 const svg = (body: string) =>
   '<svg width="18" height="18" viewBox="0 0 24 24" fill="#ffffff" stroke="#111111" stroke-width="2.2" ' +
