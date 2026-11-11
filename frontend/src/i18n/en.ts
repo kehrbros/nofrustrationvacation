@@ -346,6 +346,7 @@ export const en: Messages<typeof de> = {
     viewBooking: 'View booking {{title}}',
     addBooking: '+ Booking',
     viewRoute: 'View route {{route}}',
+    viewSolutions: 'View solutions for {{route}}',
     via: 'via {{via}}',
   },
   incidentSheet: {
@@ -538,7 +539,7 @@ export const en: Messages<typeof de> = {
   map: {
     label: 'Map with stops and routes',
     stop: 'Stop {{position}}: {{name}}',
-    alternatives: 'View alternatives: {{title}}',
+    alternatives: 'View solutions: {{title}}',
     resolved: 'Resolved: {{title}}',
     showTrip: 'Show the whole route',
     position: {

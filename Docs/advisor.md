@@ -1,6 +1,6 @@
 # Proposals by the agent (`advisor`)
 
-- **Status:** decided 2026-11-06 (Lukas). Runs at the user's request and automatic runs (`RouteTooLate`) implemented (`V44`, agent, tools, API), tested with a scripted model, never against the real API. Accommodations via `find_overnight_areas` and `search_accommodations` implemented (`V46`, 2026-11-07), not yet checked against the LiteAPI sandbox, for now only `TARGET_STAY` with a booked accommodation can be booked. Automatic runs are switched off for now, see [Configuration](#configuration). Choosing, dismissing and frontend implemented (`V47`, 2026-11-07), see [Choosing and dismissing](#choosing-and-dismissing) and [Frontend](#frontend), not checked against the LiteAPI and PayPal sandboxes.
+- **Status:** decided 2026-11-06 (Lukas). Runs at the user's request and automatic runs (`RouteTooLate`) implemented (`V44`, agent, tools, API), tested with a scripted model, never against the real API. Accommodations via `find_overnight_areas` and `search_accommodations` implemented (`V46`, 2026-11-07), not yet checked against the LiteAPI sandbox, for now only `TARGET_STAY` with a booked accommodation can be booked. Automatic runs are switched on since 2026-11-11 (Philipp), see [Configuration](#configuration). Choosing, dismissing and frontend implemented (`V47`, 2026-11-07), see [Choosing and dismissing](#choosing-and-dismissing) and [Frontend](#frontend), not checked against the LiteAPI and PayPal sandboxes.
 - **Goal:** if an incident hits a route, an agent proposes what the user can do. Automatically for `TOO_LATE`, for `DELAYED` only at the user's request.
 - **Principle:** the model chooses, compares and justifies. Routes, times and conflicts are calculated by the backend. The model changes nothing on the trip, that is always confirmed by the user.
 - **Delimitation:** `recommendations` calculates routes deterministically and without a model ([recommendations.md](recommendations.md)). `advisor` uses this calculation, decides what is proposed and stores the result.
@@ -209,7 +209,7 @@ public class Stopovers {
 
 ## Frontend
 
-- `TripAlternativesSheet` (click on a consequence on the map or in the banner): section "Solutions" with `ProposalsPanel`, below collapsed "Replan myself" with the previous derived ways (route, alternative accommodation).
+- `TripAlternativesSheet` (click on a consequence on the map, on a route with an incident on the map or in the list, or in the banner): section "Solutions" with `ProposalsPanel`, below collapsed "Replan myself" with the previous derived ways (route, alternative accommodation).
 - `ProposalsPanel`: last run of the route, button "Find solutions"/"Search again", progress (polling every 2.5 s, the dialog may be closed), cards with title, short info, "Recommended" for rank 1, "Chosen" after acceptance. Expanding shows the effect and the button to accept. Note for `stale`.
 - If the notice costs no time (any more) (category not `DELAYED`/`TOO_LATE` or resolved), `ProposalsPanel` shows "nothing to replan" instead of the search and without the `stale` note; the last run stays visible with "Chosen", replanning yourself stays possible. If the server still answers `NO_ACTIVE_CONSEQUENCE`, the same applies (no error) and the trip is reloaded.
 - **AI invisible:** texts are built by the frontend from the fields (`proposalText.ts`), `summary` and `reason` of the model are not shown (English, see [Context of the model](#context-of-the-model)).
@@ -286,7 +286,7 @@ nfv.advisor.max-proposals=3
 nfv.advisor.plans-enabled=true
 nfv.advisor.parallel-tool-calls=true
 nfv.advisor.run-timeout=15m
-nfv.advisor.auto-enabled=false
+nfv.advisor.auto-enabled=true
 nfv.advisor.stopover-enabled=true
 # Places for overnight stays, values are defaults
 nfv.recommendations.stopover.latest-arrival=22:00
@@ -298,7 +298,10 @@ nfv.recommendations.stopover.max-areas=5
 
 - `plans-enabled`: offers `compose_plan` and `find_other_targets` (only together with `stopover-enabled`), see [incident-plans.md](incident-plans.md). `parallel-tool-calls`: the model may call several tools in one turn, `max-turns` 16 for 2–3 plans (2026-11-11).
 - `stopover-enabled`: offers the model `find_overnight_areas` and `search_accommodations` (the second only with a LiteAPI key). Default `true` since `search_accommodations` exists (2026-11-07). `false` in the test properties, only the tests of the accommodation tools switch it on.
-- `auto-enabled`: switches only the runs triggered by `RouteTooLate`, those of the user always work. **Default `false` for now (Lukas, 2026-11-07):** when switched on, routes and times go to OpenAI without any action by the user. Switch on only after the run against the real API and with the note in the app and privacy policy. Until then there is no run without a user request despite `TOO_LATE`.
+- `auto-enabled`: switches only the runs triggered by `RouteTooLate`, those of the user always work. Environment variable `NFV_ADVISOR_AUTO_ENABLED`.
+  - **Default `true` since 2026-11-11 (Philipp):** when an incident makes a route `TOO_LATE`, solutions are prepared without a request of the user, also for a test incident from "Add road event". Before, the default was `false` (Lukas, 2026-11-07), so no run started and the user only saw the button.
+  - Routes and times go to OpenAI without any action by the user. **Still open:** the note in the app and in the privacy policy that Lukas asked for before switching on.
+  - Without an OpenAI key the automatic run ends `COMPLETED_WITHOUT_MODEL` like a run of the user.
 - In the test properties it is explicitly set to `false`, otherwise every test with `TOO_LATE` would start a run in the background, even after a change of the default. Only `RouteTooLateListenerTest` switches it on.
 
 ## Order of implementation
@@ -307,7 +310,7 @@ nfv.recommendations.stopover.max-areas=5
 2. `recommendations`: `forConsequence`, only affected sections, `DEPARTURE_SHIFT`, already under way, testable without a model.
 3. `assistant`: `ToolConversation`, tested against a mocked API (`ToolConversationTest`). Before the first operation check once against the real API, especially the repetition of the encrypted reasoning.
 4. `advisor`: migration `V44`, agent, tools, API, interfaces `StayOptions` and `LateArrivalNotices`. First runs against the real API.
-5. `incidents`: `RouteTooLate` in `assessRoute`, listener and `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, switch `nfv.advisor.auto-enabled` (implemented, default `false` for now). Only with this and switched on do automatic runs happen.
+5. `incidents`: `RouteTooLate` in `assessRoute`, listener and `auto_key` in `advisor`, `RouteSnapshots.ownerOf`, switch `nfv.advisor.auto-enabled` (implemented, default `true` since 2026-11-11).
 
 ## Tests
 

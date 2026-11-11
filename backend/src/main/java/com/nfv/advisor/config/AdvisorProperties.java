@@ -11,8 +11,8 @@ import java.time.Duration;
  * @param maxTurns     requests to the model per run, in the last one it has to finish
  * @param maxProposals most proposals per run
  * @param runTimeout   an unfinished run older than this counts as abandoned
- * @param autoEnabled  {@code RouteTooLate} starts runs, those of the user work either way. Off until the loop was
- *                     tested against the real API and the privacy notice exists
+ * @param autoEnabled  {@code RouteTooLate} starts runs, those of the user work either way. On since 2026-11-11
+ *                     (Philipp), see Docs/advisor.md#configuration
  * @param stopoverEnabled the model is offered {@code find_overnight_areas} and {@code search_accommodations} (the
  *                     latter only with LiteAPI configured)
  * @param plansEnabled the model is offered {@code compose_plan} and {@code find_other_targets}, see
@@ -24,7 +24,7 @@ public record AdvisorProperties(
         @DefaultValue("16") int maxTurns,
         @DefaultValue("3") int maxProposals,
         @DefaultValue("15m") Duration runTimeout,
-        @DefaultValue("false") boolean autoEnabled,
+        @DefaultValue("true") boolean autoEnabled,
         @DefaultValue("true") boolean stopoverEnabled,
         @DefaultValue("true") boolean plansEnabled,
         @DefaultValue("true") boolean parallelToolCalls) {
