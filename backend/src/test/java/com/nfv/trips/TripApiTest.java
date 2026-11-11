@@ -130,6 +130,35 @@ class TripApiTest {
     }
 
     @Test
+    void guestIsRememberedCheckedAndForgotten() throws Exception {
+        long tripId = createTrip(user, "Toskana", "2027-07-12T00:00:00+02:00", "2027-07-26T23:59:00+02:00");
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.guest").value(is((Object) null)));
+
+        String guest = "{\"firstName\":\" Erika \",\"lastName\":\"Muster\",\"email\":\"%s\","
+                + "\"phone\":\"+49 170 1234567\"}";
+        mockMvc.perform(put("/api/v1/trips/{id}/guest", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(guest.formatted("erika@example.org")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.guest.firstName").value("Erika"))
+                .andExpect(jsonPath("$.guest.email").value("erika@example.org"));
+        mockMvc.perform(put("/api/v1/trips/{id}/guest", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(guest.formatted("erika-at-example")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"))
+                .andExpect(jsonPath("$.field").value("email"));
+        mockMvc.perform(put("/api/v1/trips/{id}/guest", tripId).with(otherUser).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(guest.formatted("erika@example.org")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user))
+                .andExpect(jsonPath("$.guest.email").value("erika@example.org"));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}/guest", tripId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.guest").value(is((Object) null)));
+    }
+
+    @Test
     void listIsAscendingByStartWithPhases() throws Exception {
         createTrip(user, "Bald", iso(NOW.plusDays(10)), iso(NOW.plusDays(12)));
         createTrip(user, "Vorbei", iso(NOW.minusDays(20)), iso(NOW.minusDays(18)));

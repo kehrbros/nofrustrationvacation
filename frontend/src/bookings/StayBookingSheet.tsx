@@ -14,7 +14,6 @@ import {
   errorText,
   failureText,
   HolderForm,
-  holderComplete,
   money,
   PaySummary,
 } from './AlternativesSheet';
@@ -23,13 +22,11 @@ import {
   bookReservation,
   fetchAlternativesStatus,
   fetchReservation,
-  rememberedHolder,
-  rememberHolder,
   reserveStay,
   type AlternativesStatus,
-  type Holder,
   type Reservation,
 } from './alternativesApi';
+import { holderComplete, useHolder } from './holder';
 import { directionsUrl } from './text';
 
 /** What the page needs to book a hotel of a proposal, handed over by the proposals dialog. */
@@ -46,8 +43,6 @@ type Step =
   | { kind: 'booked'; reservation: Reservation }
   | { kind: 'attention'; reservation: Reservation }
   | { kind: 'gone' };
-
-const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: '' };
 
 /**
  * Books the hotel of a taken proposal at its stop: a night on the way (new stop) or another accommodation at the
@@ -66,7 +61,8 @@ export default function StayBookingSheet() {
   const cancelled = params.get('abgebrochen') === '1';
 
   const [status, setStatus] = useState<AlternativesStatus | null>(null);
-  const [holder, setHolder] = useState<Holder>(() => rememberedHolder() ?? EMPTY_HOLDER);
+  const guest = useHolder(trip, reload);
+  const holder = guest.holder;
   const [step, setStep] = useState<Step>(returnedReservation ? { kind: 'returned' } : stay ? { kind: 'holder' } : { kind: 'gone' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -108,9 +104,10 @@ export default function StayBookingSheet() {
     setStep({ kind: 'reserving' });
     try {
       const reservation = await reserveStay(stop.id, stay.replacesBookingId, stay, holder);
-      rememberHolder(holder);
+      guest.saved();
       setStep({ kind: 'pay', reservation });
     } catch (failure) {
+      guest.refused(failure);
       setError(errorText(failure));
       setStep({ kind: 'holder' });
     }
@@ -170,7 +167,7 @@ export default function StayBookingSheet() {
             <dt>{t('booking.occupancy')}</dt>
             <dd>{t('common.guests', { count: stay.guests })}, {t('common.rooms', { count: stay.rooms })}</dd>
           </dl>
-          <HolderForm candidate={{ name: stay.hotelName, price: stay.price, currency: stay.currency }} holder={holder} onChange={setHolder} />
+          <HolderForm candidate={{ name: stay.hotelName, price: stay.price, currency: stay.currency }} state={guest} />
         </>
       )}
       {step.kind === 'reserving' && (
@@ -219,8 +216,8 @@ export default function StayBookingSheet() {
       case 'holder':
         return (
           <div className="va-column va-gap">
-            <button type="button" className="va-button va-block" disabled={!holderComplete(holder) || !status?.bookingAvailable}
-              onClick={() => void reserve()}>
+            <button type="button" className="va-button va-block" disabled={!status?.bookingAvailable}
+              onClick={() => guest.check() && void reserve()}>
               {t('payment.continue')}
             </button>
             <button type="button" className="va-text-button" onClick={() => navigate(`/reisen/${trip.id}/stops/${stop!.id}/buchung`)}>

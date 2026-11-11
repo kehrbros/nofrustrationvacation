@@ -12,6 +12,7 @@ import com.nfv.trips.entities.Route;
 import com.nfv.trips.entities.Stop;
 import com.nfv.trips.entities.Trip;
 import com.nfv.trips.entities.TripCoverImage;
+import com.nfv.trips.entities.TripGuest;
 import com.nfv.trips.entities.Waypoint;
 import com.nfv.trips.entities.WaypointOrigin;
 import jakarta.annotation.Nullable;
@@ -34,6 +35,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -46,6 +48,9 @@ import java.util.stream.Collectors;
 public class TripLogic {
     /** Largest title photo accepted for upload. */
     public static final int MAX_COVER_IMAGE_BYTES = 5 * 1024 * 1024;
+    /** Same rules as the guest of a reservation in bookings (AlternativeReservations), so a remembered guest books. */
+    private static final Pattern GUEST_EMAIL = Pattern.compile("[^@\\s]+@[^@\\s]+\\.[^@\\s]+");
+    private static final Pattern GUEST_PHONE = Pattern.compile("\\+?[0-9 ()/-]{6,30}");
     private static final Set<String> COVER_IMAGE_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
 
     private final TripRepository tripRepository;
@@ -125,6 +130,18 @@ public class TripLogic {
         Trip trip = new Trip(appUserId, trimmed, startAt, endAt, OffsetDateTime.now(clock));
         trip.changeTravelers(travelers);
         return tripRepository.save(trip);
+    }
+
+    /**
+     * Remembers the guest for every booking of the trip, or forgets it ({@code null}).
+     *
+     * @throws InvalidTripInputException a field is missing or invalid, {@link InvalidTripInputException#getField()}
+     */
+    @Transactional
+    public Trip rememberGuest(long appUserId, long tripId, @Nullable TripGuest guest) {
+        Trip trip = get(appUserId, tripId);
+        trip.rememberGuest(guest == null ? null : requireGuest(guest));
+        return trip;
     }
 
     /** Name, period and travelers, nothing to plan: passage times depend on the departures at the stops only. */
@@ -483,6 +500,31 @@ public class TripLogic {
         if (endAt.isBefore(startAt)) {
             throw new InvalidTripInputException("trip ends before it starts");
         }
+    }
+
+    private static TripGuest requireGuest(TripGuest guest) {
+        String email = requireGuestField(guest.email(), 255, "email");
+        String phone = requireGuestField(guest.phone(), 64, "phone");
+        TripGuest stripped = new TripGuest(requireGuestField(guest.firstName(), 100, "firstName"),
+                requireGuestField(guest.lastName(), 100, "lastName"), email, phone);
+        if (!GUEST_EMAIL.matcher(email).matches()) {
+            throw new InvalidTripInputException("email", "email is invalid");
+        }
+        if (!GUEST_PHONE.matcher(phone).matches()) {
+            throw new InvalidTripInputException("phone", "phone is invalid");
+        }
+        return stripped;
+    }
+
+    private static String requireGuestField(@Nullable String value, int maxLength, String field) {
+        if (value == null || value.isBlank()) {
+            throw new InvalidTripInputException(field, field + " is required");
+        }
+        String stripped = value.strip();
+        if (stripped.length() > maxLength) {
+            throw new InvalidTripInputException(field, field + " has at most " + maxLength + " characters");
+        }
+        return stripped;
     }
 
     private static void requireTravelers(@Nullable Integer travelers) {

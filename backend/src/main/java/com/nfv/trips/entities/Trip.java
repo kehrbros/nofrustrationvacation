@@ -8,6 +8,7 @@ import org.hibernate.annotations.TimeZoneStorage;
 import org.hibernate.annotations.TimeZoneStorageType;
 import jakarta.annotation.Nullable;
 import org.hibernate.envers.Audited;
+import org.hibernate.envers.NotAudited;
 
 import java.time.OffsetDateTime;
 import java.util.Objects;
@@ -36,6 +37,9 @@ public class Trip extends AbstractEntity {
     private OffsetDateTime createdAt;
     /** Number of travelers (1–99), suggested as guests of bookings; null if not given. */
     private @Nullable Integer travelers;
+    /** Guest data for bookings, only if the user asked to remember it for this trip; personal data, no history. */
+    @NotAudited
+    private @Nullable TripGuest guest;
 
     protected Trip() {
     }
@@ -66,6 +70,11 @@ public class Trip extends AbstractEntity {
             throw new IllegalArgumentException("travelers must be between 1 and 99, was " + travelers);
         }
         this.travelers = travelers;
+    }
+
+    /** Remembers the guest for the bookings of the trip, null forgets it. Checked by the caller. */
+    public void rememberGuest(@Nullable TripGuest guest) {
+        this.guest = guest;
     }
 
     /** Where the trip stands at the given point in time. Compares instants, the offsets do not matter. */

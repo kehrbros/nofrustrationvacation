@@ -6,6 +6,7 @@
   --line: #c9c9c4;
   --accent: #f2b705;
   --accent-soft: #fff4cc;
+  --danger: #b3261e;
   --map-bg: #eef0ea;
   /* test tools only (report a test incident), so they never look like a normal function */
   --test-pink: #e6338a;
@@ -1565,4 +1566,27 @@ a.va-button {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* ---------- guest data of a booking ---------- */
+.va-field-invalid input {
+  border-color: var(--danger);
+  background: #fff6f4;
+}
+.va-field-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+  font-weight: 600;
+}
+.va-remember {
+  align-items: flex-start;
+  cursor: pointer;
+}
+.va-remember input {
+  width: 22px;
+  height: 22px;
+  margin: 2px 0 0;
+  accent-color: var(--ink);
+  flex: none;
 }

@@ -6,14 +6,9 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import PayPalButton from '../payments/PayPalButton';
-import { errorText, HolderForm, holderComplete, money } from '../bookings/AlternativesSheet';
-import {
-  fetchAlternativesStatus,
-  rememberedHolder,
-  rememberHolder,
-  type AlternativesStatus,
-  type Holder,
-} from '../bookings/alternativesApi';
+import { errorText, HolderForm, money } from '../bookings/AlternativesSheet';
+import { useHolder } from '../bookings/holder';
+import { fetchAlternativesStatus, type AlternativesStatus } from '../bookings/alternativesApi';
 import { useTripContext } from '../trips/tripContext';
 import { planStepTexts, proposalTexts, type ProposalSetting } from './proposalText';
 import {
@@ -41,8 +36,6 @@ type Step =
   | { kind: 'done'; execution: PlanExecution }
   | { kind: 'gone' };
 
-const EMPTY_HOLDER: Holder = { firstName: '', lastName: '', email: '', phone: '' };
-
 /**
  * Takes a plan with hotels in one go, see Docs/incident-plans.md#one-click-execution: guest data, one PayPal
  * approval for all hotels, then the backend books them, changes the trip and pays. Nothing is paid or changed if a
@@ -53,14 +46,14 @@ export default function PlanBookingSheet() {
   const [params] = useSearchParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const { reload, close } = useTripContext();
+  const { trip, reload, close } = useTripContext();
   const state = location.state as PlanBookingState | null;
   const proposal = state?.proposal ?? null;
   const returned = params.get('planzahlung') !== null;
   const cancelled = params.get('abgebrochen') === '1';
 
   const [status, setStatus] = useState<AlternativesStatus | null>(null);
-  const [holder, setHolder] = useState<Holder>(() => rememberedHolder() ?? EMPTY_HOLDER);
+  const guest = useHolder(trip, reload);
   const [step, setStep] = useState<Step>(executionId ? { kind: 'applying' } : proposal ? { kind: 'holder' } : { kind: 'gone' });
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -104,10 +97,11 @@ export default function PlanBookingSheet() {
     setError(null);
     setStep({ kind: 'reserving' });
     try {
-      const execution = await startPlanCheckout(state.runId, state.proposal.rank, holder);
-      rememberHolder(holder);
+      const execution = await startPlanCheckout(state.runId, state.proposal.rank, guest.holder);
+      guest.saved();
       setStep({ kind: 'pay', execution });
     } catch (failure) {
+      guest.refused(failure);
       setError(errorText(failure));
       setStep({ kind: 'holder' });
     }
@@ -159,7 +153,7 @@ export default function PlanBookingSheet() {
       )}
       {step.kind === 'holder' && (
         <HolderForm candidate={{ name: stays.map((stay) => stay.hotelName).join(', '), price: total, currency }}
-          holder={holder} onChange={setHolder} />
+          state={guest} />
       )}
       {step.kind === 'reserving' && (
         <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('planBooking.preparing')}</span></div>
@@ -211,8 +205,8 @@ export default function PlanBookingSheet() {
     switch (step.kind) {
       case 'holder':
         return (
-          <button type="button" className="va-button va-block" disabled={!holderComplete(holder) || !status?.bookingAvailable}
-            onClick={() => void reserve()}>
+          <button type="button" className="va-button va-block" disabled={!status?.bookingAvailable}
+            onClick={() => guest.check() && void reserve()}>
             {t('payment.continue')}
           </button>
         );

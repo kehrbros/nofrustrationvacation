@@ -431,6 +431,39 @@ class AlternativeApiTest {
     }
 
     @Test
+    void invalidGuestDataNamesTheField() throws Exception {
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(reservation().replace("+49 170 1234567", "call me")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_BOOKING_INPUT"))
+                .andExpect(jsonPath("$.field").value("phone"));
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(reservation().replace("\"Erika\"", "\" \"")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("firstName"));
+        verify(liteApi, never()).prebook(anyString());
+    }
+
+    /** LiteAPI offer ids are longer than 1000 characters, the plan checkout refused them as "check your details". */
+    @Test
+    void longOfferIdsAreAccepted() throws Exception {
+        prebookAndHotel("150.00");
+        String offerId = "OF-" + "x".repeat(3000);
+        when(liteApi.prebook(offerId)).thenReturn(new LiteApi.Prebook("P-1", new BigDecimal("150.00"), "EUR", null,
+                false, true, LocalDateTime.of(2027, 7, 11, 12, 0)));
+        when(checkout.createOrder(anyString(), any(), anyString(), eq(PayPalCheckout.Intent.AUTHORIZE), any(), any()))
+                .thenReturn(new PayPalCheckout.CheckoutOrder("O-1", "https://www.sandbox.paypal.com/checkoutnow?token=O-1"));
+
+        mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-reservations", bookingId).with(user)
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content(reservation().replace("\"OF-1\"", "\"" + offerId + "\"")))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PAYMENT_PENDING"));
+    }
+
+    @Test
     void alternativesOfOtherUsersAreNotFound() throws Exception {
         RequestPostProcessor other = login("alternatives-other-" + UUID.randomUUID());
         mockMvc.perform(get("/api/v1/accommodation-bookings/{id}/alternative-criteria", bookingId).with(other))

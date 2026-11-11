@@ -38,6 +38,8 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class AlternativeReservations {
     private static final Pattern EMAIL = Pattern.compile("[^@\\s]+@[^@\\s]+\\.[^@\\s]+");
+    /** LiteAPI offer ids are long (over 1000 characters seen, see V51); only a guard against absurd input. */
+    private static final int MAX_OFFER_ID = 20_000;
     private static final Pattern PHONE = Pattern.compile("\\+?[0-9 ()/-]{6,30}");
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy");
     /** Issues after which the user may approve again or another payment method may work: no reason to fail. */
@@ -441,7 +443,7 @@ public class AlternativeReservations {
 
     static BookingReservation.Holder validate(NewReservation input) {
         if (input.hotelId() == null || input.hotelId().isBlank() || input.hotelId().length() > 64
-                || input.offerId() == null || input.offerId().isBlank() || input.offerId().length() > 1000) {
+                || input.offerId() == null || input.offerId().isBlank() || input.offerId().length() > MAX_OFFER_ID) {
             throw new InvalidBookingInputException("hotel and offer are required");
         }
         if (input.checkIn() == null || input.checkOut() == null || !input.checkOut().isAfter(input.checkIn())
@@ -451,26 +453,26 @@ public class AlternativeReservations {
         if (input.currency() == null || !input.currency().matches("[A-Z]{3}")) {
             throw new InvalidBookingInputException("currency must be ISO 4217");
         }
-        String firstName = required(input.firstName(), 100, "first name");
-        String lastName = required(input.lastName(), 100, "last name");
-        String email = required(input.email(), 255, "e-mail");
+        String firstName = required(input.firstName(), 100, "firstName");
+        String lastName = required(input.lastName(), 100, "lastName");
+        String email = required(input.email(), 255, "email");
         String phone = required(input.phone(), 64, "phone");
         if (!EMAIL.matcher(email).matches()) {
-            throw new InvalidBookingInputException("e-mail is invalid");
+            throw new InvalidBookingInputException("email", "email is invalid");
         }
         if (!PHONE.matcher(phone).matches()) {
-            throw new InvalidBookingInputException("phone is invalid");
+            throw new InvalidBookingInputException("phone", "phone is invalid");
         }
         return new BookingReservation.Holder(firstName, lastName, email, phone);
     }
 
     private static String required(@Nullable String value, int maxLength, String field) {
         if (value == null || value.isBlank()) {
-            throw new InvalidBookingInputException(field + " is required");
+            throw new InvalidBookingInputException(field, field + " is required");
         }
         String stripped = value.strip();
         if (stripped.length() > maxLength) {
-            throw new InvalidBookingInputException(field + " has at most " + maxLength + " characters");
+            throw new InvalidBookingInputException(field, field + " has at most " + maxLength + " characters");
         }
         return stripped;
     }
