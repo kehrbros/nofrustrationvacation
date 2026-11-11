@@ -48,6 +48,7 @@ public class ProposalDecisions {
     private final TripLogic tripLogic;
     private final BookingTodos todos;
     private final PlanExecutions planExecutions;
+    private final RouteSituations situations;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -134,8 +135,9 @@ public class ProposalDecisions {
         }
         if (proposal.getKind() != ProposalKind.STOPOVER) {
             // a stopover replaced the route, the database removed the run with it
+            String situation = situations.of(routeId);
             transactionTemplate.executeWithoutResult(_ -> runRepository.findById(runId)
-                    .ifPresent(run -> run.accepted(chosen.position(), OffsetDateTime.now(clock))));
+                    .ifPresent(run -> run.accepted(chosen.position(), OffsetDateTime.now(clock), situation)));
         }
         return accepted;
     }

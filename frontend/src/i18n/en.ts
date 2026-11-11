@@ -177,7 +177,7 @@ export const en: Messages<typeof de> = {
     banner_one: '1 solution for {{route}}',
     banner_other: '{{count}} solutions for {{route}}',
     bannerHint: 'Tap to view and apply.',
-    nothingToReplan: 'There is nothing to replan for this alert right now.',
+    noActionNeeded: 'This alert doesn’t change your arrival, there is nothing to replan.',
     searchFailed: 'The search could not be started. Please try again.',
     notApplicable: 'This no longer works, the trip has changed in the meantime. Please refresh the solutions.',
     loading: 'Loading solutions …',
