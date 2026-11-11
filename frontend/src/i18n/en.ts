@@ -473,7 +473,7 @@ export const en: Messages<typeof de> = {
   },
   testIncident: {
     open: 'Report an incident (test)',
-    label: 'Test Issue',
+    label: 'Add road event',
     eyebrow: 'Test · Report an incident',
     eyebrowEdit: 'Test · Change a report',
     mine: 'Your test reports on this device',
