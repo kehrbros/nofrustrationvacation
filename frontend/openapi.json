@@ -2879,7 +2879,7 @@
       },
       "AlternativeCriteriaDto" : {
         "type" : "object",
-        "description" : "Criteria filled from the booking. Dates local at the accommodation, maxPrice is the total for the stay. missing: fields the user has to enter (location, checkIn, checkOut, guests).",
+        "description" : "Criteria filled from the booking. Dates local at the accommodation, checkIn/checkOut are the booked days even if check-in is before earliestCheckIn, maxPrice is the total for the stay. missing: fields the user has to enter (location, checkIn, checkOut, guests).",
         "properties" : {
           "checkIn" : {
             "type" : [ "string", "null" ],
@@ -2891,6 +2891,11 @@
           },
           "currency" : {
             "type" : "string"
+          },
+          "earliestCheckIn" : {
+            "type" : "string",
+            "format" : "date",
+            "description" : "Today at the accommodation: the earliest day a stay can be booked from"
           },
           "excludeHotelId" : {
             "type" : [ "string", "null" ],

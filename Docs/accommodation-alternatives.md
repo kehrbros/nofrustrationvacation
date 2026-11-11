@@ -63,10 +63,10 @@
   | Criterion | from the booking | if the value is missing |
   |---|---|---|
   | Region | coordinates of `AccommodationDetails` (otherwise of the stop), radius default 5 km (`nfv.bookings.alternatives.default-radius`) | user must choose a place (Photon as for the stop) |
-  | Date from/to | date of `startsAt`/`endsAt` in the zone of the accommodation; if the check-in is in the past (stay in progress), from today at the place | required input |
+  | Date from/to | date of `startsAt`/`endsAt` in the zone of the accommodation, also if the check-in is already in the past (since 2026-11-11); `earliestCheckIn` = today at the place. The form does not offer days before it and, if the booked check-in is earlier, says which day is the earliest and offers to search from it | required input |
   | Guests | `guests` | required input, suggested 2 |
   | Rooms | `rooms` | 1 |
-  | Max. price | `price` + `currency` of the booking, default without markup (user increases if needed); for a shortened period proportionally per night | no upper limit, user can set one |
+  | Max. price | `price` + `currency` of the booking, default without markup (user increases if needed); the form reduces it proportionally per night when the user moves check-in to the earliest day; the agent (`search_accommodations`) gets the stay from the earliest day on with the price reduced the same way (`CriteriaProposal.fromEarliest`) | no upper limit, user can set one |
   | Minimum stars | stars of the previous accommodation (rounded down) from its LiteAPI profile, only if `placeRef` is a LiteAPI hotel id; an error at LiteAPI leaves the field empty | "Any", user can choose 2–5 |
 
 - The previous accommodation is excluded if its `placeRef` is a LiteAPI hotel id; otherwise hits with very small distance (< 50 m) and a similar name are marked as "previous accommodation?".

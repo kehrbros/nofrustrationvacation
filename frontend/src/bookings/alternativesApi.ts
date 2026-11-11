@@ -33,6 +33,8 @@ export interface Criteria {
   radiusMeters: number;
   checkIn: string;
   checkOut: string;
+  /** Today at the place: no stay can be booked before it. */
+  earliestCheckIn: string;
   guests: number | null;
   rooms: number;
   maxPrice: string;
@@ -246,6 +248,7 @@ export async function fetchCriteria(bookingId: number): Promise<Criteria> {
     radiusMeters: dto.radiusMeters ?? 5000,
     checkIn: dto.checkIn ?? '',
     checkOut: dto.checkOut ?? '',
+    earliestCheckIn: dto.earliestCheckIn ?? '',
     guests: dto.guests ?? null,
     rooms: dto.rooms ?? 1,
     maxPrice: dto.maxPrice ?? '',

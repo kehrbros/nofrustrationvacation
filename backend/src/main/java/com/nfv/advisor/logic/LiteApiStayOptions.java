@@ -59,7 +59,7 @@ class LiteApiStayOptions implements StayOptions {
                 .findFirst()
                 .map(view -> {
                     long bookingId = view.booking().getId();
-                    CriteriaProposal criteria = alternativeSearch.criteriaFor(appUserId, bookingId);
+                    CriteriaProposal criteria = alternativeSearch.criteriaFor(appUserId, bookingId).fromEarliest();
                     return new BookedStay(bookingId, criteria.latitude(), criteria.longitude(), criteria.checkIn(),
                             criteria.checkOut(), criteria.guests(), criteria.rooms(), criteria.maxPrice(),
                             criteria.currency(), criteria.excludeHotelId(), view.accommodation().getCheckInUntil(),

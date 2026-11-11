@@ -12,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -80,12 +79,11 @@ public class AlternativeSearch {
 
         ZoneId zone = ZoneId.of(details.getTimeZone());
         LocalDate today = LocalDate.now(clock.withZone(zone));
-        LocalDate bookedIn = booking.getStartsAt() == null ? null
+        // the booked dates, even if they lie in the past: the user sees them and is told what can still be booked
+        LocalDate checkIn = booking.getStartsAt() == null ? null
                 : booking.getStartsAt().atZoneSameInstant(zone).toLocalDate();
         LocalDate checkOut = booking.getEndsAt() == null ? null
                 : booking.getEndsAt().atZoneSameInstant(zone).toLocalDate();
-        // a stay that is running already: from today on
-        LocalDate checkIn = bookedIn != null && bookedIn.isBefore(today) ? today : bookedIn;
         if (checkIn == null) {
             missing.add("checkIn");
         }
@@ -97,18 +95,9 @@ public class AlternativeSearch {
             missing.add("guests");
         }
 
-        BigDecimal maxPrice = booking.getPrice();
-        if (maxPrice != null && bookedIn != null && checkIn != null && checkOut != null && booking.getEndsAt() != null) {
-            long bookedNights = ChronoUnit.DAYS.between(bookedIn, booking.getEndsAt().atZoneSameInstant(zone).toLocalDate());
-            long nights = ChronoUnit.DAYS.between(checkIn, checkOut);
-            if (bookedNights > 0 && nights < bookedNights) {
-                maxPrice = maxPrice.multiply(BigDecimal.valueOf(nights))
-                        .divide(BigDecimal.valueOf(bookedNights), 2, RoundingMode.UP);
-            }
-        }
         String hotelId = liteApiHotelId(details);
         return new CriteriaProposal(latitude, longitude, placeName, properties.defaultRadius(), checkIn, checkOut,
-                details.getGuests(), details.getRooms() == null ? 1 : details.getRooms(), maxPrice,
+                today, details.getGuests(), details.getRooms() == null ? 1 : details.getRooms(), booking.getPrice(),
                 booking.getCurrency() == null ? "EUR" : booking.getCurrency(), hotelId, stars(hotelId),
                 List.copyOf(missing));
     }

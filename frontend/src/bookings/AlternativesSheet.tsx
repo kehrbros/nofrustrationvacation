@@ -32,6 +32,7 @@ import {
 } from './alternativesApi';
 import { formatLocalDateTime } from './localTime';
 import { routeCheckText } from './routeCheckText';
+import { dateProblem, earliestCheckOut, fromEarliest } from './stayDates';
 import { failedHolderField, holderComplete, useHolder, type HolderField, type HolderState } from './holder';
 import { directionsUrl } from './text';
 
@@ -337,6 +338,7 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
   }, [placeQuery, changingPlace]);
 
   const mark = (field: string) => missing.has(field) ? 'va-field va-field-check' : 'va-field';
+  const problem = dateProblem(criteria);
   return (
     <div className="va-form">
       <p className="va-small va-muted">
@@ -389,16 +391,31 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
         </select>
       </div>
       <div className="va-field-row">
-        <div className={mark('checkIn')}>
+        <div className={problem ? 'va-field va-field-invalid' : mark('checkIn')}>
           <label htmlFor="alt-in">{t('booking.checkIn')}</label>
-          <input id="alt-in" type="date" value={criteria.checkIn} onChange={(event) => set({ checkIn: event.target.value })} />
+          <input id="alt-in" type="date" min={criteria.earliestCheckIn || undefined} value={criteria.checkIn}
+            aria-invalid={problem ? true : undefined} aria-describedby={problem ? 'alt-dates-error' : undefined}
+            onChange={(event) => set({ checkIn: event.target.value })} />
         </div>
-        <div className={mark('checkOut')}>
+        <div className={problem === 'over' ? 'va-field va-field-invalid' : mark('checkOut')}>
           <label htmlFor="alt-out">{t('booking.checkOut')}</label>
-          <input id="alt-out" type="date" min={criteria.checkIn || undefined} value={criteria.checkOut}
+          <input id="alt-out" type="date" min={earliestCheckOut(criteria)} value={criteria.checkOut}
+            aria-invalid={problem === 'over' ? true : undefined} aria-describedby={problem ? 'alt-dates-error' : undefined}
             onChange={(event) => set({ checkOut: event.target.value })} />
         </div>
       </div>
+      {problem && (
+        <div className="va-column va-gap">
+          <p id="alt-dates-error" className="va-field-error" role="alert">
+            {t(problem === 'over' ? 'alternatives.datesOver' : 'alternatives.datesStartEarlier', { date: date(criteria.earliestCheckIn) })}
+          </p>
+          {problem === 'startsEarlier' && (
+            <button type="button" className="va-text-button va-dates-fix" onClick={() => onChange(fromEarliest(criteria))}>
+              {t('alternatives.searchFromEarliest', { date: date(criteria.earliestCheckIn) })}
+            </button>
+          )}
+        </div>
+      )}
       <div className="va-field-row">
         <div className={mark('guests')}>
           <label htmlFor="alt-guests">{t('form.guests')}</label>
@@ -757,6 +774,7 @@ function excludedHint(count: number): string {
 
 function canSearch(criteria: Criteria): boolean {
   return criteria.latitude != null && !!criteria.checkIn && !!criteria.checkOut && criteria.checkOut > criteria.checkIn
+    && dateProblem(criteria) === null
     && criteria.guests != null && criteria.guests >= criteria.rooms && /^[A-Z]{3}$/.test(criteria.currency)
     && (!criteria.maxPrice.trim() || Number(criteria.maxPrice.replace(',', '.')) > 0);
 }
