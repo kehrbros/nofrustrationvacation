@@ -117,14 +117,18 @@ public class AdvisorRun extends AbstractEntity {
         this.finishedAt = at;
     }
 
-    /** The user took the proposal at the position; a later decision replaces an earlier one. */
-    public void accepted(int position, OffsetDateTime at) {
+    /**
+     * The user took the proposal at the position; a later decision replaces an earlier one. The situation after taking
+     * it becomes the new reference: what the choice itself changed does not make the run stale.
+     */
+    public void accepted(int position, OffsetDateTime at, String situationAfter) {
         if (position < 0 || position >= proposals.size()) {
             throw new IllegalArgumentException("run " + getId() + " has no proposal " + position);
         }
         this.decision = RunDecision.ACCEPTED;
         this.chosenPosition = position;
         this.decidedAt = at;
+        this.situation = situationAfter;
     }
 
     /** None of the proposals fits, the user plans again by hand. */

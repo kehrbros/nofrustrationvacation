@@ -71,6 +71,8 @@ export default function TripAlternativesSheet() {
               tripId={trip.id}
               routeId={route.id}
               incidentId={consequence.incidentId}
+              actionable={!consequence.resolved
+                && (consequence.category === 'TOO_LATE' || consequence.category === 'DELAYED')}
               setting={{
                 fromName: from?.name ?? t('alternativesSheet.start'),
                 targetName,

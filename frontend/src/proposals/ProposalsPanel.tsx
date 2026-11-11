@@ -30,10 +30,16 @@ const POLL_MS = 2500;
  * best first. Taking one changes the trip (route, departure, a night on the way) or leads to booking the hotel;
  * opening "plan myself" dismisses open ones. See Docs/advisor.md#frontend.
  */
-export default function ProposalsPanel({ tripId, routeId, incidentId, setting, onChanged, manualOpen, onToggleManual }: {
+export default function ProposalsPanel({ tripId, routeId, incidentId, actionable, setting, onChanged, manualOpen,
+  onToggleManual }: {
   tripId: number;
   routeId: number;
   incidentId: number;
+  /**
+   * The incident still costs time on the route (DELAYED or TOO_LATE): only then can solutions be searched for. Otherwise
+   * the panel says that there is nothing to do and shows the last solutions without a search.
+   */
+  actionable: boolean;
   setting: ProposalSetting;
   /** The trip changed, load it again. */
   onChanged: () => void;
@@ -48,6 +54,9 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
+  // the server knew better than the trip loaded: the incident no longer costs time
+  const [nothingToDo, setNothingToDo] = useState(false);
+  const canSearch = actionable && !nothingToDo;
 
   useEffect(() => {
     let active = true;
@@ -77,9 +86,12 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       const runId = await startRun(routeId, incidentId);
       setRun(await fetchRun(runId));
     } catch (failure) {
-      setError(failure instanceof TripsApiError && failure.code === 'NO_ACTIVE_CONSEQUENCE'
-        ? t('proposals.nothingToReplan')
-        : t('proposals.searchFailed'));
+      if (failure instanceof TripsApiError && failure.code === 'NO_ACTIVE_CONSEQUENCE') {
+        setNothingToDo(true);
+        onChanged();
+      } else {
+        setError(t('proposals.searchFailed'));
+      }
     } finally {
       setBusy(false);
     }
@@ -141,7 +153,10 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
       {done && <div className="va-success"><CheckCircleOutlined aria-hidden="true" /><span>{done}</span></div>}
 
-      {run === null && (
+      {!canSearch && (
+        <div className="va-success" role="status"><CheckCircleOutlined aria-hidden="true" /><span>{t('proposals.noActionNeeded')}</span></div>
+      )}
+      {run === null && canSearch && (
         <p className="va-muted">{t('proposals.intro')}</p>
       )}
       {isRunning(run) && (
@@ -155,7 +170,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       )}
       {run?.status === 'FAILED' && <p className="va-muted">{t('proposals.runFailed')}</p>}
       {result && result.proposals.length === 0 && <p className="va-muted">{t('proposals.none')}</p>}
-      {result && result.stale && result.proposals.length > 0 && (
+      {canSearch && result && result.stale && result.proposals.length > 0 && (
         <Alert type="warning" showIcon message={t('proposals.stale')} />
       )}
       {result && result.decision === 'DISMISSED' && result.proposals.length > 0 && (
@@ -181,7 +196,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
       )}
 
       <div className="va-row va-gap va-wrap">
-        {!isRunning(run) && (
+        {!isRunning(run) && canSearch && (
           <button type="button" className={`va-button ${result && result.proposals.length > 0 ? 'va-button-outline' : ''}`}
             disabled={busy} onClick={() => void search()}>
             <ReloadOutlined aria-hidden="true" /> {run === null ? t('proposals.search') : t('proposals.refresh')}
@@ -189,7 +204,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, setting, o
         )}
         <button type="button" className="va-text-button" aria-expanded={manualOpen} aria-controls="va-manual-planning"
           onClick={() => void toggleManual()}>
-          {result && result.proposals.length > 0 ? t('proposals.noneFits') : t('proposals.planMyself')} {manualOpen ? '↑' : '↓'}
+          {canSearch && result && result.proposals.length > 0 ? t('proposals.noneFits') : t('proposals.planMyself')} {manualOpen ? '↑' : '↓'}
         </button>
       </div>
       {run && !isRunning(run) && <span className="va-small va-muted">{t('proposals.asOf', { ago: formatAgo(run.createdAt) })}</span>}

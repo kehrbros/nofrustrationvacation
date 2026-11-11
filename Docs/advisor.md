@@ -211,6 +211,7 @@ public class Stopovers {
 
 - `TripAlternativesSheet` (Klick auf eine Consequence auf der Karte oder im Banner): Abschnitt „Lösungen“ mit `ProposalsPanel`, darunter eingeklappt „Selbst umplanen“ mit den bisherigen abgeleiteten Wegen (Route, alternative Unterkunft).
 - `ProposalsPanel`: letzter Lauf der Route, Knopf „Lösungen suchen“/„Neu suchen“, Fortschritt (Abfrage alle 2,5 s, der Dialog darf geschlossen werden), Karten mit Titel, Kurzinfo, „Empfohlen“ für Rang 1, „Gewählt“ nach dem Übernehmen. Aufklappen zeigt die Wirkung und den Knopf zum Übernehmen. Hinweis bei `stale`.
+- Kostet der Hinweis keine Zeit (mehr) (Kategorie nicht `DELAYED`/`TOO_LATE` oder erledigt), zeigt `ProposalsPanel` „nichts umzuplanen“ statt Suche und ohne `stale`-Hinweis; der letzte Lauf bleibt mit „Gewählt“ sichtbar, selbst umplanen bleibt möglich. Antwortet der Server trotzdem `NO_ACTIVE_CONSEQUENCE`, gilt dasselbe (kein Fehler) und die Reise wird neu geladen.
 - **KI unsichtbar:** Texte baut das Frontend aus den Feldern (`proposalText.ts`), `summary` und `reason` des Modells werden nicht gezeigt (Englisch, siehe [Kontext des Modells](#kontext-des-modells)).
 - `ProposalsBanner` auf der Reiseseite: offener Lauf (fertig, Vorschläge, nicht entschieden) einer Route mit Incident verlinkt in den Dialog.
 - `StayBookingSheet` (`stops/:stopId/unterkunft`): Buchung des Hotels aus dem Vorschlag, Gastdaten, PayPal-Button, Rückkehr der Weiterleitung über `?reservierung=`.
@@ -243,6 +244,7 @@ public class Stopovers {
 ### Veraltete Vorschläge
 
 - Beim Lesen vergleicht `advisor` `situation` mit der aktuellen Lage der Route. Weicht sie ab, kommt der Lauf mit `stale: true` zurück, es wird nichts neu berechnet.
+- Übernehmen setzt `situation` auf die Lage nach der Wahl: Was die Wahl selbst ändert (Ankunft, Kategorien), macht den Lauf nicht `stale`. `stale` heißt bei gewählten Läufen also „seit der Wahl geändert“.
 - Der Nutzer kann dann einen neuen Lauf starten. Wählt er trotzdem, plant `RoutePlanning` neu und `ConsequenceMatcher` bewertet den neuen Weg, wie bei jeder Wahl.
 
 ## API

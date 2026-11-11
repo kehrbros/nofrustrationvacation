@@ -234,6 +234,11 @@ class ProposalDecisionsTest {
 
         Stop start = inTransaction(() -> stopRepository.findById(startId).orElseThrow());
         assertThat(start.getDepartureAt()).isEqualTo(planned.plusHours(6));
+        // what the choice itself changed (arrival, categories) does not make the proposals stale
+        mockMvc.perform(get("/api/v1/alternative-proposals/{id}", runId).with(user))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.decision").value("ACCEPTED"))
+                .andExpect(jsonPath("$.stale").value(false));
     }
 
     @Test

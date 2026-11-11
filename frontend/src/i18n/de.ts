@@ -175,7 +175,7 @@ export const de = {
     banner_one: '1 Lösung für {{route}}',
     banner_other: '{{count}} Lösungen für {{route}}',
     bannerHint: 'Tippen zum Ansehen und Übernehmen.',
-    nothingToReplan: 'Für diesen Hinweis gibt es gerade nichts umzuplanen.',
+    noActionNeeded: 'Dieser Hinweis ändert nichts an deiner Ankunft, es gibt nichts umzuplanen.',
     searchFailed: 'Die Suche konnte nicht gestartet werden. Bitte versuche es noch einmal.',
     notApplicable: 'Das geht so nicht mehr, die Reise hat sich inzwischen geändert. Bitte aktualisiere die Lösungen.',
     loading: 'Lösungen werden geladen …',

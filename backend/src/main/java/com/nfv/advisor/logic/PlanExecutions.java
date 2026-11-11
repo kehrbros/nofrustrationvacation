@@ -56,6 +56,7 @@ public class PlanExecutions {
     private final TripEditing tripEditing;
     private final TripLogic tripLogic;
     private final BookingTodos todos;
+    private final RouteSituations situations;
     private final TransactionTemplate transactionTemplate;
     private final Clock clock;
 
@@ -348,7 +349,7 @@ public class PlanExecutions {
     /** The run is gone if a night on the way split its route. */
     private void accepted(long runId, int rank) {
         transactionTemplate.executeWithoutResult(_ -> runRepository.findById(runId)
-                .ifPresent(run -> run.accepted(rank - 1, OffsetDateTime.now(clock))));
+                .ifPresent(run -> run.accepted(rank - 1, OffsetDateTime.now(clock), situations.of(run.getRouteId()))));
     }
 
     private void failIfPaymentFailed(AdvisorPlanExecution execution) {
