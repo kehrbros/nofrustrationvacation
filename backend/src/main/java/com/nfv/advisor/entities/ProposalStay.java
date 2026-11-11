@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 @Embeddable
 public record ProposalStay(
         @Column(name = "stay_hotel_id", length = 64) String hotelId,
-        @Column(name = "stay_offer_id", length = 1000) String offerId,
+        @Column(name = "stay_offer_id", columnDefinition = "TEXT") String offerId,
         @Column(name = "stay_hotel_name") String hotelName,
         @Column(name = "stay_latitude") double latitude,
         @Column(name = "stay_longitude") double longitude,

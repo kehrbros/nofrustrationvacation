@@ -70,7 +70,9 @@ class StayProposalsTest {
     private static final AtomicInteger TESTS = new AtomicInteger();
     private static final double[] NEWTOWN = {-41.3100, 174.7790};
     private static final double[] THORNDON = {-41.2755, 174.7790};
-    private static final StayOffer OFFER = new StayOffer("lp1", "offer-1", "Thorndon Lodge", -41.276, 174.778, 120,
+    /** LiteAPI offer ids can be longer than 1000 characters, they are stored whole. */
+    private static final String OFFER_ID = "offer-" + "x".repeat(2400);
+    private static final StayOffer OFFER = new StayOffer("lp1", OFFER_ID, "Thorndon Lodge", -41.276, 174.778, 120,
             3.0, 8.4, "Room only", new BigDecimal("189.00"), "EUR", true, LocalDateTime.of(2030, 1, 1, 18, 0));
 
     @MockitoBean
@@ -139,7 +141,7 @@ class StayProposalsTest {
         assertThat((String) JsonPath.read(body, "$.proposals[0].kind")).isEqualTo("TARGET_STAY");
         assertThat((String) JsonPath.read(body, "$.proposals[0].reason")).isEqualTo("Stay close by.");
         assertThat((String) JsonPath.read(body, "$.proposals[0].stay.hotelName")).isEqualTo("Thorndon Lodge");
-        assertThat((String) JsonPath.read(body, "$.proposals[0].stay.offerId")).isEqualTo("offer-1");
+        assertThat((String) JsonPath.read(body, "$.proposals[0].stay.offerId")).isEqualTo(OFFER_ID);
         assertThat((String) JsonPath.read(body, "$.proposals[0].stay.price")).isEqualTo("189.00");
         assertThat((String) JsonPath.read(body, "$.proposals[0].stay.checkIn")).isEqualTo(checkIn);
         assertThat((String) JsonPath.read(body, "$.proposals[0].stay.place")).isEqualTo("Thorndon");
