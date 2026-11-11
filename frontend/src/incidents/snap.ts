@@ -2,7 +2,7 @@ import type { LinePoint, RouteLine } from '../trips/model';
 
 const EARTH_RADIUS = 6_371_000;
 /** A tap this close to a route (on screen) snaps onto it. */
-export const SNAP_PIXELS = 40;
+export const SNAP_PIXELS = 60;
 
 export interface Snapped {
   point: LinePoint;

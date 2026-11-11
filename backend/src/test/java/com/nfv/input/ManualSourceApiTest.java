@@ -40,6 +40,7 @@ import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.empty;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -86,6 +87,7 @@ class ManualSourceApiTest {
     private TrafficEventProcessor processor;
 
     private RequestPostProcessor tester;
+    private long testerId;
     private String id;
 
     @BeforeEach
@@ -95,7 +97,9 @@ class ManualSourceApiTest {
         }
         // incidents of other test classes in the shared database must not move or block these routes
         jdbc.update("UPDATE incident SET valid_to = valid_from");
-        tester = login(List.of(new SimpleGrantedAuthority("ROLE_tester")));
+        String username = "manual-" + UUID.randomUUID();
+        testerId = appUserProvisioning.findOrCreate(username, null, null).getId();
+        tester = login(username, List.of(new SimpleGrantedAuthority("ROLE_tester")));
         id = "test-" + UUID.randomUUID();
     }
 
@@ -114,6 +118,46 @@ class ManualSourceApiTest {
                 .andExpect(jsonPath(consequence(routeId, "category"), hasItem("DELAYED")))
                 .andExpect(jsonPath(consequence(routeId, "match"), hasItem("DIRECT")))
                 .andExpect(jsonPath(consequence(routeId, "delayAssumed"), hasItem(false)));
+    }
+
+    @Test
+    void pointNextToTheRouteIsPlacedOntoIt() throws Exception {
+        long tripId = tripOf(testerId);
+        long routeId = plannedRoute(tripId, DEPARTURE.plusHours(3));
+        // about 150 m west of the tunnel, farther than the point radius
+        String tap = "\"point\": {\"lat\": -41.289262576382875, \"lon\": 174.7698}";
+        String onRoute = ", \"onRoute\": {\"tripId\": " + tripId + ", \"routeId\": " + routeId + "}";
+
+        report(event("\"type\": \"CLOSURE\", " + tap + ", \"validFrom\": \"" + DEPARTURE.minusHours(1) + "\", "
+                + "\"validTo\": \"" + DEPARTURE.plusHours(1) + "\"" + onRoute))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.outcome").value("INCIDENT"))
+                .andExpect(jsonPath("$.placement.routeId").value(routeId))
+                .andExpect(jsonPath("$.placement.distanceMeters").value(greaterThan(50)))
+                .andExpect(jsonPath("$.placement.passageStart").isString())
+                .andExpect(jsonPath(consequence(routeId, "category"), hasItem("DELAYED")));
+
+        mockMvc.perform(post(EVENTS + "/placement").contentType(MediaType.APPLICATION_JSON).with(tester)
+                        .content("{\"tripId\": " + tripId + ", \"routeId\": " + routeId + ", " + tap + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.routeId").value(routeId))
+                .andExpect(jsonPath("$.lat").isNumber())
+                .andExpect(jsonPath("$.distanceMeters").value(greaterThan(50)));
+    }
+
+    @Test
+    void onlyOwnRoutesArePlacedOnto() throws Exception {
+        long tripId = tripOf(appUserProvisioning.findOrCreate("manual-" + UUID.randomUUID(), null, null).getId());
+        long routeId = plannedRoute(tripId, DEPARTURE.plusHours(3));
+
+        report(event("\"type\": \"CLOSURE\", " + TUNNEL + ", \"validFrom\": \"" + DEPARTURE + "\", "
+                + "\"onRoute\": {\"tripId\": " + tripId + ", \"routeId\": " + routeId + "}"))
+                .andExpect(status().isUnprocessableEntity());
+        report(event("\"type\": \"CLOSURE\", " + "\"line\": [{\"lat\": -41.2900, \"lon\": 174.7712}, {\"lat\": -41.2885, \"lon\": 174.7719}]" + ", \"validFrom\": \""
+                + DEPARTURE + "\", \"onRoute\": {\"tripId\": " + tripId + ", \"routeId\": " + routeId + "}"))
+                .andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM input_event WHERE subject_id = ?", Long.class, id))
+                .isZero();
     }
 
     @Test
@@ -291,10 +335,19 @@ class ManualSourceApiTest {
 
     /** Te Aro → Thorndon through the Terrace Tunnel (northbound), leaving at {@link #DEPARTURE}. */
     private long plannedRoute(OffsetDateTime arrival) {
+        return plannedRoute(tripOf(appUserProvisioning.findOrCreate("manual-" + UUID.randomUUID(), null, null)
+                .getId()), arrival);
+    }
+
+    private long tripOf(long userId) {
+        return transactionTemplate.execute(_ -> tripRepository.save(new Trip(userId, "Wellington", DEPARTURE,
+                DEPARTURE.plusDays(1), OffsetDateTime.now(ZoneOffset.UTC))).getId());
+    }
+
+    /** As {@link #plannedRoute(OffsetDateTime)}, on the trip. */
+    private long plannedRoute(long tripId, OffsetDateTime arrival) {
         long routeId = transactionTemplate.execute(_ -> {
-            long userId = appUserProvisioning.findOrCreate("manual-" + UUID.randomUUID(), null, null).getId();
-            Trip trip = tripRepository.save(new Trip(userId, "Wellington", DEPARTURE, DEPARTURE.plusDays(1),
-                    OffsetDateTime.now(ZoneOffset.UTC)));
+            Trip trip = tripRepository.findById(tripId).orElseThrow();
             Stop start = stopRepository.save(new Stop(trip, 0, "Te Aro", -41.2947, 174.7735, null, DEPARTURE));
             Stop end = stopRepository.save(new Stop(trip, 1, "Thorndon", -41.2755, 174.7790, arrival, null));
             return routeRepository.save(new Route(trip, start, end)).getId();
@@ -304,7 +357,10 @@ class ManualSourceApiTest {
     }
 
     private RequestPostProcessor login(List<GrantedAuthority> authorities) {
-        String username = "manual-" + UUID.randomUUID();
+        return login("manual-" + UUID.randomUUID(), authorities);
+    }
+
+    private RequestPostProcessor login(String username, List<GrantedAuthority> authorities) {
         AppUser appUser = appUserProvisioning.findOrCreate(username, null, null);
         Jwt jwt = Jwt.withTokenValue("token").header("alg", "none").subject(username).build();
         return authentication(new AppUserAuthentication(new CurrentUser(appUser.getId(), username), jwt, authorities));
