@@ -82,6 +82,8 @@ class AlternativeApiTest {
     private StructuredExtraction extraction;
     @Autowired
     private com.nfv.bookings.logic.AlternativeReservations reservations;
+    @Autowired
+    private com.nfv.bookings.data.BookingReservationRepository reservationRepository;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private RequestPostProcessor user;
@@ -664,6 +666,40 @@ class AlternativeApiTest {
         mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", todoId)
                         .with(login("other-" + UUID.randomUUID())).with(csrf()))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletingTheTripDeletesItsReservationsWithoutCancelling() throws Exception {
+        // a paid booking at a stop deleted earlier, which only its to-do still knows
+        long paidId = reserve("O-11");
+        mockPaymentAndBooking(paidId, "O-11");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", paidId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("BOOKED"));
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, stopId).with(user).with(csrf()))
+                .andExpect(status().is2xxSuccessful());
+        // and one at a new stop that needs attention (booked, capture refused)
+        String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(stop("Rom", WELLINGTON)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
+        bookingId = id(mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(BOOKING)).andExpect(status().isCreated()));
+        long stuckId = reserve("O-12");
+        when(checkout.authorize(eq("O-12"), anyString())).thenReturn(
+                new PayPalCheckout.Payment("A-12", "CREATED", new PayPalAmount("EUR", new BigDecimal("165.00"))));
+        when(liteApi.book(anyString(), any(), anyInt(), anyString()))
+                .thenReturn(new LiteApi.ProviderBooking("LB-12", null, "CONFIRMED"));
+        when(checkout.captureAuthorization(eq("A-12"), anyString()))
+                .thenThrow(new com.nfv.paypal.PayPalRejectedException(422, "AUTHORIZATION_EXPIRED", "d-1", "expired"));
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", stuckId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("NEEDS_ATTENTION"));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(user).with(csrf()))
+                .andExpect(status().is2xxSuccessful());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user)).andExpect(status().isNotFound());
+        assertThat(reservationRepository.findById(paidId)).isEmpty();
+        assertThat(reservationRepository.findById(stuckId)).isEmpty();
+        verify(liteApi, org.mockito.Mockito.never()).cancel(anyString());
     }
 
     private long reserve(String orderId) throws Exception {

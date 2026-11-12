@@ -48,6 +48,8 @@ export const en: Messages<typeof de> = {
     stopOnly: 'The stop will be removed from the trip.',
     tripCascade: '{{items}} and all routes will be deleted as well.',
     tripOnly: 'The trip will be deleted.',
+    tripAppBookings_one: 'Note: you booked and paid for one accommodation in the app. It will not be cancelled or refunded, its reservation is deleted as well.',
+    tripAppBookings_other: 'Note: you booked and paid for {{count}} accommodations in the app. They will not be cancelled or refunded, their reservations are deleted as well.',
   },
   removeBooking: {
     titleBooking: 'Cancel {{title}} as well?',

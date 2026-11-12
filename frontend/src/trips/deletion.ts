@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { isAppBooked } from '../bookings/appBookings';
 import type { Booking } from '../bookings/model';
 import type { TripDetail } from './model';
 
@@ -23,13 +24,16 @@ export function stopDeletionText(trip: TripDetail, stopId: number, bookings: Boo
   return parts.join(' ') || t('deletion.stopOnly');
 }
 
-/** What deleting the trip also deletes, for the confirmation. */
+/** What deleting the trip also deletes, for the confirmation; warns about bookings made in the app. */
 export function tripDeletionText(trip: TripDetail, bookings: Booking[]): string {
   const items = [
     trip.stops.length > 0 && t('common.stops', { count: trip.stops.length }),
     bookings.length > 0 && t('common.bookings', { count: bookings.length }),
   ].filter(Boolean);
-  return items.length
+  const text = items.length
     ? t('deletion.tripCascade', { items: items.join(t('common.and')) })
     : t('deletion.tripOnly');
+  // booked and paid in the app: deleted as well, but not cancelled (cleaning up, Docs/domain.md#bookings)
+  const inApp = bookings.filter(isAppBooked).length;
+  return inApp > 0 ? `${text} ${t('deletion.tripAppBookings', { count: inApp })}` : text;
 }
