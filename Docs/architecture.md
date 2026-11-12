@@ -45,6 +45,7 @@ Every module is a package under `com.nfv`.
 | `incidents` | Incidents, consequences, matching logic | new |
 | `recommendations` | Route suggestions from scenarios: during planning and as an alternative to consequences (detour, later departure), see [recommendations.md](recommendations.md) | new (planning), incidents draft |
 | `advisor` | Agent that proposes and stores solutions for incidents, automatically for `TOO_LATE`, otherwise on request, see [advisor.md](advisor.md) | new, automatic mode switched off for now |
+| `demo` | Demo trip for the jury and testers: trip, routes, bookings and test incidents through the normal logic, only with the manual test source, see [demo-trip.md](demo-trip.md) | new |
 | `auth` | Own identity provider (OAuth2/OIDC, MCP clients via CIMD), independent of all other modules | base |
 | `user` | `AppUser`, securing `/api/**` and `/mcp`, `CurrentUser` | base |
 | `common` | `AbstractEntity`, Envers revision, converters, error handling, OpenAPI | base |
@@ -89,6 +90,10 @@ flowchart LR
     advisor --> bookings
     incidents -.->|RouteTooLate| advisor
     network -.->|NetworkRefreshed| trips
+    demo --> trips
+    demo --> bookings
+    demo --> incidents
+    demo --> input
 ```
 
 - **References across module boundaries only by id** (`appUserId`, `segmentId`, `stopId`, `routeId`, `routeSectionId`, `incidentId`), with a foreign key in the database. JPA relationships (`@ManyToOne`) only within a module. The arrows above show these id references and the calls.
@@ -98,6 +103,7 @@ flowchart LR
 - **`input` and `incidents`** (decided 2026-11-04, implemented): `input` receives, stores, reads and enriches (`→ assistant`), does not know `network`. `incidents` locates via `network.SegmentMatching` (`IncidentReporting`), creates incidents and assesses consequences. Assessment on a changed arrival via the event `StopArrivalChanged` from `trips`.
 - **`recommendations`** reads routes via `trips.logic`, calculates suggestions transiently (nothing stored) and stores the chosen route via `TripEditing.replaceWaypoints` (then planning). It is not in `trips` because it needs `incidents` and `incidents` depends on `trips`, see [recommendations.md](recommendations.md).
 - **`advisor`** sits at the very top, no module knows it: it calls `recommendations` as tools of the agent and stores its runs and proposals itself. This keeps `recommendations` deterministic and without a model. Backwards only via the event `RouteTooLate` from `incidents`, after the commit, see [advisor.md](advisor.md).
+- **`demo`** sits at the very top like `advisor`, no module knows it, see [demo-trip.md](demo-trip.md).
 - **`auth`** is isolated via ArchUnit (`AuthModuleIsolationTest`). There are no ArchUnit rules for the new modules yet.
 
 ## Runtime View
