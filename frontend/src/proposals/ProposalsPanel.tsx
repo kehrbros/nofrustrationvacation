@@ -1,6 +1,6 @@
 import { CheckCircleOutlined, CheckOutlined, HomeOutlined, NodeIndexOutlined, ReloadOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
 import KiwiLoader from '../components/KiwiLoader';
@@ -25,13 +25,21 @@ import {
 
 const POLL_MS = 2500;
 
+/** Why the solutions are searched again right when the panel opens: a hotel of the plan taken was gone or dearer. */
+export type SearchAgainReason = 'OFFER_UNAVAILABLE' | 'PRICE_EXCEEDED';
+
+/** Router state of the solutions dialog when taking a plan failed, see {@link SearchAgainReason}. */
+export interface SearchAgainState {
+  searchAgain: SearchAgainReason;
+}
+
 /**
  * The solutions for a route hit by an incident: searched in the background when asked for (again at any time), the
  * best first. Taking one changes the trip (route, departure, a night on the way) or leads to booking the hotel;
  * opening "plan myself" dismisses open ones. See Docs/advisor.md#frontend.
  */
 export default function ProposalsPanel({ tripId, routeId, incidentId, actionable, setting, onChanged, manualOpen,
-  onToggleManual }: {
+  onToggleManual, searchAgain }: {
   tripId: number;
   routeId: number;
   incidentId: number;
@@ -46,6 +54,8 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, actionable
   /** The ways to plan again by hand are shown (below the panel, by the caller). */
   manualOpen: boolean;
   onToggleManual: (open: boolean) => void;
+  /** Search again right away (instead of showing the last solutions) and say why. */
+  searchAgain?: SearchAgainReason | null;
 }) {
   const navigate = useNavigate();
   // undefined: loading
@@ -57,14 +67,22 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, actionable
   // the server knew better than the trip loaded: the incident no longer costs time
   const [nothingToDo, setNothingToDo] = useState(false);
   const canSearch = actionable && !nothingToDo;
+  const [searchingAgain, setSearchingAgain] = useState<SearchAgainReason | null>(null);
+  const searchedAgain = useRef(false);
 
   useEffect(() => {
+    if (searchAgain && actionable && !searchedAgain.current) {
+      searchedAgain.current = true;
+      setSearchingAgain(searchAgain);
+      void search();
+      return;
+    }
     let active = true;
     fetchRouteRun(routeId).then((latest) => active && setRun(latest), () => active && setRun(null));
     return () => {
       active = false;
     };
-  }, [routeId]);
+  }, [routeId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // while searching: ask again until the run has ended
   useEffect(() => {
@@ -77,7 +95,7 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, actionable
     return () => window.clearTimeout(timer);
   }, [run]);
 
-  const search = async () => {
+  async function search() {
     setBusy(true);
     setError(null);
     setDone(null);
@@ -94,12 +112,15 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, actionable
       }
     } finally {
       setBusy(false);
+      // searched before anything was loaded: show the empty panel rather than loading forever
+      setRun((current) => (current === undefined ? null : current));
     }
-  };
+  }
 
   const take = async (proposal: Proposal) => {
     if (!run) return;
     if (proposal.kind === 'PLAN' && planStays(proposal).length > 0) {
+      setSearchingAgain(null);
       const state: PlanBookingState = { runId: run.runId, proposal, setting };
       navigate(`/reisen/${tripId}/plan`, { state });
       return;
@@ -144,13 +165,17 @@ export default function ProposalsPanel({ tripId, routeId, incidentId, actionable
   };
 
   if (run === undefined) {
-    return <div className="va-empty"><KiwiLoader size="small" decorative /> {t('proposals.loading')}</div>;
+    return searchingAgain
+      ? <div className="va-note va-row va-gap" role="status"><KiwiLoader size="small" decorative /><span>{t(`proposals.searchingAgain.${searchingAgain}`)}</span></div>
+      : <div className="va-empty"><KiwiLoader size="small" decorative /> {t('proposals.loading')}</div>;
   }
 
   const result = run && (run.status === 'COMPLETED' || run.status === 'COMPLETED_WITHOUT_MODEL') ? run : null;
   return (
     <div className="va-column va-gap">
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
+      {searchingAgain && isRunning(run) && <Alert type="info" showIcon message={t(`proposals.searchingAgain.${searchingAgain}`)} closable
+        onClose={() => setSearchingAgain(null)} />}
       {done && <div className="va-success"><CheckCircleOutlined aria-hidden="true" /><span>{done}</span></div>}
 
       {!canSearch && (

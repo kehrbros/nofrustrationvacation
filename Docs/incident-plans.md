@@ -57,6 +57,7 @@
   3. event `PlanPaymentSecured` → `PlanExecutions` changes the trip (detour/departure; overnight stay: stop before the destination, onward journey with the checked points, arrival at the destination moved; replacement destination: target stop moved, drive there; to-dos),
   4. capture and create bookings at the stops of the plan (overnight stay at the new stop).
 - **If step 3 fails**, the hotels are still paid and booked at the target stop, status `APPLIED_PARTLY`, the user replans themselves.
+- **Hotel gone or dearer** (`409 OFFER_UNAVAILABLE` or `PRICE_EXCEEDED` at checkout or completion, nothing paid): the frontend does not ask the user to search again by hand. `PlanBookingSheet` loads the run (`PlanExecutionDto.runId`, also after the redirect fallback), goes back to the solutions of its incident (`alternativen/:routeId/:incidentId`) and `ProposalsPanel` starts a new run right away with a note why (Philipp, 2026-11-12).
 - **Background:** `ReservationRecovery` continues plan payments (approved, but nobody came back → steps 1–4; `SECURED` → event again, a plan already applied is only paid).
 - **Frontend:** plan card with steps in `ProposalsPanel`, sheet `PlanBookingSheet` (`/reisen/:id/plan`, return of the redirect `/reisen/:id/plan/:executionId?planzahlung=…`).
 

@@ -365,6 +365,7 @@ class ProposalDecisionsTest {
                                 + "\"phone\":\"+49 170 1234567\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("AWAITING_PAYMENT"))
+                .andExpect(jsonPath("$.runId").value(runId))
                 .andExpect(jsonPath("$.orderId").value("O-7"))
                 .andExpect(jsonPath("$.total").value("143.00"))
                 .andExpect(jsonPath("$.hotels[0].hotelName").value("Te Aro Lodge"))

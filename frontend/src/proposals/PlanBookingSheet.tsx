@@ -9,12 +9,16 @@ import PayPalButton from '../payments/PayPalButton';
 import { errorText, HolderForm, money } from '../bookings/AlternativesSheet';
 import { useHolder } from '../bookings/holder';
 import { fetchAlternativesStatus, type AlternativesStatus } from '../bookings/alternativesApi';
+import { HOME_PATH } from '../layout/navigation';
 import { useTripContext } from '../trips/tripContext';
+import { TripsApiError } from '../trips/tripsApi';
+import type { SearchAgainReason, SearchAgainState } from './ProposalsPanel';
 import { planStepTexts, proposalTexts, type ProposalSetting } from './proposalText';
 import {
   abortPlan,
   completePlan,
   fetchPlanExecution,
+  fetchRun,
   planStays,
   startPlanCheckout,
   type PlanExecution,
@@ -39,7 +43,8 @@ type Step =
 /**
  * Takes a plan with hotels in one go, see Docs/incident-plans.md#one-click-execution: guest data, one PayPal
  * approval for all hotels, then the backend books them, changes the trip and pays. Nothing is paid or changed if a
- * hotel fails. The redirect fallback of PayPal comes back to plan/:executionId.
+ * hotel fails; if one is gone or has become dearer, the sheet goes back to the solutions of the incident and searches
+ * them again. The redirect fallback of PayPal comes back to plan/:executionId.
  */
 export default function PlanBookingSheet() {
   const { executionId } = useParams();
@@ -82,14 +87,39 @@ export default function PlanBookingSheet() {
     }
   };
 
+  /**
+   * A hotel of the plan is gone or has become dearer, nothing was paid: back to the solutions of the incident, which
+   * are searched again right away. False if the incident of the run is not known (the sheet then shows the error).
+   */
+  const searchAgain = async (failure: unknown, runId: number): Promise<boolean> => {
+    const reason = searchAgainReason(failure);
+    if (!reason) return false;
+    try {
+      const run = await fetchRun(runId);
+      if (run.incidentId == null) return false;
+      const next: SearchAgainState = { searchAgain: reason };
+      navigate(`${HOME_PATH}/${trip.id}/alternativen/${run.routeId}/${run.incidentId}`, { replace: true, state: next });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /** Completing failed: shows how the plan stands now, or searches again if a hotel refused. */
+  const completionFailed = (executionId: number, failure: unknown, unknown: () => void) => {
+    setError(errorText(failure));
+    fetchPlanExecution(executionId).then(async (execution) => {
+      if (execution.status === 'FAILED' && await searchAgain(failure, execution.runId)) return;
+      finished(execution);
+    }, unknown);
+  };
+
   const complete = (execution: PlanExecution) => {
     setError(null);
     setNotice(null);
     setStep({ kind: 'applying' });
-    completePlan(execution.executionId).then(finished, (failure) => {
-      setError(errorText(failure));
-      fetchPlanExecution(execution.executionId).then(finished, () => setStep({ kind: 'pay', execution }));
-    });
+    completePlan(execution.executionId).then(finished,
+      (failure) => completionFailed(execution.executionId, failure, () => setStep({ kind: 'pay', execution })));
   };
 
   const reserve = async () => {
@@ -101,6 +131,7 @@ export default function PlanBookingSheet() {
       guest.saved();
       setStep({ kind: 'pay', execution });
     } catch (failure) {
+      if (await searchAgain(failure, state.runId)) return;
       guest.refused(failure);
       setError(errorText(failure));
       setStep({ kind: 'holder' });
@@ -124,10 +155,7 @@ export default function PlanBookingSheet() {
         .finally(() => setStep({ kind: 'gone' }));
       return;
     }
-    completePlan(id).then(finished, (failure) => {
-      setError(errorText(failure));
-      fetchPlanExecution(id).then(finished, () => setStep({ kind: 'gone' }));
-    });
+    completePlan(id).then(finished, (failure) => completionFailed(id, failure, () => setStep({ kind: 'gone' })));
   }, [executionId, returned, cancelled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const stays = proposal ? planStays(proposal) : [];
@@ -236,4 +264,10 @@ export default function PlanBookingSheet() {
         return undefined;
     }
   }
+}
+
+/** A hotel of the plan is gone or has become dearer: new solutions are needed. */
+function searchAgainReason(failure: unknown): SearchAgainReason | null {
+  const code = failure instanceof TripsApiError ? failure.code : undefined;
+  return code === 'OFFER_UNAVAILABLE' || code === 'PRICE_EXCEEDED' ? code : null;
 }

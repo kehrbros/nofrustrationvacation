@@ -162,7 +162,7 @@ public class AlternativeProposalController {
 
     private static PlanExecutionDto toDto(PlanExecutions.ExecutionView view) {
         PlanPayments.PlanPaymentView payment = view.payment();
-        return new PlanExecutionDto(view.executionId(), view.tripId(), view.status(), view.failure(),
+        return new PlanExecutionDto(view.executionId(), view.tripId(), view.runId(), view.status(), view.failure(),
                 payment == null ? null : payment.status(), payment == null ? null : payment.orderId(),
                 payment == null ? null : payment.approveUrl(), payment == null ? null : payment.total(),
                 payment == null ? null : payment.currency(),
