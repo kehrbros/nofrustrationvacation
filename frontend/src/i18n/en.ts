@@ -690,6 +690,11 @@ export const en: Messages<typeof de> = {
     tooLarge: 'The file is too large (5 MB at most).',
     readFailed: 'The confirmation could not be read right now. You can enter the booking manually.',
   },
+  undo: {
+    action: 'Undo',
+    secondsLeft_one: '1 second left',
+    secondsLeft_other: '{{count}} seconds left',
+  },
   todo: {
     reason: {
       REPLACED: 'Replaced by a new accommodation',
@@ -716,6 +721,8 @@ export const en: Messages<typeof de> = {
     done: 'Done',
     hideDone: 'Hide completed',
     doneCount: '{{count}} done',
+    markedCancelled: '{{title}} marked as cancelled',
+    markedDone: '{{title}} done',
     reopen: 'Reopen',
     lateOn: 'Arriving only on {{date}}: let them know or cancel the first night',
     lateNextDay: 'Arriving only the next day: let them know or cancel the first night',

@@ -688,6 +688,11 @@ export const de = {
     tooLarge: 'Die Datei ist zu groß (höchstens 5 MB).',
     readFailed: 'Die Bestätigung konnte gerade nicht gelesen werden. Du kannst die Buchung manuell eingeben.',
   },
+  undo: {
+    action: 'Rückgängig',
+    secondsLeft_one: 'Noch 1 Sekunde',
+    secondsLeft_other: 'Noch {{count}} Sekunden',
+  },
   todo: {
     reason: {
       REPLACED: 'Ersetzt durch eine neue Unterkunft',
@@ -714,6 +719,8 @@ export const de = {
     done: 'Erledigt',
     hideDone: 'Erledigte ausblenden',
     doneCount: '{{count}} erledigt',
+    markedCancelled: '{{title}} als storniert markiert',
+    markedDone: '{{title}} erledigt',
     reopen: 'Wieder öffnen',
     lateOn: 'Ankunft erst am {{date}}: Bescheid geben oder die erste Nacht stornieren',
     lateNextDay: 'Ankunft erst am nächsten Tag: Bescheid geben oder die erste Nacht stornieren',
