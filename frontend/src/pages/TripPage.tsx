@@ -1,8 +1,9 @@
 import { AimOutlined, ArrowLeftOutlined, DeleteOutlined, EditOutlined, HomeOutlined, NodeIndexOutlined, PlusOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { Alert, Popconfirm, Spin } from 'antd';
+import { Alert, Spin } from 'antd';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from 'react-router';
 
+import ConfirmDialog from '../components/ConfirmDialog';
 import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { useAsync } from '../api/useAsync';
@@ -153,6 +154,9 @@ export default function TripPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // deleting a stop with bookings made and paid in the app: ask whether to cancel them as well
   const [stopToDelete, setStopToDelete] = useState<number | null>(null);
+  // plain confirmations as centered dialogs, a popover is cut off on phones
+  const [confirmStop, setConfirmStop] = useState<number | null>(null);
+  const [confirmTrip, setConfirmTrip] = useState(false);
   const deleteStop = async (stopId: number) => {
     setDeleteError(null);
     try {
@@ -226,19 +230,9 @@ export default function TripPage() {
           <h1 className="va-trip-title">{trip.name}</h1>
           <span className="va-muted">{formatPeriod(trip.startAt, trip.endAt)}</span>
         </div>
-        <Popconfirm
-          title={t('trip.deleteTrip')}
-          description={tripDeletionText(trip, bookings)}
-          okText={t('common.delete')}
-          okButtonProps={{ danger: true }}
-          cancelText={t('common.cancel')}
-          placement="bottomRight"
-          onConfirm={() => removeTrip()}
-        >
-          <button type="button" className="va-icon-button" aria-label={t('trip.deleteTripLabel')}>
-            <DeleteOutlined />
-          </button>
-        </Popconfirm>
+        <button type="button" className="va-icon-button" aria-label={t('trip.deleteTripLabel')} onClick={() => setConfirmTrip(true)}>
+          <DeleteOutlined />
+        </button>
         <ProfileButton />
       </header>
 
@@ -349,19 +343,10 @@ export default function TripPage() {
                           <DeleteOutlined />
                         </button>
                       ) : (
-                        <Popconfirm
-                          title={t('trip.deleteStop', { name: stop.name })}
-                          description={stopDeletionText(trip, stop.id, bookingsByStop.get(stop.id) ?? [])}
-                          okText={t('common.delete')}
-                          okButtonProps={{ danger: true }}
-                          cancelText={t('common.cancel')}
-                          placement="topRight"
-                          onConfirm={() => deleteStop(stop.id)}
-                        >
-                          <button type="button" className="va-icon-button va-plain" aria-label={t('trip.deleteStopLabel', { name: stop.name })}>
-                            <DeleteOutlined />
-                          </button>
-                        </Popconfirm>
+                        <button type="button" className="va-icon-button va-plain" aria-label={t('trip.deleteStopLabel', { name: stop.name })}
+                          onClick={() => setConfirmStop(stop.id)}>
+                          <DeleteOutlined />
+                        </button>
                       )}
                     </div>
                     <StopBookings bookings={bookingsByStop.get(stop.id) ?? []} stopId={stop.id} />
@@ -374,6 +359,31 @@ export default function TripPage() {
         </section>
       </div>
 
+      {confirmTrip && (
+        <ConfirmDialog
+          title={t('trip.deleteTrip')}
+          text={tripDeletionText(trip, bookings)}
+          confirmLabel={t('trip.deleteTripLabel')}
+          onConfirm={() => {
+            setConfirmTrip(false);
+            void removeTrip();
+          }}
+          onCancel={() => setConfirmTrip(false)}
+        />
+      )}
+      {confirmStop !== null && stopById.get(confirmStop) && (
+        <ConfirmDialog
+          title={t('trip.deleteStop', { name: stopById.get(confirmStop)?.name ?? '' })}
+          text={stopDeletionText(trip, confirmStop, bookingsByStop.get(confirmStop) ?? [])}
+          confirmLabel={t('common.delete')}
+          onConfirm={() => {
+            const stopId = confirmStop;
+            setConfirmStop(null);
+            void deleteStop(stopId);
+          }}
+          onCancel={() => setConfirmStop(null)}
+        />
+      )}
       {stopToDelete !== null && stopById.get(stopToDelete) && (
         <RemoveAppBookingDialog
           bookings={(bookingsByStop.get(stopToDelete) ?? []).filter(isAppBooked)}

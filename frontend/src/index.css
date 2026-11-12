@@ -192,6 +192,11 @@ a {
   background: #ffffff;
   color: var(--ink);
 }
+.va-button-danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #ffffff;
+}
 .va-block {
   width: 100%;
 }

@@ -152,6 +152,7 @@ flowchart LR
 ## Frontend
 
 - Pages according to the UI concept (mockups: https://claude.ai/artifact/8Vgxrtx6rJjtV7R8WxXuY4): `/reisen` (current trip, tabs upcoming/past), `/reisen/neu`, `/reisen/:id` (map with list below).
+- Confirming a deletion on the trip page (trip, stop) uses a centered dialog (`src/components/ConfirmDialog.tsx`), not a popover: a popover at the header button was cut off on phones (2026-11-12).
 - Dialogs above the map are sub-routes with their own URL (`stops/neu`, `stops/:stopId/buchung`, `buchungen/:bookingId`, `hinweise/:routeId/:incidentId`, `routen/:routeId`), the back button closes them.
 - Map: MapLibre GL JS with OpenFreeMap tiles (`VITE_MAP_STYLE_URL` overrides the style). Routes are drawn as straight lines between the stops until routing. The attribution (OpenFreeMap, OpenMapTiles, OpenStreetMap) comes from the tile metadata and is always expanded at the top left, because the trip sheet covers the lower corners.
 - Current position: browser geolocation (`watchPosition`, `src/map/position.ts`) as long as the trip is open; marked as a green pawn (`src/map/pawn.ts`), faded at the last position when the signal is lost. Not sent to the backend. Without permission or without the API no pawn, the position button briefly explains why.
