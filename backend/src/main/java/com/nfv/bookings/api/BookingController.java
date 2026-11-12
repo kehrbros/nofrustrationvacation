@@ -79,11 +79,11 @@ public class BookingController {
         return toDto(todos.reopen(user.appUserId(), todoId));
     }
 
-    private static BookingTodoDto toDto(BookingTodo todo) {
+    static BookingTodoDto toDto(BookingTodo todo) {
         return new BookingTodoDto(todo.getId(), todo.getTripId(), todo.getBookingId(), todo.getKind(),
                 todo.getReason(), todo.getTitle(), todo.getProvider(), todo.getReference(), todo.getManageUrl(),
                 todo.getPhone(), todo.getEmail(), todo.getStartsAt(), todo.getEndsAt(), todo.getCancellationDeadline(),
-                todo.isBookedInApp(), todo.getNewArrivalOn(), todo.getCreatedAt(), todo.getDoneAt());
+                todo.isBookedInApp(), todo.isCancellableInApp(), todo.getNewArrivalOn(), todo.getCreatedAt(), todo.getDoneAt());
     }
 
 

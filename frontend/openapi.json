@@ -883,6 +883,35 @@
         "tags" : [ "Bookings" ]
       }
     },
+    "/api/v1/booking-todos/{todoId}/refund-cancellation" : {
+      "post" : {
+        "description" : "For open cancellations with cancellableInApp, also when the booking or its stop was deleted: cancels at LiteAPI, PayPal refunds, the to-do is done. 409 CANCELLATION_NOT_POSSIBLE, 409 OFFER_UNAVAILABLE (LiteAPI refused), 503 ALTERNATIVES_UNAVAILABLE.",
+        "operationId" : "cancelTodoWithRefund",
+        "parameters" : [ {
+          "in" : "path",
+          "name" : "todoId",
+          "required" : true,
+          "schema" : {
+            "type" : "integer",
+            "format" : "int64"
+          }
+        } ],
+        "responses" : {
+          "200" : {
+            "content" : {
+              "*/*" : {
+                "schema" : {
+                  "$ref" : "#/components/schemas/TodoCancellationDto"
+                }
+              }
+            },
+            "description" : "OK"
+          }
+        },
+        "summary" : "Cancel the booking of a to-do in the app and refund it",
+        "tags" : [ "Alternative accommodations" ]
+      }
+    },
     "/api/v1/bookings/accommodation-drafts" : {
       "post" : {
         "description" : "Pasted or shared text and/or a screenshot (JPEG, PNG, WebP, GIF) or PDF up to 5 MB. The content is sent to the language model (OpenAI) and not stored. 503 ASSISTANT_UNAVAILABLE if the assistant is not configured or fails, 429 ASSISTANT_RATE_LIMITED.",
@@ -3149,7 +3178,7 @@
       },
       "BookingTodoDto" : {
         "type" : "object",
-        "description" : "Something to do about a booking after the trip changed, with a copy of the booking. CANCEL: cancel it at the provider (bookedInApp: in the app, POST /bookings/{bookingId}/refund-cancellation). NOTIFY_LATE_ARRIVAL: the arrival moves to newArrivalOn, tell the accommodation.",
+        "description" : "Something to do about a booking after the trip changed, with a copy of the booking. CANCEL: cancel it at the provider (cancellableInApp: in the app, POST /booking-todos/{id}/refund-cancellation). NOTIFY_LATE_ARRIVAL: the arrival moves to newArrivalOn, tell the accommodation.",
         "properties" : {
           "bookedInApp" : {
             "type" : "boolean",
@@ -3159,6 +3188,10 @@
             "type" : [ "integer", "null" ],
             "format" : "int64",
             "description" : "null once the booking is deleted, e.g. with its stop"
+          },
+          "cancellableInApp" : {
+            "type" : "boolean",
+            "description" : "Open cancellation the app can make, with a refund, also after the booking was deleted"
           },
           "cancellationDeadline" : {
             "type" : [ "string", "null" ],
@@ -3205,7 +3238,7 @@
           },
           "reason" : {
             "type" : "string",
-            "enum" : [ "REPLACED", "STOP_REMOVED", "ARRIVAL_LATER" ]
+            "enum" : [ "REPLACED", "STOP_REMOVED", "BOOKING_REMOVED", "ARRIVAL_LATER" ]
           },
           "reference" : {
             "type" : [ "string", "null" ]
@@ -4556,6 +4589,28 @@
             "type" : [ "string", "null" ],
             "description" : "null if there is a problem",
             "enum" : [ "IGNORE", "FOLLOW" ]
+          }
+        }
+      },
+      "TodoCancellationDto" : {
+        "type" : "object",
+        "description" : "A to-do cancelled in the app: the booking is cancelled at LiteAPI, PayPal refunds refundAmount.",
+        "properties" : {
+          "currency" : {
+            "type" : "string"
+          },
+          "refundAmount" : {
+            "type" : [ "string", "null" ],
+            "format" : "decimal",
+            "description" : "Refunded with PayPal",
+            "example" : "189.00"
+          },
+          "refunded" : {
+            "type" : "boolean",
+            "description" : "The refund with PayPal is made (otherwise it follows in the background)"
+          },
+          "todo" : {
+            "$ref" : "#/components/schemas/BookingTodoDto"
           }
         }
       },

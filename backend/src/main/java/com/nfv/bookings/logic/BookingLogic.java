@@ -163,6 +163,8 @@ public class BookingLogic {
     @Transactional
     public void delete(long appUserId, long bookingId) {
         Booking booking = owned(appUserId, bookingId);
+        tripLogic.stop(appUserId, booking.getStopId())
+                .ifPresent(stop -> todos.bookingRemoved(stop.getTrip().getId(), booking));
         accommodationRepository.findByBookingId(bookingId).ifPresent(accommodationRepository::delete);
         bookingRepository.delete(booking);
     }

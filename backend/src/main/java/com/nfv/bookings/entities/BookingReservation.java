@@ -25,8 +25,8 @@ public class BookingReservation extends AbstractEntity {
     /** Owner (of the trip), for the completion in the background. */
     @Column(nullable = false)
     private long appUserId;
-    @Column(nullable = false)
-    private long stopId;
+    /** {@code null} once the stop is deleted while the reservation is booked and paid, see {@link #detachFromStop}. */
+    private @Nullable Long stopId;
     /** The booking that cannot be used, if this replaces one. */
     private @Nullable Long replacesBookingId;
     /** The booking created once everything succeeded. */
@@ -120,6 +120,22 @@ public class BookingReservation extends AbstractEntity {
             throw new IllegalStateException("reservation " + getId() + " is " + status);
         }
         this.stopId = stopId;
+    }
+
+    /** True while money is held for it: booked and paid, or cancelled with the refund still due. */
+    public boolean holdsMoney() {
+        return status == ReservationStatus.BOOKED || isRefundOpen();
+    }
+
+    /**
+     * Its stop is deleted, but the money is still held: the reservation stays without a stop, so it can be cancelled
+     * with a refund from the to-do list.
+     */
+    public void detachFromStop() {
+        if (!holdsMoney()) {
+            throw new IllegalStateException("reservation " + getId() + " is " + status);
+        }
+        this.stopId = null;
     }
 
     public BookingReservation(long appUserId, long stopId, @Nullable Long replacesBookingId, Offer offer,

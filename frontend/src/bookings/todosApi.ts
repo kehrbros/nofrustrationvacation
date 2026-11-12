@@ -1,12 +1,12 @@
 import { t } from '../i18n';
-import { completeTodo, listTodos, reopenTodo } from '../generated/api';
+import { cancelTodoWithRefund, completeTodo, listTodos, reopenTodo } from '../generated/api';
 import type { BookingTodoDto } from '../generated/api';
 import { TripsApiError } from '../trips/tripsApi';
 
 /** To-do list of a trip: bookings to cancel or to tell about a later arrival, see Docs/domain.md#bookings. */
 
 export type TodoKind = 'CANCEL' | 'NOTIFY_LATE_ARRIVAL';
-export type TodoReason = 'REPLACED' | 'STOP_REMOVED' | 'ARRIVAL_LATER';
+export type TodoReason = 'REPLACED' | 'STOP_REMOVED' | 'BOOKING_REMOVED' | 'ARRIVAL_LATER';
 
 export interface BookingTodo {
   id: number;
@@ -24,6 +24,8 @@ export interface BookingTodo {
   endsAt: string | null;
   cancellationDeadline: string | null;
   bookedInApp: boolean;
+  /** Open cancellation the app can make with a refund, also after the booking or its stop was deleted. */
+  cancellableInApp: boolean;
   /** yyyy-mm-dd */
   newArrivalOn: string | null;
   doneAt: string | null;
@@ -54,6 +56,7 @@ function toTodo(dto: BookingTodoDto): BookingTodo {
     endsAt: dto.endsAt ?? null,
     cancellationDeadline: dto.cancellationDeadline ?? null,
     bookedInApp: dto.bookedInApp ?? false,
+    cancellableInApp: dto.cancellableInApp ?? false,
     newArrivalOn: dto.newArrivalOn ?? null,
     doneAt: dto.doneAt ?? null,
   };
@@ -70,6 +73,26 @@ export async function markTodoDone(todoId: number): Promise<BookingTodo> {
 
 export async function reopenTodoAgain(todoId: number): Promise<BookingTodo> {
   return toTodo(await unwrap(reopenTodo({ path: { todoId } })));
+}
+
+export interface TodoCancellation {
+  todo: BookingTodo;
+  /** Decimal as string, refunded with PayPal. */
+  refundAmount: string | null;
+  currency: string;
+  /** false: the refund follows in the background. */
+  refunded: boolean;
+}
+
+/** Cancels the booking of the to-do at the hotel, PayPal refunds; the to-do is done then. */
+export async function cancelTodoInApp(todoId: number): Promise<TodoCancellation> {
+  const result = await unwrap(cancelTodoWithRefund({ path: { todoId } }));
+  return {
+    todo: toTodo(result.todo ?? {}),
+    refundAmount: result.refundAmount ?? null,
+    currency: result.currency ?? '',
+    refunded: result.refunded ?? false,
+  };
 }
 
 export function todoReasonText(todo: BookingTodo): string {

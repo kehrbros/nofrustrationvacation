@@ -19,7 +19,7 @@ import java.util.Set;
 /**
  * Deletes the bookings and reservations of alternatives at stops that are deleted, in the transaction of the
  * deletion. Only while money is reserved at PayPal and the booking is not finished yet, the deletion is refused: the
- * payment would be left without its reservation.
+ * payment would be left without its reservation. Reservations booked and paid in the app stay without their stop.
  */
 @Component
 @RequiredArgsConstructor
@@ -45,10 +45,12 @@ class StopDeletionListener {
             // the database detaches it from the booking)
             todos.stopsRemoved(event.tripId(), bookings);
         }
-        reservationRepository.deleteAll(reservations);
+        // booked and paid (or a refund still due): the reservation stays without its stop, so it can still be
+        // cancelled with a refund from the to-do list (and the background job finishes a refund that is due)
+        reservations.stream().filter(BookingReservation::holdsMoney).forEach(BookingReservation::detachFromStop);
+        reservationRepository.deleteAll(reservations.stream().filter(reservation -> !reservation.holdsMoney()).toList());
         if (!bookings.isEmpty()) {
             accommodationRepository.deleteAll(
-
                     accommodationRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList()));
             bookingRepository.deleteAll(bookings);
         }
