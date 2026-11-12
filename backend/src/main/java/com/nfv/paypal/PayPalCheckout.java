@@ -47,18 +47,12 @@ public class PayPalCheckout {
     }
 
     /**
+     * Order with its own return and cancel URL. With {@link Intent#AUTHORIZE} the money is only reserved after
+     * approval ({@link #authorize}) and moved later ({@link #captureAuthorization}) or released ({@link #voidAuthorization}).
+     *
      * @param reference our id of the payment, stored as {@code custom_id} and used for idempotency: repeating the
      *                  call with the same reference returns the same order
      * @return the order, the payer has to be sent to {@link CheckoutOrder#approveUrl()}
-     */
-    public CheckoutOrder createOrder(String reference, PayPalAmount amount, String description) {
-        return createOrder(reference, amount, description, Intent.CAPTURE, properties.checkoutReturnUrl(),
-                properties.checkoutCancelUrl());
-    }
-
-    /**
-     * Order with its own return and cancel URL. With {@link Intent#AUTHORIZE} the money is only reserved after
-     * approval ({@link #authorize}) and moved later ({@link #captureAuthorization}) or released ({@link #voidAuthorization}).
      */
     public CheckoutOrder createOrder(String reference, PayPalAmount amount, String description, Intent intent,
                                      URI returnUrl, URI cancelUrl) {

@@ -8,8 +8,7 @@ import lombok.Getter;
 
 /**
  * Application side of a user account. Mapped to the JWT of incoming requests by {@link #username},
- * created on the first authenticated request, see Docs/authentication.md. Balances are kept by the accounting
- * module, see Docs/accounting.md.
+ * created on the first authenticated request, see Docs/authentication.md.
  */
 @Getter
 @Entity

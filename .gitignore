@@ -100,3 +100,9 @@ spikes/
 *.osm.pbf
 # GraphHopper graphs, in case NFV_HOST_DATA_DIR points into the repository
 data/graphs/
+
+# IDE project files
+.idea/
+
+# Error logs of openapi-ts
+frontend/openapi-ts-error-*.log

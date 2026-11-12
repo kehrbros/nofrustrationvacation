@@ -94,15 +94,15 @@
   2. The backend authorises the payment (money reserved, not yet collected) and checks amount and currency.
   3. Booking at LiteAPI with `ACC_CREDIT_CARD`.
   4. Successful → capture of the authorisation, reservation `BOOKED`, create `Booking`. Failed (`2001`, price change) → release the authorisation (void), no money moved, no refund fee.
-  - If the flow aborts between 3 and 4, a poller (as with the top-up in `accounting`) reconciles reservations with authorisation via `clientReference` at LiteAPI and captures or releases. Authorisations expire after a few days, which is enough for the reconciliation.
+  - If the flow aborts between 3 and 4, a poller (`ReservationRecovery`) reconciles reservations with authorisation via `clientReference` at LiteAPI and captures or releases. Authorisations expire after a few days, which is enough for the reconciliation.
 - **Several hotels of a plan (2026-11-11):** one order with one `purchase_unit` per hotel (`reference_id` = reservation), one approval, authorisation per unit, LiteAPI booking per hotel, capture only after the plan has changed the trip. If one hotel fails, the others are cancelled and all authorisations released (`bookings.PlanPayments`), see [incident-plans.md](incident-plans.md#one-click-execution).
 - **Cancellation of an alternative booked via the app:** LiteAPI refunds to our card according to the conditions, we refund via PayPal (refund of the capture). Whether to keep or refund the commission on cancellation: open.
 - **Adaptations to the module `paypal`** (stays a technical integration without domain knowledge, `PayPalModuleTest` still applies):
-  - Return and cancel URL per call instead of fixed configuration (`checkout-return-url` points to a removed page of `accounting`).
+  - Return and cancel URL per call instead of fixed configuration (the fixed URLs of the former top-up were removed on 2026-11-12).
   - `intent=AUTHORIZE` with authorize, capture and void of the authorisation (`/v2/checkout/orders/{id}/authorize`, `/v2/payments/authorizations/{id}/capture|void`).
   - Refund of a capture (`/v2/payments/captures/{id}/refund`), idempotent via `PayPal-Request-Id`.
-  - `PayPalConnect` and `PayPalPayouts` stay unchanged (see [Further PayPal potential](#further-paypal-potential)).
-  - New dependency: `bookings --> paypal`. `accounting` and `onboarding` stay legacy code.
+  - `PayPalConnect` and `PayPalPayouts` were removed with `accounting` and `onboarding` on 2026-11-12, restore from git history for the ideas in [Further PayPal potential](#further-paypal-potential).
+  - New dependency: `bookings --> paypal`.
 - **Later additionally the payment SDK ("Pay with card / Google Pay"):** technically possible to offer both methods side by side. With the payment SDK Nuitee is merchant of record, with PayPal we are. Consequences:
   - Two pricing models: SDK via `margin` (commission paid out by Nuitee), PayPal via `margin: 0` + own commission. Final prices should be the same, otherwise the user sees a different price per payment method; therefore fetch offers separately per payment method or set `margin` and commission equal.
   - Cancellation and refund run at Nuitee or with us depending on the method; the reservation remembers the method (`payment_method`).
@@ -114,12 +114,12 @@
 - Ideas, not decided. Notes on PayPal products from general knowledge, check in the PayPal docs before implementing.
 - **Fast payment in an emergency:** save the user's PayPal account (vault), then pay for an alternative with one tap, without redirect. Fits the use case in the evening at the reception.
 - **Refund on cancellation:** refund as above, also automatically if LiteAPI cancels a booking.
-- **Splitting costs among fellow travellers:** sharing trips is open ([domain.md](domain.md#open)). Afterwards collect a share of a booking from fellow travellers via PayPal, forwarding to the booker via `PayPalPayouts` (already exists).
-- **Paid features:** e.g. notifications for incidents as a subscription (PayPal Subscriptions). Already mentioned as an idea for `accounting` in [architecture.md](architecture.md#legacy-code).
+- **Splitting costs among fellow travellers:** sharing trips is open ([domain.md](domain.md#open)). Afterwards collect a share of a booking from fellow travellers via PayPal, forwarding to the booker via the Payouts API (`PayPalPayouts`, removed 2026-11-12, restore from git history).
+- **Paid features:** e.g. notifications for incidents as a subscription (PayPal Subscriptions).
 - **Pay later** (PayPal Pay Later / instalments) for expensive alternatives, available depending on the country.
 - **Further booking types:** transport and activities (planned) via the same checkout.
 - **Payment via AI assistants:** MCP tools (`/mcp`) could propose an alternative and send a PayPal link for approval; the user always confirms the payment themselves at PayPal. PayPal offers its own agent tools for this, to be checked.
-- **Prefill guest data:** "Log in with PayPal" (`PayPalConnect`) provides name and email; deliberately separate from the app's login (`auth` stays isolated).
+- **Prefill guest data:** "Log in with PayPal" (`PayPalConnect`, removed 2026-11-12, restore from git history) provides name and email; deliberately separate from the app's login (`auth` stays isolated).
 
 ## Implementation in the module `bookings`
 
