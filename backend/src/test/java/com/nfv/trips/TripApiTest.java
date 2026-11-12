@@ -176,10 +176,13 @@ class TripApiTest {
         mockMvc.perform(post("/api/v1/trips").with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(tripJson("Toskana", "2027-07-26T00:00:00+02:00", "2027-07-12T00:00:00+02:00")))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"))
+                // the frontend marks the field
+                .andExpect(jsonPath("$.field").value("endAt"));
         mockMvc.perform(post("/api/v1/trips").with(user).with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\" \"}"))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("name"));
     }
 
     @Test
@@ -229,11 +232,13 @@ class TripApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Berlin\",\"latitude\":52.52,\"longitude\":13.40}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("LOCATION_OUTSIDE_REGIONS"));
+                .andExpect(jsonPath("$.code").value("LOCATION_OUTSIDE_REGIONS"))
+                .andExpect(jsonPath("$.field").value("latitude"));
         mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Rotorua\"}"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"));
+                .andExpect(jsonPath("$.code").value("INVALID_TRIP_INPUT"))
+                .andExpect(jsonPath("$.field").value("latitude"));
         mockMvc.perform(put("/api/v1/trips/{id}/stops/{stopId}", tripId, auckland).with(user).with(csrf())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Sydney\",\"latitude\":-33.87,\"longitude\":151.21}"))

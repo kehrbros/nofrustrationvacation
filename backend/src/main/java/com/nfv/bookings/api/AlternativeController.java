@@ -190,19 +190,20 @@ public class AlternativeController {
 
     private static AlternativeCriteria toCriteria(AlternativeCriteriaInputDto dto) {
         if (dto.latitude() == null || dto.longitude() == null) {
-            throw new InvalidBookingInputException("place of the search is required");
+            throw new InvalidBookingInputException("latitude", "place of the search is required");
         }
         if (dto.checkIn() == null || dto.checkOut() == null) {
-            throw new InvalidBookingInputException("check-in and check-out are required");
+            throw new InvalidBookingInputException(dto.checkIn() == null ? "checkIn" : "checkOut",
+                    "check-in and check-out are required");
         }
-        return new AlternativeCriteria(dto.latitude(), dto.longitude(), number(dto.radiusMeters(), "radius"),
+        return new AlternativeCriteria(dto.latitude(), dto.longitude(), number(dto.radiusMeters(), "radiusMeters"),
                 dto.checkIn(), dto.checkOut(), number(dto.guests(), "guests"), number(dto.rooms(), "rooms"),
                 dto.maxPrice(), upper(dto.currency()), dto.excludeHotelId(), dto.minStars());
     }
 
     private static int number(@Nullable Integer value, String field) {
         if (value == null) {
-            throw new InvalidBookingInputException(field + " is required");
+            throw new InvalidBookingInputException(field, field + " is required");
         }
         return value;
     }

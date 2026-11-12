@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { emptyForm, formFromBooking, formFromDraft, liteApiHotelId, stayTimes, toInput, validateForm, withStayDefaults } from './form';
+import {
+  emptyForm, formErrors, formFromBooking, formFromDraft, liteApiHotelId, stayTimes, toInput, validateForm, withStayDefaults,
+} from './form';
 import { formatLocalDateTime, formatStay, nights } from './localTime';
 import type { AccommodationDraft, Booking } from './model';
 
@@ -73,6 +75,14 @@ describe('validateForm and toInput', () => {
     expect(validateForm({ ...valid, checkOutDate: '2027-07-11' })).toMatch(/nach der Anreise/);
     expect(validateForm({ ...valid, manageUrl: 'javascript:alert(1)' })).toMatch(/https/);
     expect(validateForm({ ...valid, price: 'viel' })).toMatch(/Preis/);
+  });
+
+  it('names every problem at its field', () => {
+    expect(Object.keys(formErrors(emptyForm()))).toEqual(['name', 'checkInDate', 'checkOutDate']);
+    const errors = formErrors({ ...valid, price: '12', currency: 'E', website: 'www.x.de', guests: '0', rooms: '100' });
+    expect(Object.keys(errors).sort()).toEqual(['currency', 'guests', 'rooms', 'website']);
+    expect(errors.website).toMatch(/https/);
+    expect(formErrors({ ...valid, checkOutDate: '2027-07-11' }).checkOutDate).toMatch(/nach der Anreise/);
   });
 });
 

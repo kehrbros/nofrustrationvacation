@@ -2,6 +2,7 @@ import { AudioOutlined, EditOutlined, SnippetsOutlined } from '@ant-design/icons
 import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 
+import { failedField, useFieldErrors } from '../components/form/validation';
 import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
@@ -9,7 +10,9 @@ import Rich from '../i18n/Rich';
 import AccommodationFields from './AccommodationFields';
 import { isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
-import { emptyForm, validateForm, withStayDefaults, type AccommodationForm, type FormField, type StayDefaults } from './form';
+import {
+  API_FIELDS, emptyForm, FORM_FIELDS, formErrors, withStayDefaults, type AccommodationForm, type FormField, type StayDefaults,
+} from './form';
 import type { BookingSource } from './model';
 import { readConfirmation } from './readConfirmation';
 import { clearShared, readShared, type SharedContent } from './shareTarget';
@@ -57,6 +60,8 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [available, setAvailable] = useState<boolean | null>(null);
+  const [readTried, setReadTried] = useState(false);
+  const validation = useFieldErrors(formErrors(form), form);
 
   useEffect(() => {
     void isExtractionAvailable().then(setAvailable);
@@ -66,6 +71,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
   }, [initialForm]);
 
   const manual = () => {
+    validation.reset();
     setForm(withStayDefaults(emptyForm(), defaults));
     setSource('MANUAL');
     setFilled(new Set());
@@ -73,7 +79,13 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
     setStep('review');
   };
 
+  const combinedEmpty = !text.trim() && !file && !shared?.text.trim() && !shared?.file;
+
   const read = async () => {
+    if (combinedEmpty) {
+      setReadTried(true);
+      return;
+    }
     setReading(true);
     setReadError(null);
     const result = await readConfirmation(shared, text, file);
@@ -82,6 +94,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
       setReadError(result.message);
       return;
     }
+    validation.reset();
     setForm(withStayDefaults(result.filled.form, defaults));
     setFilled(result.filled.filled);
     setUncertain(result.filled.uncertain);
@@ -90,9 +103,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
   };
 
   const submit = async () => {
-    const problem = validateForm(form);
-    if (problem) {
-      setError(problem);
+    if (!validation.check()) {
       return;
     }
     setSaving(true);
@@ -103,8 +114,12 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
         await clearShared().catch(() => undefined);
       }
     } catch (failure) {
-      // cancelled by the caller (e.g. in its dialog): back to the form without a message
-      setError(failure instanceof SubmitCancelled ? null : t('addBooking.saveFailed'));
+      // cancelled by the caller (e.g. in its dialog): back to the form without a message; a refused field is marked
+      const field = failedField(failure, FORM_FIELDS, API_FIELDS);
+      if (field) {
+        validation.refuse(field);
+      }
+      setError(failure instanceof SubmitCancelled || field ? null : t('addBooking.saveFailed'));
       setSaving(false);
     }
   };
@@ -115,8 +130,6 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
     review: initialForm ? t('addBooking.edit') : t('addBooking.review'),
   };
   const back = step === 'choose' || initialForm ? undefined : () => setStep(step === 'review' && source !== 'MANUAL' ? 'paste' : 'choose');
-
-  const combinedEmpty = !text.trim() && !file && !shared?.text.trim() && !shared?.file;
 
   return (
     <Sheet
@@ -179,6 +192,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
           error={readError}
           onError={setReadError}
           onManual={manual}
+          missing={readTried && combinedEmpty}
         />
       )}
 
@@ -196,6 +210,8 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
             uncertain={uncertain}
             autoLocate={source !== 'MANUAL'}
             near={near}
+            errors={validation.errors}
+            onTouch={validation.touch}
           />
           {error && <Alert type="error" showIcon message={error} />}
         </>
@@ -209,7 +225,7 @@ export default function AddBookingSheet({ onClose, onSubmit, context, initialFor
         <button
           type="button"
           className="va-button va-button-accent va-block"
-          disabled={reading || available === false || (!combinedEmpty)}
+          disabled={reading || available === false}
           onClick={() => void read()}
         >
           {reading ? t('addBooking.reading') : t('addBooking.read')}

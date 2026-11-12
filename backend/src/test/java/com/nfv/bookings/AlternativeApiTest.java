@@ -207,7 +207,8 @@ class AlternativeApiTest {
         mockMvc.perform(post("/api/v1/accommodation-bookings/{id}/alternative-searches", bookingId).with(user)
                         .with(csrf()).contentType(MediaType.APPLICATION_JSON)
                         .content(CRITERIA.replace("}", ",\"minStars\":6}")))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("minStars"));
         verify(liteApi, never()).rates(any());
     }
 

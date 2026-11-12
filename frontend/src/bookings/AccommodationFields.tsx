@@ -1,6 +1,7 @@
 import { EnvironmentOutlined, HomeOutlined } from '@ant-design/icons';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
+import Field, { RequiredNote } from '../components/form/Field';
 import KiwiLoader from '../components/KiwiLoader';
 import { t } from '../i18n';
 import { searchPlaces, type Place } from '../map/geocoding';
@@ -20,6 +21,12 @@ interface Props {
   autoLocate?: boolean;
   /** The stop: suggestions for the name near it come first. */
   near?: { latitude: number; longitude: number } | null;
+  /** Errors to show per field (useFieldErrors of the owner). */
+  errors?: Partial<Record<FormField, string>>;
+  /** The user left a field. */
+  onTouch?: (field: FormField) => void;
+  /** The owner explains the * already, above its own fields. */
+  hideRequiredNote?: boolean;
 }
 
 type Suggestion =
@@ -44,7 +51,7 @@ const lookedUpLabel = (name: FormField) =>
  * the stop first); choosing one fills the address and looks up contact and house rules (LiteAPI, the rest found on
  * the web by the assistant). The stay is entered as dates; times are local at the accommodation.
  */
-export default function AccommodationFields({ form, onChange, filled, uncertain, autoLocate, near }: Props) {
+export default function AccommodationFields({ form, onChange, filled, uncertain, autoLocate, near, errors = {}, onTouch, hideRequiredNote }: Props) {
   const [autoLocated, setAutoLocated] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -185,25 +192,28 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
     onChange({ ...current, ...patch });
   };
 
-  const field = (name: FormField, label: string, input: ReactNode, hint?: string) => {
+  const field = (name: FormField, label: string, input: ReactNode, hint?: string, required?: boolean) => {
     const researched = origins.get(name) === 'assistant';
     const check = uncertain?.has(name) || researched;
     return (
-      <div className={`va-field ${check ? 'va-field-check' : ''}`}>
-        <label htmlFor={`acc-${name}`}>
-          {label}
-          {(filled?.has(name) || researched) && (
-            <span
-              className="va-filled-mark"
-              title={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
-              aria-label={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
-            />
-          )}
-        </label>
+      <Field
+        id={`acc-${name}`}
+        label={label}
+        required={required}
+        error={errors[name]}
+        hint={hint}
+        className={check ? 'va-field-check' : undefined}
+        labelExtra={(filled?.has(name) || researched) && (
+          <span
+            className="va-filled-mark"
+            title={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
+            aria-label={researched ? t('accommodation.researched') : t('accommodation.fromConfirmation')}
+          />
+        )}
+      >
         {input}
         {check && <span className="va-small va-check-hint">{t('accommodation.check')}</span>}
-        {hint && <span className="va-small va-muted">{hint}</span>}
-      </div>
+      </Field>
     );
   };
   const text = (name: FormField, type = 'text', extra: Record<string, unknown> = {}) => (
@@ -219,6 +229,7 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
         }
         set({ [name]: event.target.value } as Partial<AccommodationForm>);
       }}
+      onBlur={() => onTouch?.(name)}
       {...extra}
     />
   );
@@ -228,19 +239,24 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
 
   return (
     <div className="va-form">
+      {!hideRequiredNote && <RequiredNote />}
       <h3 className="va-form-section">{t('addBooking.accommodation')}</h3>
-      <div className={`va-field ${uncertain?.has('name') ? 'va-field-check' : ''}`}>
-        <label htmlFor="acc-name">
-          {t('accommodation.name')}
-          {filled?.has('name') && (
-            <span className="va-filled-mark" title={t('accommodation.fromConfirmation')} aria-label={t('accommodation.fromConfirmation')} />
-          )}
-        </label>
+      <Field
+        id="acc-name"
+        label={t('accommodation.name')}
+        required
+        error={errors.name}
+        className={uncertain?.has('name') ? 'va-field-check' : undefined}
+        labelExtra={filled?.has('name') && (
+          <span className="va-filled-mark" title={t('accommodation.fromConfirmation')} aria-label={t('accommodation.fromConfirmation')} />
+        )}
+        hint={(searching || !lookup) && (
+          <>{searching && <><KiwiLoader size="small" decorative />{' '}</>}{searching ? t('accommodation.searching') : t('accommodation.nameHint')}</>
+        )}
+      >
         <input
-          id="acc-name"
           type="search"
           autoComplete="off"
-          required
           aria-autocomplete="list"
           value={form.name}
           onChange={(event) => {
@@ -255,14 +271,12 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
             }
           }}
           onKeyDown={(event) => event.key === 'Escape' && setSuggesting(false)}
-          onBlur={() => window.setTimeout(() => setSuggesting(false), 200)}
+          onBlur={() => {
+            onTouch?.('name');
+            window.setTimeout(() => setSuggesting(false), 200);
+          }}
         />
         {uncertain?.has('name') && <span className="va-small va-check-hint">{t('accommodation.check')}</span>}
-        {(searching || !lookup) && (
-          <span id="acc-name-hint" className="va-small va-muted">
-            {searching && <><KiwiLoader size="small" decorative />{' '}</>}{searching ? t('accommodation.searching') : t('accommodation.nameHint')}
-          </span>
-        )}
         {suggesting && suggestions.length > 0 && (
           <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
             {suggestions.map((choice) => (
@@ -284,7 +298,7 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
           </ul>
         )}
         {lookup && <LookupNote lookup={lookup} fromLiteApi={fromLiteApi} fromAssistant={fromAssistant} />}
-      </div>
+      </Field>
       {field(
         'addressLine',
         t('booking.address'),
@@ -294,8 +308,8 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
 
       <h3 className="va-form-section">{t('booking.stay')}</h3>
       <div className="va-field-row">
-        {field('checkInDate', t('booking.checkIn'), text('checkInDate', 'date', { required: true }))}
-        {field('checkOutDate', t('booking.checkOut'), text('checkOutDate', 'date', { required: true, min: form.checkInDate || undefined }))}
+        {field('checkInDate', t('booking.checkIn'), text('checkInDate', 'date'), undefined, true)}
+        {field('checkOutDate', t('booking.checkOut'), text('checkOutDate', 'date', { min: form.checkInDate || undefined }), undefined, true)}
       </div>
 
       <h3 className="va-form-section">{t('accommodation.booking')}</h3>
@@ -307,7 +321,7 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
         {field('rooms', t('form.rooms'), text('rooms', 'number', { min: 1, max: 99, inputMode: 'numeric' }))}
       </div>
 
-      <details className="va-details" open={hasMore(form, filled, uncertain, origins)}>
+      <details className="va-details" open={hasMore(form, filled, uncertain, origins) || MORE_FIELDS.some((name) => errors[name])}>
         <summary>{t('accommodation.more')}</summary>
         <div className="va-form">
           <div className="va-field-row">
@@ -323,10 +337,9 @@ export default function AccommodationFields({ form, onChange, filled, uncertain,
             {field('currency', t('accommodation.currency'), text('currency', 'text', { maxLength: 3, autoCapitalize: 'characters' }))}
           </div>
           {field('cancellationDeadline', t('accommodation.freeCancellation'), text('cancellationDeadline', 'datetime-local'))}
-          <div className="va-field">
-            <label htmlFor="acc-notes">{t('booking.notes')}</label>
-            <textarea id="acc-notes" rows={3} value={form.notes} onChange={(event) => set({ notes: event.target.value })} />
-          </div>
+          <Field id="acc-notes" label={t('booking.notes')} error={errors.notes}>
+            <textarea rows={3} value={form.notes} onChange={(event) => set({ notes: event.target.value })} onBlur={() => onTouch?.('notes')} />
+          </Field>
         </div>
       </details>
     </div>

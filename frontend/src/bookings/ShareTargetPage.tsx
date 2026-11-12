@@ -3,22 +3,29 @@ import { Alert, Spin } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 
+import Field, { RequiredNote } from '../components/form/Field';
+import { failedField, useFieldErrors, type FieldErrors } from '../components/form/validation';
 import KiwiLoader from '../components/KiwiLoader';
 import type { TripDetail, TripSummary } from '../trips/model';
 import { localDateTimeIso, toDayInput } from '../trips/time';
-import { addStop, fetchTrip, fetchTrips } from '../trips/tripsApi';
+import { addStop, fetchTrip, fetchTrips, TripsApiError } from '../trips/tripsApi';
 import { t } from '../i18n';
 import Rich from '../i18n/Rich';
 import AccommodationFields from './AccommodationFields';
 import { createAccommodationBooking, isExtractionAvailable } from './bookingsApi';
 import ConfirmationInput from './ConfirmationInput';
-import { emptyForm, stopTimesFromForm, toInput, validateForm, withStayDefaults, type FilledForm } from './form';
+import {
+  API_FIELDS, emptyForm, FORM_FIELDS, formErrors, stopTimesFromForm, toInput, withStayDefaults, type FilledForm, type FormField,
+} from './form';
 import type { BookingSource } from './model';
 import { readConfirmation } from './readConfirmation';
 import { stopPoint } from './stayDefaults';
 import { clearShared, readShared, type SharedContent } from './shareTarget';
 
 const NEW_STOP = -1;
+
+type ShareField = FormField | 'trip';
+const FIELDS: ShareField[] = [...FORM_FIELDS, 'trip'];
 
 /**
  * Target of "Teilen" on Android: the same way as "Bestätigung einfügen" (AddBookingSheet). The shared content can be
@@ -42,7 +49,10 @@ export default function ShareTargetPage() {
   const [stopId, setStopId] = useState<number>(NEW_STOP);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [readTried, setReadTried] = useState(false);
   const form = filled.form;
+  const allErrors: FieldErrors<ShareField> = { ...formErrors(form), ...(tripId == null ? { trip: t('shareTarget.chooseTrip') } : {}) };
+  const validation = useFieldErrors<ShareField>(allErrors, { ...form, trip: tripId });
 
   useEffect(() => {
     let active = true;
@@ -63,13 +73,19 @@ export default function ShareTargetPage() {
   }, []);
 
   const showReview = (result: FilledForm, how: BookingSource) => {
+    validation.reset();
     setFilled(result);
     setSource(how);
     setTripId(suggestTrip(trips, result.form.checkInDate)?.id ?? null);
     setPhase('review');
   };
 
+  const nothingToRead = !text.trim() && !file && !shared;
   const read = async () => {
+    if (nothingToRead) {
+      setReadTried(true);
+      return;
+    }
     setReading(true);
     setReadError(null);
     const result = await readConfirmation(shared, text, file);
@@ -108,9 +124,7 @@ export default function ShareTargetPage() {
   const newStopLabel = useMemo(() => form.name.trim() || t('addBooking.accommodation'), [form.name]);
 
   const save = async () => {
-    const problem = validateForm(form) ?? (tripId == null ? t('shareTarget.chooseTrip') : null);
-    if (problem || tripId == null) {
-      setError(problem);
+    if (!validation.check() || tripId == null) {
       return;
     }
     setSaving(true);
@@ -131,8 +145,14 @@ export default function ShareTargetPage() {
       const booking = await createAccommodationBooking(target, toInput(form, source));
       await clearShared();
       navigate(`/reisen/${tripId}/buchungen/${booking.id}`, { replace: true });
-    } catch {
-      setError(t('addBooking.saveFailed'));
+    } catch (failure) {
+      // a new stop at the accommodation: its place decides whether it is possible
+      const outside = failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS';
+      const field = outside ? 'name' : failedField(failure, FIELDS, API_FIELDS);
+      if (field) {
+        validation.refuse(field, outside ? t('stop.outsideRegions') : undefined);
+      }
+      setError(field ? null : t('addBooking.saveFailed'));
       setSaving(false);
     }
   };
@@ -175,11 +195,12 @@ export default function ShareTargetPage() {
             error={readError}
             onError={setReadError}
             onManual={manual}
+            missing={readTried && nothingToRead}
           />
           <button
             type="button"
             className="va-button va-button-accent va-block"
-            disabled={reading || available === false || (!text.trim() && !file && !shared)}
+            disabled={reading || available === false}
             onClick={() => void read()}
           >
             {reading ? t('addBooking.reading') : t('addBooking.read')}
@@ -197,21 +218,22 @@ export default function ShareTargetPage() {
             </p>
           )}
           <div className="va-form">
-            <div className="va-field">
-              <label htmlFor="share-trip">{t('shareTarget.trip')}</label>
+            <RequiredNote />
+            <Field id="share-trip" label={t('shareTarget.trip')} required error={validation.errors.trip}>
               {trips.length === 0 ? (
                 <span className="va-muted">
                   {t('shareTarget.noTripBefore')}<Link to="/reisen/neu">{t('newTrip.create')}</Link>{t('shareTarget.noTripAfter')}
                 </span>
               ) : (
-                <select id="share-trip" value={tripId ?? ''} onChange={(event) => setTripId(event.target.value ? Number(event.target.value) : null)}>
+                <select value={tripId ?? ''} onChange={(event) => setTripId(event.target.value ? Number(event.target.value) : null)}
+                  onBlur={() => validation.touch('trip')}>
                   <option value="">{t('shareTarget.tripPlaceholder')}</option>
                   {trips.map((candidate) => (
                     <option key={candidate.id} value={candidate.id}>{candidate.name}</option>
                   ))}
                 </select>
               )}
-            </div>
+            </Field>
             {trip && (
               <fieldset className="va-fieldset">
                 <legend>{t('shareTarget.stop')}</legend>
@@ -241,9 +263,12 @@ export default function ShareTargetPage() {
             uncertain={filled.uncertain}
             autoLocate={source !== 'MANUAL'}
             near={stopPoint(trip?.stops.find((stop) => stop.id === stopId))}
+            errors={validation.errors}
+            onTouch={validation.touch}
+            hideRequiredNote
           />
           {error && <Alert type="error" showIcon message={error} />}
-          <button type="button" className="va-button va-button-accent va-block" disabled={saving || tripId == null} onClick={() => void save()}>
+          <button type="button" className="va-button va-button-accent va-block" disabled={saving} onClick={() => void save()}>
             {saving && <><KiwiLoader size="small" decorative />{' '}</>}{saving ? t('common.saving') : t('addBooking.save')}
           </button>
         </>

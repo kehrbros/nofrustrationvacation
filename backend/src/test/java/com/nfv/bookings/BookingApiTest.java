@@ -24,7 +24,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -260,17 +262,24 @@ class BookingApiTest {
     @Test
     void invalidBookingsAreRejected() throws Exception {
         String valid = booking("Hotel Adler", null, null, "Europe/Berlin");
-        for (String invalid : List.of(
-                valid.replace("\"checkOut\":\"2027-07-15T10:00:00\"", "\"checkOut\":\"2027-07-11T10:00:00\""),
-                valid.replace("\"name\":\"Hotel Adler\"", "\"name\":\" \""),
-                valid.replace("\"currency\":\"EUR\"", "\"currency\":null"),
-                valid.replace("\"manageUrl\":\"https://secure.booking.com/myreservations.html\"",
-                        "\"manageUrl\":\"javascript:alert(1)\""),
-                valid.replace("\"fallbackTimeZone\":\"Europe/Berlin\"", "\"fallbackTimeZone\":\"Mars/Olympus\""))) {
+        // invalid input → the field the frontend marks (null: the input as a whole)
+        Map<String, String> invalidInputs = new LinkedHashMap<>();
+        invalidInputs.put(valid.replace("\"checkOut\":\"2027-07-15T10:00:00\"", "\"checkOut\":\"2027-07-11T10:00:00\""),
+                "checkOut");
+        invalidInputs.put(valid.replace("\"name\":\"Hotel Adler\"", "\"name\":\" \""), "name");
+        invalidInputs.put(valid.replace("\"currency\":\"EUR\"", "\"currency\":null"), "currency");
+        invalidInputs.put(valid.replace("\"manageUrl\":\"https://secure.booking.com/myreservations.html\"",
+                "\"manageUrl\":\"javascript:alert(1)\""), "manageUrl");
+        invalidInputs.put(valid.replace("\"fallbackTimeZone\":\"Europe/Berlin\"", "\"fallbackTimeZone\":\"Mars/Olympus\""),
+                null);
+        for (Map.Entry<String, String> invalid : invalidInputs.entrySet()) {
             mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON).content(invalid))
+                            .contentType(MediaType.APPLICATION_JSON).content(invalid.getKey()))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.code").value("INVALID_BOOKING_INPUT"));
+                    .andExpect(jsonPath("$.code").value("INVALID_BOOKING_INPUT"))
+                    .andExpect(invalid.getValue() == null
+                            ? jsonPath("$.field").doesNotExist()
+                            : jsonPath("$.field").value(invalid.getValue()));
         }
     }
 

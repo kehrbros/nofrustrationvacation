@@ -8,6 +8,8 @@ import { createAccommodationBooking } from '../bookings/bookingsApi';
 import { stopTimesFromForm, toInput, type AccommodationForm } from '../bookings/form';
 import type { BookingSource } from '../bookings/model';
 import { stayDefaults } from '../bookings/stayDefaults';
+import Field, { RequiredNote } from '../components/form/Field';
+import { failedField, useFieldErrors, type FieldErrors } from '../components/form/validation';
 import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
@@ -18,6 +20,24 @@ import { outsideBookingLabel, stopBookingsConflict, stopDaysLabel, type StopBook
 import { useTripContext } from '../trips/tripContext';
 import { localDateTimeIso, toDateTimeInput } from '../trips/time';
 import { addStop, TripsApiError, updateStop } from '../trips/tripsApi';
+
+type StopField = 'name' | 'place' | 'arrival' | 'departure';
+const FIELDS: StopField[] = ['name', 'place', 'arrival', 'departure'];
+
+/** What is wrong with the stop, per field (same rules as TripLogic). */
+function stopErrors(place: Place | null, arrival: string, departure: string): FieldErrors<StopField> {
+  const errors: FieldErrors<StopField> = {};
+  // stops need a position in New Zealand, only places from the suggestions have one
+  if (!place) {
+    errors.place = t('stop.choosePlace');
+  }
+  const arrivalAt = localDateTimeIso(arrival);
+  const departureAt = localDateTimeIso(departure);
+  if (arrivalAt && departureAt && new Date(departureAt) < new Date(arrivalAt)) {
+    errors.departure = t('stop.departureBeforeArrival');
+  }
+  return errors;
+}
 
 /**
  * "Stop hinzufügen": place search, arrival and departure; the stop is appended to the trip. An accommodation booking
@@ -66,6 +86,23 @@ function StopForm({ edited }: { edited?: Stop }) {
   const [addingBooking, setAddingBooking] = useState(false);
   const [booking, setBooking] = useState<{ form: AccommodationForm; source: BookingSource } | null>(null);
   const previous = trip.stops.at(-1);
+  const validation = useFieldErrors(stopErrors(place, arrival, departure), { name, place, arrival, departure });
+  const { errors, touch } = validation;
+  /** A refused stop: marks the field the backend named, else shows the message below the form. */
+  const refused = (failure: unknown) => {
+    if (failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS') {
+      validation.refuse('place', t('stop.outsideRegions'));
+      return;
+    }
+    const field = failedField(failure, FIELDS, {
+      latitude: 'place', longitude: 'place', name: edited ? 'name' : 'place', arrivalAt: 'arrival', departureAt: 'departure',
+    });
+    if (field) {
+      validation.refuse(field);
+      return;
+    }
+    setError(t('stop.saveFailed'));
+  };
 
   useEffect(() => {
     if (place || query.trim().length < 3) {
@@ -98,13 +135,7 @@ function StopForm({ edited }: { edited?: Stop }) {
     event.preventDefault();
     const arrivalAt = localDateTimeIso(arrival);
     const departureAt = localDateTimeIso(departure);
-    // stops need a position in New Zealand, only places from the suggestions have one
-    if (!place) {
-      setError(t('stop.choosePlace'));
-      return;
-    }
-    if (arrivalAt && departureAt && new Date(departureAt) < new Date(arrivalAt)) {
-      setError(t('stop.departureBeforeArrival'));
+    if (!validation.check() || !place) {
       return;
     }
     if (edited) {
@@ -151,9 +182,7 @@ function StopForm({ edited }: { edited?: Stop }) {
         close();
       }
     } catch (failure) {
-      setError(failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS'
-        ? t('stop.outsideRegions')
-        : t('stop.saveFailed'));
+      refused(failure);
       setSaving(false);
     }
   };
@@ -181,9 +210,7 @@ function StopForm({ edited }: { edited?: Stop }) {
         setConflictError(t('stayConflict.failed'));
         return;
       }
-      setError(failure instanceof TripsApiError && failure.code === 'LOCATION_OUTSIDE_REGIONS'
-        ? t('stop.outsideRegions')
-        : t('stop.saveFailed'));
+      refused(failure);
     }
   };
 
@@ -206,36 +233,39 @@ function StopForm({ edited }: { edited?: Stop }) {
       }
     >
       <form id="stop-form" className="va-form" onSubmit={(event) => void submit(event)} noValidate>
+        <RequiredNote />
         {edited && (
-          <div className="va-field">
-            <label htmlFor="stop-name">{t('stop.name')}</label>
-            <input id="stop-name" type="text" maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
-          </div>
+          <Field id="stop-name" label={t('stop.name')} error={errors.name}>
+            <input type="text" maxLength={255} value={name} onChange={(event) => setName(event.target.value)} onBlur={() => touch('name')} />
+          </Field>
         )}
-        <div className="va-field">
-          <label htmlFor="stop-place">{t('stop.place')}</label>
+        <Field
+          id="stop-place"
+          label={t('stop.place')}
+          required
+          error={errors.place}
+          hint={place
+            ? place.detail ? t('stop.placeChosen', { detail: place.detail }) : edited ? t('stop.currentPlace') : t('stop.placeChosen', { detail: t('stop.placeSelected') })
+            : t('stop.placeHint')}
+        >
           <input
-            id="stop-place"
             type="search"
             autoComplete="off"
             value={place ? place.name : query}
-            aria-describedby="stop-place-hint"
             onChange={(event) => {
               setPlace(null);
               setQuery(event.target.value);
             }}
+            onBlur={() => touch('place')}
           />
-          <span id="stop-place-hint" className="va-small va-muted">
-            {place
-              ? place.detail ? t('stop.placeChosen', { detail: place.detail }) : edited ? t('stop.currentPlace') : t('stop.placeChosen', { detail: t('stop.placeSelected') })
-              : t('stop.placeHint')}
-          </span>
           {places.length > 0 && (
             <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
               {places.map((candidate) => (
                 <li key={`${candidate.latitude},${candidate.longitude}`}>
                   <button
                     type="button"
+                    // keeps the focus in the search, so leaving it does not report a missing place first
+                    onMouseDown={(event) => event.preventDefault()}
                     onClick={() => {
                       setPlace(candidate);
                       // a new place renames the stop, the name can still be changed
@@ -254,7 +284,7 @@ function StopForm({ edited }: { edited?: Stop }) {
           )}
           {noMatch && !searchFailed && <span className="va-small va-muted">{t('stop.noPlace')}</span>}
           {searchFailed && <span className="va-small va-muted">{t('stop.searchUnavailable')}</span>}
-        </div>
+        </Field>
 
         {!edited && (
           <div className="va-field">
@@ -266,14 +296,13 @@ function StopForm({ edited }: { edited?: Stop }) {
         )}
 
         <div className="va-field-row">
-          <div className="va-field">
-            <label htmlFor="stop-arrival">{t('stop.arrival')}</label>
-            <input id="stop-arrival" type="datetime-local" value={arrival} onChange={(event) => setArrival(event.target.value)} />
-          </div>
-          <div className="va-field">
-            <label htmlFor="stop-departure">{t('stop.departure')}</label>
-            <input id="stop-departure" type="datetime-local" value={departure} min={arrival || undefined} onChange={(event) => setDeparture(event.target.value)} />
-          </div>
+          <Field id="stop-arrival" label={t('stop.arrival')} error={errors.arrival}>
+            <input type="datetime-local" value={arrival} onChange={(event) => setArrival(event.target.value)} onBlur={() => touch('arrival')} />
+          </Field>
+          <Field id="stop-departure" label={t('stop.departure')} error={errors.departure}>
+            <input type="datetime-local" value={departure} min={arrival || undefined} onChange={(event) => setDeparture(event.target.value)}
+              onBlur={() => touch('departure')} />
+          </Field>
         </div>
 
         {edited ? null : booking ? (

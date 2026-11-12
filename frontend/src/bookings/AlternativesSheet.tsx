@@ -3,6 +3,8 @@ import { Alert, Spin } from 'antd';
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
+import Field, { RequiredMark, RequiredNote } from '../components/form/Field';
+import { failedField, useFieldErrors, type FieldErrors, type FieldValidation } from '../components/form/validation';
 import KiwiLoader from '../components/KiwiLoader';
 import Sheet from '../components/Sheet';
 import { formatMoney, formatNumber, t } from '../i18n';
@@ -32,6 +34,7 @@ import {
 } from './alternativesApi';
 import { formatLocalDateTime } from './localTime';
 import { routeCheckText } from './routeCheckText';
+import { canSearch, CRITERIA_API_FIELDS, CRITERIA_FIELDS, criteriaErrors, criteriaValues, type CriteriaField } from './criteria';
 import { dateProblem, earliestCheckOut, fromEarliest } from './stayDates';
 import { failedHolderField, holderComplete, useHolder, type HolderField, type HolderState } from './holder';
 import { directionsUrl } from './text';
@@ -71,6 +74,7 @@ export default function AlternativesSheet() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const guest = useHolder(trip, reload);
+  const criteriaCheck = useFieldErrors(criteria ? criteriaErrors(criteria) : {}, criteriaValues(criteria));
   const holder = guest.holder;
   const [oldMarked, setOldMarked] = useState(false);
   const completing = useRef(false);
@@ -159,7 +163,12 @@ export default function AlternativesSheet() {
     try {
       setStep({ kind: 'results', result: await searchAlternatives(booking!.id, criteria) });
     } catch (failure) {
-      setError(errorText(failure));
+      // a criterion the backend refused is marked at its field
+      const field = failedField(failure, CRITERIA_FIELDS, CRITERIA_API_FIELDS);
+      if (field) {
+        criteriaCheck.refuse(field);
+      }
+      setError(field ? null : errorText(failure));
       setStep({ kind: 'criteria' });
     } finally {
       setBusy(false);
@@ -209,7 +218,7 @@ export default function AlternativesSheet() {
       {error && <Alert type="error" showIcon message={error} closable onClose={() => setError(null)} />}
       {notice && <Alert type="info" showIcon message={notice} closable onClose={() => setNotice(null)} />}
       {step.kind === 'criteria' && (criteria
-        ? <CriteriaForm criteria={criteria} onChange={setCriteria} />
+        ? <CriteriaForm criteria={criteria} onChange={setCriteria} validation={criteriaCheck} />
         : <div className="va-empty"><Spin /></div>)}
       {step.kind === 'searching' && (
         <div className="va-empty va-column va-gap"><Spin /><span className="va-muted">{t('alternatives.searching')}</span></div>
@@ -247,8 +256,8 @@ export default function AlternativesSheet() {
         return (
           <div className="va-row va-gap">
             <button type="button" className="va-button va-button-outline" onClick={back}>{t('alternatives.back')}</button>
-            <button type="button" className="va-button va-grow" disabled={busy || !criteria || !canSearch(criteria) || !status?.searchAvailable}
-              onClick={() => void search()}>
+            <button type="button" className="va-button va-grow" disabled={busy || !criteria || !status?.searchAvailable}
+              onClick={() => criteriaCheck.check() && criteria && dateProblem(criteria) === null && void search()}>
               {busy ? <KiwiLoader size="small" decorative /> : <SearchOutlined aria-hidden="true" />} {busy ? t('alternatives.searchRunning') : t('alternatives.search')}
             </button>
           </div>
@@ -315,7 +324,13 @@ export default function AlternativesSheet() {
   }
 }
 
-function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (criteria: Criteria) => void }) {
+function CriteriaForm({ criteria, onChange, validation }: {
+  criteria: Criteria;
+  onChange: (criteria: Criteria) => void;
+  validation: FieldValidation<CriteriaField>;
+}) {
+  const errors: FieldErrors<CriteriaField> = validation.errors;
+  const touch = validation.touch;
   const [placeQuery, setPlaceQuery] = useState('');
   const [places, setPlaces] = useState<Place[]>([]);
   const [changingPlace, setChangingPlace] = useState(criteria.latitude == null);
@@ -337,15 +352,16 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
     };
   }, [placeQuery, changingPlace]);
 
-  const mark = (field: string) => missing.has(field) ? 'va-field va-field-check' : 'va-field';
+  const check = (field: string) => missing.has(field) ? 'va-field-check' : undefined;
   const problem = dateProblem(criteria);
   return (
     <div className="va-form">
       <p className="va-small va-muted">
         {t('alternatives.criteriaIntro')}
       </p>
-      <div className={mark('location')}>
-        <span className="va-label">{t('alternatives.region')}</span>
+      <RequiredNote />
+      <div className={['va-field', check('location'), errors.location ? 'va-field-invalid' : null].filter(Boolean).join(' ')}>
+        <span className="va-label">{t('alternatives.region')}<RequiredMark /></span>
         {!changingPlace ? (
           <span className="va-row va-gap va-baseline">
             <span className="va-muted va-grow"><EnvironmentOutlined aria-hidden="true" /> {criteria.placeName ?? t('stop.placeSelected')}</span>
@@ -354,12 +370,14 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
         ) : (
           <>
             <input type="search" autoComplete="off" aria-label={t('alternatives.placeSearch')} placeholder={t('alternatives.placePlaceholder')}
-              value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} />
+              aria-required="true" aria-invalid={errors.location ? true : undefined}
+              aria-describedby={errors.location ? 'alt-location-error' : undefined}
+              value={placeQuery} onChange={(event) => setPlaceQuery(event.target.value)} onBlur={() => touch('location')} />
             {places.length > 0 && (
               <ul className="va-suggestions" aria-label={t('stop.suggestions')}>
                 {places.map((place) => (
                   <li key={`${place.latitude},${place.longitude}`}>
-                    <button type="button" onClick={() => {
+                    <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => {
                       set({ latitude: place.latitude, longitude: place.longitude, placeName: [place.name, place.detail].filter(Boolean).join(', '),
                         missing: criteria.missing.filter((field) => field !== 'location') });
                       setChangingPlace(false);
@@ -376,33 +394,32 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
             )}
           </>
         )}
+        {errors.location && <p id="alt-location-error" className="va-field-error" role="alert">{errors.location}</p>}
       </div>
-      <div className="va-field">
-        <label htmlFor="alt-radius">{t('alternatives.radius', { km: formatNumber(criteria.radiusMeters / 1000) })}</label>
-        <input id="alt-radius" type="range" min={500} max={20000} step={500} value={criteria.radiusMeters}
+      <Field id="alt-radius" label={t('alternatives.radius', { km: formatNumber(criteria.radiusMeters / 1000) })} error={errors.radius}>
+        <input type="range" min={500} max={20000} step={500} value={criteria.radiusMeters}
           onChange={(event) => set({ radiusMeters: Number(event.target.value) })} />
-      </div>
-      <div className="va-field">
-        <label htmlFor="alt-stars">{t('alternatives.minStars')}</label>
-        <select id="alt-stars" value={criteria.minStars ?? ''}
+      </Field>
+      <Field id="alt-stars" label={t('alternatives.minStars')} error={errors.minStars}>
+        <select value={criteria.minStars ?? ''}
           onChange={(event) => set({ minStars: event.target.value ? Number(event.target.value) : null })}>
           <option value="">{t('alternatives.anyStars')}</option>
           {[2, 3, 4, 5].map((stars) => <option key={stars} value={stars}>{t('alternatives.fromStars', { stars })}</option>)}
         </select>
-      </div>
+      </Field>
       <div className="va-field-row">
-        <div className={problem ? 'va-field va-field-invalid' : mark('checkIn')}>
-          <label htmlFor="alt-in">{t('booking.checkIn')}</label>
-          <input id="alt-in" type="date" min={criteria.earliestCheckIn || undefined} value={criteria.checkIn}
+        <Field id="alt-in" label={t('booking.checkIn')} required error={errors.checkIn}
+          className={problem ? 'va-field-invalid' : check('checkIn')}>
+          <input type="date" min={criteria.earliestCheckIn || undefined} value={criteria.checkIn}
             aria-invalid={problem ? true : undefined} aria-describedby={problem ? 'alt-dates-error' : undefined}
-            onChange={(event) => set({ checkIn: event.target.value })} />
-        </div>
-        <div className={problem === 'over' ? 'va-field va-field-invalid' : mark('checkOut')}>
-          <label htmlFor="alt-out">{t('booking.checkOut')}</label>
-          <input id="alt-out" type="date" min={earliestCheckOut(criteria)} value={criteria.checkOut}
+            onChange={(event) => set({ checkIn: event.target.value })} onBlur={() => touch('checkIn')} />
+        </Field>
+        <Field id="alt-out" label={t('booking.checkOut')} required error={errors.checkOut}
+          className={problem === 'over' ? 'va-field-invalid' : check('checkOut')}>
+          <input type="date" min={earliestCheckOut(criteria)} value={criteria.checkOut}
             aria-invalid={problem === 'over' ? true : undefined} aria-describedby={problem ? 'alt-dates-error' : undefined}
-            onChange={(event) => set({ checkOut: event.target.value })} />
-        </div>
+            onChange={(event) => set({ checkOut: event.target.value })} onBlur={() => touch('checkOut')} />
+        </Field>
       </div>
       {problem && (
         <div className="va-column va-gap">
@@ -417,28 +434,24 @@ function CriteriaForm({ criteria, onChange }: { criteria: Criteria; onChange: (c
         </div>
       )}
       <div className="va-field-row">
-        <div className={mark('guests')}>
-          <label htmlFor="alt-guests">{t('form.guests')}</label>
-          <input id="alt-guests" type="number" min={1} max={36} inputMode="numeric" value={criteria.guests ?? ''}
-            onChange={(event) => set({ guests: event.target.value ? Number(event.target.value) : null })} />
-        </div>
-        <div className="va-field">
-          <label htmlFor="alt-rooms">{t('form.rooms')}</label>
-          <input id="alt-rooms" type="number" min={1} max={9} inputMode="numeric" value={criteria.rooms}
-            onChange={(event) => set({ rooms: Math.max(1, Number(event.target.value) || 1) })} />
-        </div>
+        <Field id="alt-guests" label={t('form.guests')} required error={errors.guests} className={check('guests')}>
+          <input type="number" min={1} max={36} inputMode="numeric" value={criteria.guests ?? ''}
+            onChange={(event) => set({ guests: event.target.value ? Number(event.target.value) : null })} onBlur={() => touch('guests')} />
+        </Field>
+        <Field id="alt-rooms" label={t('form.rooms')} required error={errors.rooms}>
+          <input type="number" min={1} max={9} inputMode="numeric" value={criteria.rooms}
+            onChange={(event) => set({ rooms: Math.max(1, Number(event.target.value) || 1) })} onBlur={() => touch('rooms')} />
+        </Field>
       </div>
       <div className="va-field-row">
-        <div className="va-field">
-          <label htmlFor="alt-price">{t('alternatives.maxPrice')}</label>
-          <input id="alt-price" type="text" inputMode="decimal" placeholder={t('alternatives.noLimit')} value={criteria.maxPrice}
-            onChange={(event) => set({ maxPrice: event.target.value })} />
-        </div>
-        <div className="va-field">
-          <label htmlFor="alt-currency">{t('accommodation.currency')}</label>
-          <input id="alt-currency" type="text" maxLength={3} autoCapitalize="characters" value={criteria.currency}
-            onChange={(event) => set({ currency: event.target.value.toUpperCase() })} />
-        </div>
+        <Field id="alt-price" label={t('alternatives.maxPrice')} error={errors.maxPrice}>
+          <input type="text" inputMode="decimal" placeholder={t('alternatives.noLimit')} value={criteria.maxPrice}
+            onChange={(event) => set({ maxPrice: event.target.value })} onBlur={() => touch('maxPrice')} />
+        </Field>
+        <Field id="alt-currency" label={t('accommodation.currency')} required error={errors.currency}>
+          <input type="text" maxLength={3} autoCapitalize="characters" value={criteria.currency}
+            onChange={(event) => set({ currency: event.target.value.toUpperCase() })} onBlur={() => touch('currency')} />
+        </Field>
       </div>
     </div>
   );
@@ -513,19 +526,11 @@ export interface HolderOffer {
 export function HolderForm({ candidate, state }: { candidate: HolderOffer; state: HolderState }) {
   const { holder, errors } = state;
   const set = (patch: Partial<Holder>) => state.setHolder({ ...holder, ...patch });
-  const field = (name: HolderField, label: string, input: Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'value'>) => {
-    const id = `alt-${name}`;
-    const error = errors[name];
-    return (
-      <div className={error ? 'va-field va-field-invalid' : 'va-field'}>
-        <label htmlFor={id}>{label}</label>
-        <input id={id} value={holder[name]} aria-invalid={error ? true : undefined}
-          aria-describedby={error ? `${id}-error` : undefined}
-          onChange={(event) => set({ [name]: event.target.value })} onBlur={() => state.touch(name)} {...input} />
-        {error && <p id={`${id}-error`} className="va-field-error" role="alert">{error}</p>}
-      </div>
-    );
-  };
+  const field = (name: HolderField, label: string, input: Omit<InputHTMLAttributes<HTMLInputElement>, 'id' | 'value'>) => (
+    <Field id={`alt-${name}`} label={label} required error={errors[name]}>
+      <input value={holder[name]} onChange={(event) => set({ [name]: event.target.value })} onBlur={() => state.touch(name)} {...input} />
+    </Field>
+  );
   return (
     <div className="va-form">
       <div className="va-impact">
@@ -535,6 +540,7 @@ export function HolderForm({ candidate, state }: { candidate: HolderOffer; state
       <p className="va-small va-muted">
         {t('alternatives.holderIntro')}
       </p>
+      <RequiredNote />
       <div className="va-field-row">
         {field('firstName', t('alternatives.firstName'), { autoComplete: 'given-name' })}
         {field('lastName', t('alternatives.lastName'), { autoComplete: 'family-name' })}
@@ -770,13 +776,6 @@ function criteriaSummary(criteria: Criteria): string {
 /** The assistant left out hotels it found not comparable (other kind or clearly lower standard). */
 function excludedHint(count: number): string {
   return t('alternatives.excluded', { count });
-}
-
-function canSearch(criteria: Criteria): boolean {
-  return criteria.latitude != null && !!criteria.checkIn && !!criteria.checkOut && criteria.checkOut > criteria.checkIn
-    && dateProblem(criteria) === null
-    && criteria.guests != null && criteria.guests >= criteria.rooms && /^[A-Z]{3}$/.test(criteria.currency)
-    && (!criteria.maxPrice.trim() || Number(criteria.maxPrice.replace(',', '.')) > 0);
 }
 
 export const money = formatMoney;

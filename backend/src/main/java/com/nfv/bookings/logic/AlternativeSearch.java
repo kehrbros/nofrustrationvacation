@@ -238,32 +238,34 @@ public class AlternativeSearch {
 
     void validate(AlternativeCriteria criteria) {
         if (Math.abs(criteria.latitude()) > 90 || Math.abs(criteria.longitude()) > 180) {
-            throw new InvalidBookingInputException("coordinates out of range");
+            throw new InvalidBookingInputException("latitude", "coordinates out of range");
         }
         if (criteria.radiusMeters() < 100 || criteria.radiusMeters() > MAX_RADIUS) {
-            throw new InvalidBookingInputException("radius must be 100 m to 50 km");
+            throw new InvalidBookingInputException("radiusMeters", "radius must be 100 m to 50 km");
         }
         if (criteria.checkIn() == null || criteria.checkOut() == null || !criteria.checkOut().isAfter(criteria.checkIn())) {
-            throw new InvalidBookingInputException("check-out must be after check-in");
+            throw new InvalidBookingInputException(criteria.checkIn() == null ? "checkIn" : "checkOut",
+                    "check-out must be after check-in");
         }
         // one day of tolerance: the date at the place may be behind the server's
         if (criteria.checkIn().isBefore(LocalDate.now(clock).minusDays(1))) {
-            throw new InvalidBookingInputException("check-in must not be in the past");
+            throw new InvalidBookingInputException("checkIn", "check-in must not be in the past");
         }
         if (ChronoUnit.DAYS.between(criteria.checkIn(), criteria.checkOut()) > MAX_NIGHTS) {
-            throw new InvalidBookingInputException("at most " + MAX_NIGHTS + " nights");
+            throw new InvalidBookingInputException("checkOut", "at most " + MAX_NIGHTS + " nights");
         }
         if (criteria.rooms() < 1 || criteria.rooms() > 9 || criteria.guests() < criteria.rooms() || criteria.guests() > 36) {
-            throw new InvalidBookingInputException("1 to 9 rooms with at least one guest each");
+            throw new InvalidBookingInputException(criteria.rooms() < 1 || criteria.rooms() > 9 ? "rooms" : "guests",
+                    "1 to 9 rooms with at least one guest each");
         }
         if (criteria.minStars() != null && (criteria.minStars() < 1 || criteria.minStars() > 5)) {
-            throw new InvalidBookingInputException("minimum stars must be 1 to 5");
+            throw new InvalidBookingInputException("minStars", "minimum stars must be 1 to 5");
         }
         if (criteria.maxPrice() != null && criteria.maxPrice().signum() <= 0) {
-            throw new InvalidBookingInputException("maximum price must be positive");
+            throw new InvalidBookingInputException("maxPrice", "maximum price must be positive");
         }
         if (criteria.currency() == null || !CURRENCY.matcher(criteria.currency()).matches()) {
-            throw new InvalidBookingInputException("currency must be ISO 4217");
+            throw new InvalidBookingInputException("currency", "currency must be ISO 4217");
         }
     }
 

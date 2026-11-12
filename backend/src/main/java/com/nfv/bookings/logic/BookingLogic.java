@@ -178,7 +178,7 @@ public class BookingLogic {
     private Valid validate(NewAccommodationBooking input) {
         String name = text(input.name(), 255, "name");
         if (name == null) {
-            throw new InvalidBookingInputException("name of the accommodation is required");
+            throw new InvalidBookingInputException("name", "name of the accommodation is required");
         }
         if ((input.latitude() == null) != (input.longitude() == null)) {
             throw new InvalidBookingInputException("latitude and longitude only together");
@@ -187,22 +187,23 @@ public class BookingLogic {
             throw new InvalidBookingInputException("coordinates out of range");
         }
         if (input.checkIn() == null || input.checkOut() == null) {
-            throw new InvalidBookingInputException("check-in and check-out are required");
+            throw new InvalidBookingInputException(input.checkIn() == null ? "checkIn" : "checkOut",
+                    "check-in and check-out are required");
         }
         if (!input.checkOut().isAfter(input.checkIn())) {
-            throw new InvalidBookingInputException("check-out must be after check-in");
+            throw new InvalidBookingInputException("checkOut", "check-out must be after check-in");
         }
         String countryCode = upper(input.countryCode());
         if (countryCode != null && !COUNTRY.matcher(countryCode).matches()) {
-            throw new InvalidBookingInputException("country code must be ISO 3166-1 alpha-2");
+            throw new InvalidBookingInputException("countryCode", "country code must be ISO 3166-1 alpha-2");
         }
         String currency = upper(input.currency());
         if (input.price() != null) {
             if (input.price().signum() < 0 || input.price().compareTo(MAX_PRICE) > 0 || input.price().scale() > 2) {
-                throw new InvalidBookingInputException("price must be 0 or more with at most 2 decimals");
+                throw new InvalidBookingInputException("price", "price must be 0 or more with at most 2 decimals");
             }
             if (currency == null || !CURRENCY.matcher(currency).matches()) {
-                throw new InvalidBookingInputException("price needs an ISO 4217 currency");
+                throw new InvalidBookingInputException("currency", "price needs an ISO 4217 currency");
             }
         } else {
             currency = null;
@@ -211,13 +212,13 @@ public class BookingLogic {
         Integer rooms = count(input.rooms(), "rooms");
 
         ZoneId zone = timeZones.of(input.latitude(), input.longitude(), input.fallbackTimeZone());
-        AccommodationDetails.Place place = new AccommodationDetails.Place(name, text(input.addressLine(), 500, "address"),
+        AccommodationDetails.Place place = new AccommodationDetails.Place(name, text(input.addressLine(), 500, "addressLine"),
                 countryCode, input.latitude(), input.longitude(), zone, text(input.phone(), 64, "phone"),
-                text(input.email(), 255, "email"), url(input.website(), "website"), text(input.placeRef(), 255, "place"));
+                text(input.email(), 255, "email"), url(input.website(), "website"), text(input.placeRef(), 255, "placeRef"));
         AccommodationDetails.HouseRules rules = new AccommodationDetails.HouseRules(input.checkInFrom(),
                 input.checkInUntil(), input.checkOutUntil(), guests, rooms);
         Booking.BookingContent content = new Booking.BookingContent(name, text(input.provider(), 255, "provider"),
-                text(input.reference(), 255, "reference"), url(input.manageUrl(), "manage URL"),
+                text(input.reference(), 255, "reference"), url(input.manageUrl(), "manageUrl"),
                 at(input.checkIn(), zone), at(input.checkOut(), zone), input.price(), currency,
                 input.cancellationDeadline() == null ? null : at(input.cancellationDeadline(), zone),
                 text(input.notes(), 2000, "notes"));
@@ -235,7 +236,7 @@ public class BookingLogic {
         }
         String stripped = value.strip();
         if (stripped.length() > maxLength) {
-            throw new InvalidBookingInputException(field + " has at most " + maxLength + " characters");
+            throw new InvalidBookingInputException(field, field + " has at most " + maxLength + " characters");
         }
         return stripped;
     }
@@ -259,12 +260,12 @@ public class BookingLogic {
         } catch (URISyntaxException e) {
             // falls through
         }
-        throw new InvalidBookingInputException(field + " must be an http(s) URL");
+        throw new InvalidBookingInputException(field, field + " must be an http(s) URL");
     }
 
     private static @Nullable Integer count(@Nullable Integer value, String field) {
         if (value != null && (value < 1 || value > 99)) {
-            throw new InvalidBookingInputException(field + " must be 1 to 99");
+            throw new InvalidBookingInputException(field, field + " must be 1 to 99");
         }
         return value;
     }
