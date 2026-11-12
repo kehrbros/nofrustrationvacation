@@ -1,12 +1,8 @@
 package com.nfv.currency;
 
-import com.nfv.accounting.data.AccountRepository;
-import com.nfv.accounting.entities.AccountType;
 import com.nfv.common.money.Money;
 import com.nfv.currency.data.ExchangeRateRepository;
 import com.nfv.currency.entities.ExchangeRate;
-import com.nfv.user.data.AppUserRepository;
-import com.nfv.user.entities.AppUser;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -25,11 +21,7 @@ class MoneyPersistenceTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @Autowired
-    private AppUserRepository appUserRepository;
-    @Autowired
     private ExchangeRateRepository exchangeRateRepository;
-    @Autowired
-    private AccountRepository accountRepository;
 
     @Test
     void allMoneyColumnsHaveScale8() {
@@ -40,21 +32,11 @@ class MoneyPersistenceTest {
                     AND table_name NOT IN ('booking', 'booking_aud', 'booking_reservation', 'advisor_proposal',
                         'advisor_proposal_step', 'plan_payment')""");
 
-        assertEquals(10, columns.size(), columns.toString());
+        // no money column exists since the accounting was removed (V54); the rule applies to new ones
         for (Map<String, Object> column : columns) {
             assertEquals(19, ((Number) column.get("NUMERIC_PRECISION")).intValue(), column.toString());
             assertEquals(Money.SCALE, ((Number) column.get("NUMERIC_SCALE")).intValue(), column.toString());
         }
-    }
-
-    @Test
-    void moneyIsStoredWithFullPrecision() {
-        AppUser user = appUserRepository.save(AppUser.firstLogin("money-precision", null, null));
-        jdbcTemplate.update("INSERT INTO accounting_account (app_user_id, type, balance, created_at) VALUES (?, 'CREDIT', 0.00000075, CURRENT_TIMESTAMP)",
-                user.getId());
-
-        assertEquals(Money.of("0.00000075"), accountRepository.findByAppUserIdAndType(user.getId(), AccountType.CREDIT)
-                .orElseThrow().getBalance());
     }
 
     @Test

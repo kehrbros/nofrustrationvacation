@@ -70,16 +70,11 @@ public class PayPalHttp {
                 .body(responseType));
     }
 
-    /** Token request with the app credentials (Basic auth), e.g. to exchange an authorization code. */
-    public TokenResponse requestToken(MultiValueMap<String, String> form) {
-        return requestToken("/v1/oauth2/token", form);
-    }
-
-    /** Token request at another token endpoint, e.g. the identity token service of "Log in with PayPal". */
-    public TokenResponse requestToken(String path, MultiValueMap<String, String> form) {
+    /** Token request with the app credentials (Basic auth). */
+    private TokenResponse requestToken(MultiValueMap<String, String> form) {
         requireConfigured();
         try {
-            TokenResponse response = restClient.post().uri(path)
+            TokenResponse response = restClient.post().uri("/v1/oauth2/token")
                     .headers(headers -> headers.setBasicAuth(properties.clientId(), properties.clientSecret()))
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
@@ -90,19 +85,6 @@ public class PayPalHttp {
                 throw new PayPalUnavailableException("PayPal returned no access token");
             }
             return response;
-        } catch (RestClientException e) {
-            throw unavailable(e);
-        }
-    }
-
-    /** Calls the API with the bearer token of a user (e.g. userinfo of "Log in with PayPal"). */
-    public <T> T getAsUser(String path, String userAccessToken, Class<T> responseType) {
-        try {
-            return restClient.get().uri(path)
-                    .headers(headers -> headers.setBearerAuth(userAccessToken))
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, (_, r) -> { throw toException(r.getStatusCode(), r.getBody().readAllBytes()); })
-                    .body(responseType);
         } catch (RestClientException e) {
             throw unavailable(e);
         }

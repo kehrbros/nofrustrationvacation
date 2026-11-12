@@ -25,8 +25,8 @@
 - **Column type:** `NUMERIC(19, 8)`. Create new money columns in migrations the same way, in `_aud` tables as well.
 - **Converted by `V4__money.sql`** (previously entities `scale = 6`, schema `NUMERIC(38, 2)`):
   - prices of market, offers and orders (removed with `V18__drop_market_and_llm.sql`)
-  - `AppUser.accountBalance` (replaced by `accounting_account.balance` since `V11__accounting.sql`), additionally new field `AppUser.preferredCurrency`
-- **Bookings with conversion** (top-up/payout, see [accounting.md](accounting.md)): `CurrencyConversionService.toBaseForBooking(...)` returns a `CurrencyConversion` (original amount, base amount, rate, rate date). In the API it is mapped to `common.money.OriginalAmount` (`@Embeddable`, columns `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) and stored with the booking, never recalculated.
+  - `AppUser.accountBalance` (moved to the accounting module with `V11__accounting.sql`, removed with `V54__drop_accounting.sql`), additionally new field `AppUser.preferredCurrency`
+- **Bookings with conversion** (formerly top-up/payout of the removed accounting): `CurrencyConversionService.toBaseForBooking(...)` returns a `CurrencyConversion` (original amount, base amount, rate, rate date). In the API it is mapped to `common.money.OriginalAmount` (`@Embeddable`, columns `original_amount`, `original_currency`, `exchange_rate`, `exchange_rate_date`) and stored with the booking, never recalculated. Currently no entity uses it.
 
 ## Exchange rates (`com.nfv.currency`)
 
@@ -46,17 +46,18 @@
 - **Outgoing rounding (`MoneyRounding`):**
   - `PRICE`: prices with small amounts: 6 decimal places, `HALF_EVEN`.
   - `AMOUNT`: balances, invoice and payment amounts: decimal places of the currency (2 for EUR, 0 for JPY), `HALF_EVEN`.
-  - `PAYOUT`: payouts: like `AMOUNT`, but `DOWN`, so that never more is paid out than the balance covers.
+  - `PAYOUT`: like `AMOUNT`, but `DOWN`, so that never more is paid out than a balance covers (unused since the accounting was removed).
   - Formatting (thousands separator, symbol) is done by the frontend.
 - **Point in time of the rate:** current values with the latest rate, historical values with `toDto(..., at)` at the rate of the event date, bookings with the stored rate.
 - **Round trip:** converting there and back may deviate minimally. Where this matters, store the original input in addition to the display value.
-- **Example:** `GET /api/v1/accounting/balances?currency=EUR` returns credit and earnings in EUR. `PUT /api/v1/users/me/preferred-currency` with `{"currency": "EUR"}` (or `null` for USD) sets the default currency.
+- **Example:** `PUT /api/v1/users/me/preferred-currency` with `{"currency": "EUR"}` (or `null` for USD) sets the default currency.
 
 ## Tests
 
 - `MoneyTest` (scale, rounding, arithmetic), `CurrencyConversionServiceTest` (conversion, rounding rules, outdated rates), `EcbExchangeRateProviderTest` (cross rates)
-- `MoneyPersistenceTest` (all money columns incl. `_aud` are `NUMERIC(19, 8)`), `AccountingFlowTest` (API conversion of balances), `MoneyArchitectureTest`
+- `MoneyPersistenceTest` (all money columns incl. `_aud` are `NUMERIC(19, 8)`), `MoneyArchitectureTest`
 
 ## Open
 
-- Exchange rate markup/spread for top-ups and payouts.
+- Exchange rate markup/spread for conversions with booking effect.
+- Whether `currency` is still needed by the travel app, see [architecture.md](architecture.md#legacy-code).

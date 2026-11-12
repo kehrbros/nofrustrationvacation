@@ -36,8 +36,6 @@ class PayPalClientTest {
 
     private MockRestServiceServer server;
     private PayPalCheckout checkout;
-    private PayPalPayouts payouts;
-    private PayPalConnect connect;
 
     @BeforeEach
     void setUp() {
@@ -46,8 +44,6 @@ class PayPalClientTest {
         server = MockRestServiceServer.bindTo(builder).build();
         PayPalHttp http = new PayPalHttp(builder.build(), properties, Clock.fixed(Instant.parse("2026-10-22T10:00:00Z"), ZoneOffset.UTC));
         checkout = new PayPalCheckout(http, properties);
-        payouts = new PayPalPayouts(http);
-        connect = new PayPalConnect(http, properties);
     }
 
     @Test
@@ -77,19 +73,21 @@ class PayPalClientTest {
         expectAppToken();
         server.expect(requestTo(API + "/v2/checkout/orders"))
                 .andExpect(method(HttpMethod.POST))
-                .andExpect(header("PayPal-Request-Id", "create-top-up-1"))
+                .andExpect(header("PayPal-Request-Id", "create-payment-1"))
                 .andExpect(jsonPath("$.intent").value("CAPTURE"))
-                .andExpect(jsonPath("$.purchase_units[0].custom_id").value("top-up-1"))
+                .andExpect(jsonPath("$.purchase_units[0].custom_id").value("payment-1"))
                 .andExpect(jsonPath("$.purchase_units[0].amount.currency_code").value("EUR"))
                 .andExpect(jsonPath("$.purchase_units[0].amount.value").value("25.00"))
-                .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url").value("http://localhost:18173/consumer/guthaben/paypal"))
+                .andExpect(jsonPath("$.payment_source.paypal.experience_context.return_url").value("http://localhost:18173/paypal/return"))
                 .andRespond(withSuccess("""
                         {"id":"O-1","status":"PAYER_ACTION_REQUIRED","links":[
                           {"href":"https://api-m.sandbox.paypal.com/v2/checkout/orders/O-1","rel":"self"},
                           {"href":"https://www.sandbox.paypal.com/checkoutnow?token=O-1","rel":"payer-action"}]}""",
                         MediaType.APPLICATION_JSON));
 
-        PayPalCheckout.CheckoutOrder order = checkout.createOrder("top-up-1", new PayPalAmount("EUR", new BigDecimal("25.00")), "Credit");
+        PayPalCheckout.CheckoutOrder order = checkout.createOrder("payment-1", new PayPalAmount("EUR", new BigDecimal("25.00")), "Hotel",
+                PayPalCheckout.Intent.CAPTURE, URI.create("http://localhost:18173/paypal/return"),
+                URI.create("http://localhost:18173/paypal/cancel"));
 
         assertThat(order.orderId()).isEqualTo("O-1");
         assertThat(order.approveUrl()).isEqualTo("https://www.sandbox.paypal.com/checkoutnow?token=O-1");
@@ -188,102 +186,11 @@ class PayPalClientTest {
     @Test
     void serverErrorsMeanUnknownOutcome() {
         expectAppToken();
-        server.expect(requestTo(API + "/v1/payments/payouts"))
+        server.expect(requestTo(API + "/v2/payments/authorizations/A-1/capture"))
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
 
-        assertThatThrownBy(() -> payouts.send("p-1", "PAYER1", new PayPalAmount("USD", new BigDecimal("10.00")), "s", "n"))
+        assertThatThrownBy(() -> checkout.captureAuthorization("A-1", "capture-a-1"))
                 .isInstanceOf(PayPalUnavailableException.class);
-    }
-
-    @Test
-    void payoutIsSentToThePayerIdAndItsStatusIsRead() {
-        expectAppToken();
-        server.expect(requestTo(API + "/v1/payments/payouts"))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(jsonPath("$.sender_batch_header.sender_batch_id").value("nfv-payout-7"))
-                .andExpect(jsonPath("$.items[0].recipient_type").value("PAYPAL_ID"))
-                .andExpect(jsonPath("$.items[0].receiver").value("PAYER1"))
-                .andExpect(jsonPath("$.items[0].amount.currency").value("EUR"))
-                .andExpect(jsonPath("$.items[0].amount.value").value("42.10"))
-                .andRespond(withStatus(HttpStatus.CREATED).contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"batch_header\":{\"payout_batch_id\":\"B-1\",\"batch_status\":\"PENDING\"}}"));
-        server.expect(requestTo(API + "/v1/payments/payouts/B-1"))
-                .andExpect(method(HttpMethod.GET))
-                .andRespond(withSuccess("""
-                        {"batch_header":{"payout_batch_id":"B-1","batch_status":"SUCCESS"},
-                         "items":[{"payout_item_id":"I-1","transaction_status":"SUCCESS"}]}""", MediaType.APPLICATION_JSON));
-
-        PayPalPayouts.PayoutBatch sent = payouts.send("nfv-payout-7", "PAYER1",
-                new PayPalAmount("EUR", new BigDecimal("42.10")), "Payout", "Earnings");
-        PayPalPayouts.PayoutBatch read = payouts.getPayout("B-1");
-
-        assertThat(sent.payoutBatchId()).isEqualTo("B-1");
-        assertThat(sent.isSucceeded()).isFalse();
-        assertThat(read.isSucceeded()).isTrue();
-        assertThat(read.isReturned()).isFalse();
-    }
-
-    @Test
-    void returnedPayoutIsRecognized() {
-        assertThat(new PayPalPayouts.PayoutBatch("B-1", "SUCCESS", "RETURNED", null).isReturned()).isTrue();
-        assertThat(new PayPalPayouts.PayoutBatch("B-1", "SUCCESS", "UNCLAIMED", null).isReturned()).isFalse();
-        assertThat(new PayPalPayouts.PayoutBatch("B-1", "DENIED", null, null).isReturned()).isTrue();
-    }
-
-    @Test
-    void connectUrlCarriesClientRedirectAndState() {
-        URI url = connect.authorizationUrl("state-1");
-
-        assertThat(url.getHost()).isEqualTo("www.sandbox.paypal.com");
-        assertThat(url.getPath()).isEqualTo("/connect");
-        assertThat(url.getRawQuery())
-                .contains("client_id=client")
-                .contains("response_type=code")
-                .contains("state=state-1")
-                .contains("scope=openid%20email%20https://uri.paypal.com/services/paypalattributes")
-                .contains("redirect_uri=http://localhost:18173/paypal/connected");
-    }
-
-    @Test
-    void connectedAccountIsReadWithTheUsersToken() {
-        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
-                .andExpect(header("Authorization", "Basic Y2xpZW50OnNlY3JldA=="))
-                .andExpect(content().formData(form("grant_type", "authorization_code", "code", "auth-code")))
-                .andRespond(withSuccess("{\"access_token\":\"user-token\",\"expires_in\":900}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
-                .andExpect(header("Authorization", "Bearer user-token"))
-                .andRespond(withSuccess("""
-                        {"user_id":"https://www.paypal.com/webapps/auth/identity/user/abc","payer_id":"PAYER1",
-                         "verified_account":"true","emails":[{"value":"old@example.com","primary":false,"confirmed":true},
-                         {"value":"provider@example.com","primary":true,"confirmed":true}]}""", MediaType.APPLICATION_JSON));
-
-        PayPalAccount account = connect.fetchAccount("auth-code");
-
-        assertThat(account).isEqualTo(new PayPalAccount("PAYER1", "provider@example.com", true));
-    }
-
-    @Test
-    void openIdUserinfoWithFlatEmailIsRead() {
-        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
-                .andRespond(withSuccess("{\"access_token\":\"user-token\"}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
-                .andRespond(withSuccess("""
-                        {"user_id":"https://www.paypal.com/webapps/auth/identity/user/abc","payer_id":"PAYER2",
-                         "email":"provider@example.com","email_verified":true}""", MediaType.APPLICATION_JSON));
-
-        assertThat(connect.fetchAccount("auth-code")).isEqualTo(new PayPalAccount("PAYER2", "provider@example.com", true));
-    }
-
-    @Test
-    void refusedUserinfoIsARejection() {
-        server.expect(requestTo(API + "/v1/identity/openidconnect/tokenservice"))
-                .andRespond(withSuccess("{\"access_token\":\"user-token\",\"scope\":\"openid\"}", MediaType.APPLICATION_JSON));
-        server.expect(requestTo(API + "/v1/oauth2/token/userinfo?schema=openid"))
-                .andRespond(withStatus(HttpStatus.BAD_REQUEST).contentType(MediaType.APPLICATION_JSON).body("""
-                        {"error":"invalid_request","error_description":"Unable to fetch details to serve the request"}"""));
-
-        assertThatThrownBy(() -> connect.fetchAccount("auth-code"))
-                .isInstanceOfSatisfying(PayPalRejectedException.class, e -> assertThat(e.getIssue()).isEqualTo("invalid_request"));
     }
 
     @Test
@@ -291,7 +198,6 @@ class PayPalClientTest {
         PayPalProperties unconfigured = properties("client", "");
         PayPalHttp http = new PayPalHttp(RestClient.create(API), unconfigured, Clock.systemUTC());
 
-        assertThat(new PayPalConnect(http, unconfigured).isAvailable()).isFalse();
         assertThatThrownBy(() -> new PayPalCheckout(http, unconfigured).getOrder("O-1"))
                 .isInstanceOf(PayPalNotConfiguredException.class);
     }
@@ -321,10 +227,6 @@ class PayPalClientTest {
     }
 
     private static PayPalProperties properties(String clientId, String secret) {
-        return new PayPalProperties(PayPalProperties.Environment.SANDBOX, clientId, secret,
-                URI.create("http://localhost:18173/paypal/connected"),
-                URI.create("http://localhost:18173/consumer/guthaben/paypal"),
-                URI.create("http://localhost:18173/consumer/guthaben/paypal?abgebrochen=1"),
-                "Nfv", Duration.ofSeconds(5));
+        return new PayPalProperties(PayPalProperties.Environment.SANDBOX, clientId, secret, "Nfv", Duration.ofSeconds(5));
     }
 }

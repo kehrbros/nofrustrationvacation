@@ -76,7 +76,7 @@ Derived from the code. The flow has never run against the sandbox.
 - **Move money only when the room is secured:** authorise → book → capture, otherwise release. Already exists, only needs to be explained in the UI ("The amount is reserved, it is charged only when the hotel confirms").
 - **Remember PayPal for next time (vault):** on the first rebooking "Save PayPal for emergencies" (`payment_source.paypal.attributes.vault`), afterwards rebooking without an approval window. Fits exactly the case "in the evening at the reception". Before building, check whether vaulting can be enabled in the sandbox app and works with `intent=AUTHORIZE`. Stretch goal.
 - **Automatic refund:** if the user cancels an alternative booked in the app within the deadline, LiteAPI cancellation and PayPal refund (`refundCapture` exists) in one step.
-- **Splitting costs** (later, needs shared trips): fellow travellers pay their share via a PayPal link, forwarding via Payouts (exists).
+- **Splitting costs** (later, needs shared trips): fellow travellers pay their share via a PayPal link, forwarding via Payouts (`PayPalPayouts`, removed 2026-11-12, restore from git history).
 - **Pay Later** for expensive emergency bookings: only one parameter in the JS SDK, availability per country, check for New Zealand before the demo.
 
 ## Additional features

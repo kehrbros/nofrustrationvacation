@@ -1,7 +1,7 @@
 # Architecture
 
 - **Goal of the app:** users store travel routes and are informed about events that affect the course of their trip (e.g. road closure). Domain model see [domain.md](domain.md).
-- **Origin:** the repository was the app Nfv (market for LLM capacity). Market, agents and LLM proxy have been removed (`V18`, `V19`). Auth, user, infrastructure and deployment are reused. Accounting, PayPal and provider onboarding are legacy code, see [Legacy code](#legacy-code).
+- **Origin:** the repository was the app Nfv (market for LLM capacity). Market, agents and LLM proxy have been removed (`V18`, `V19`), accounting (credit, top-up, payout) and provider onboarding on 2026-11-12 (`V54`), see [Legacy code](#legacy-code). Auth, user, infrastructure and deployment are reused.
 - **Technology:** backend Spring Boot (Java 25, Maven) in `backend/`, frontend React/Vite (TypeScript) in `frontend/`, PostgreSQL, operated as a Docker Swarm stack, see [deployment.md](deployment.md). Road network and routing with embedded GraphHopper and PostGIS, see [network.md](network.md). Route suggestions see [recommendations.md](recommendations.md), proposals by the agent see [advisor.md](advisor.md).
 
 ## System Context
@@ -49,13 +49,12 @@ Every module is a package under `com.nfv`.
 | `auth` | Own identity provider (OAuth2/OIDC, MCP clients via CIMD), independent of all other modules | base |
 | `user` | `AppUser`, securing `/api/**` and `/mcp`, `CurrentUser` | base |
 | `common` | `AbstractEntity`, Envers revision, converters, error handling, OpenAPI | base |
-| `currency` | Exchange rates (ECB), conversion at the API | base, only needed by `accounting` |
-| `paypal` | Technical integration with PayPal (checkout with capture or authorisation, refund, payouts, connect), knows no domain modules | base, used by `bookings` and `accounting`, see [paypal.md](paypal.md) |
-| `accounting`, `onboarding` | Accounts, top-up and payout via PayPal, provider onboarding | legacy code |
+| `currency` | Exchange rates (ECB), conversion at the API, preferred currency of the user | base, currently unused by the travel app (removal open) |
+| `paypal` | Technical integration with PayPal (checkout with capture or authorisation, refund), knows no domain modules | base, used by `bookings`, see [paypal.md](paypal.md) |
 
 ### Structure of a module
 
-- Modelled on `accounting`:
+- Modelled on `bookings`:
   - `entities`: JPA entities and enums. Fields via Lombok `@Getter`, changes only via domain methods, protected default constructor for JPA.
   - `data`: Spring Data repositories, own queries as JPQL.
   - `logic`: domain services (`@Service`, `@Transactional`), helper components package-private.
@@ -210,9 +209,9 @@ flowchart LR
 
 ## Legacy code
 
-- Code and docs for accounting ([accounting.md](accounting.md), [paypal.md](paypal.md), [money.md](money.md)) and the backend module `onboarding` still come from Nfv. The frontend pages for them (roles consumer, provider, operator, onboarding, credit, earnings, PayPal linking) have been removed; the PayPal return URLs (`nfv.frontend-url`) therefore point nowhere.
-- Whether any of it is needed for the travel app (e.g. paid notifications) is open. Until then the code stays unchanged.
-- **Decided (2026-11-02):** `paypal` is no longer legacy code, it pays for alternative accommodations (implemented 2026-11-03), see [accommodation-alternatives.md](accommodation-alternatives.md#payment). `accounting` and `onboarding` stay legacy code.
+- **Decided (2026-11-02):** `paypal` is no longer legacy code, it pays for alternative accommodations (implemented 2026-11-03), see [accommodation-alternatives.md](accommodation-alternatives.md#payment).
+- **Removed (2026-11-12):** the modules `accounting` (credit and earnings accounts, ledger, top-up, payout) and `onboarding` (provider onboarding) of the former token market, their tables (`V54__drop_accounting.sql`), their configuration `nfv.accounting.*` and `Docs/accounting.md`, as well as `PayPalConnect`, `PayPalPayouts` and the fixed checkout return URLs in `paypal`. Restore from git history if needed (e.g. paid notifications, splitting costs).
+- **Still open:** `currency` (ECB rates, `exchange_rate`, `AppUser.preferredCurrency`, `PUT /users/me/preferred-currency`) is not used by the travel app and stays for now (Philipp, 2026-11-12). `common.money.Money` stays in any case.
 
 ## Open points
 
@@ -229,4 +228,4 @@ flowchart LR
 - **Assistant:** monitor costs (model choice, image size), note in the privacy policy, rate limit in the database with several replicas, voice search (transcription, search agent with OSM/web search) and email forwarding as next stages.
 - **Time zone data:** timeshape `2024a` (newer versions need protobuf 4, GraphHopper/osmosis brings protobuf 3; `protobuf-java` is raised to 3.25.5, from 3.25.6 reading `.osm.pbf` fails because of the old osmosis code). After first use the boundaries occupy approx. 200 MB of heap (via `SoftReference`, released on memory shortage).
 - **ArchUnit rules** for the new modules (only id references, no cycles).
-- **Legacy code:** decide whether accounting, PayPal and onboarding stay or are removed; app name and branding (README, icon, package name `com.nfv`).
+- **Legacy code:** decide whether `currency` stays, see [Legacy code](#legacy-code).

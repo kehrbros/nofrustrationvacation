@@ -28,6 +28,6 @@ The frontend is available in German and English (i18next), every UI text is kept
 
 Monetary values (single base currency USD, `Money` type, exchange rates and currency conversion at the API boundary) are described in [Docs/money.md](Docs/money.md).
 
-Accounting (credit and earnings accounts, top-ups and payouts via PayPal, carried over from the former Nfv app) is described in [Docs/accounting.md](Docs/accounting.md), the PayPal connection and how to configure its credentials in [Docs/paypal.md](Docs/paypal.md).
+The PayPal connection (payment and refund of accommodations booked in the app) and how to configure its credentials are described in [Docs/paypal.md](Docs/paypal.md).
 
 Running PostgreSQL, backend and frontend as a Docker Swarm stack (`docker-compose.yml`, profile `postgres`, credentials as Docker secrets) is described in [Docs/deployment.md](Docs/deployment.md). For a local run with PostgreSQL that builds all images from source, copy `.env.example` to `.env` and run `docker compose -f docker-compose.local.yml up --build`.

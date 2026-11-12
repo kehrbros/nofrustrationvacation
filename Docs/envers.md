@@ -8,15 +8,15 @@
 - **Structure of an `_aud` table:** all audited columns of the base table (nullable, without unique/FK), plus `rev` and `revtype` (`0` = insert, `1` = update, `2` = delete); primary key `(id, rev)`:
 
   ```sql
-  CREATE TABLE payout_account_aud (
+  CREATE TABLE trip_aud (
       id       BIGINT   NOT NULL,
       rev      BIGINT   NOT NULL REFERENCES revinfo (rev),
-      revtype  TINYINT,
+      revtype  SMALLINT,
       -- audited columns of the base table, e.g.:
-      email    VARCHAR(255),
+      name     VARCHAR(255),
       PRIMARY KEY (id, rev)
   );
   ```
 
-- **Reading history:** `AuditReaderFactory.get(entityManager)`, e.g. `getRevisions(PayoutAccount.class, id)`, `find(PayoutAccount.class, id, rev)` or `createQuery().forRevisionsOfEntity(...)`. Call within a transaction.
+- **Reading history:** `AuditReaderFactory.get(entityManager)`, e.g. `getRevisions(Trip.class, id)`, `find(Trip.class, id, rev)` or `createQuery().forRevisionsOfEntity(...)`. Call within a transaction.
 - **Example/test:** `backend/src/test/java/com/nfv/common/EnversAuditTest.java`.

@@ -1,15 +1,13 @@
 # PayPal integration
 
-- **Module `com.nfv.paypal`:** only the technical integration with the PayPal REST API. Knows no domain modules, only `common` (ArchUnit `PayPalModuleTest`). Users: `com.nfv.bookings` (payment of alternative accommodations, see [accommodation-alternatives.md](accommodation-alternatives.md#payment)) and the legacy code `com.nfv.accounting`, see [accounting.md](accounting.md).
+- **Module `com.nfv.paypal`:** only the technical integration with the PayPal REST API. Knows no domain modules, only `common` (ArchUnit `PayPalModuleTest`). Only user: `com.nfv.bookings` (payment of alternative accommodations and plans, refunds after cancellation, see [accommodation-alternatives.md](accommodation-alternatives.md#payment)).
 - **Facades:**
-  - `PayPalConnect`: "Log in with PayPal" (OAuth 2.0 authorization code). The provider logs in at PayPal and confirms their account; we receive `payer_id`, email and verification status (code exchange via `/v1/identity/openidconnect/tokenservice`, then `/v1/oauth2/token/userinfo?schema=openid`, as in PayPal's docs on payouts recipients; the exchange via `/v1/oauth2/token` with `schema=paypalv1.1` failed in the sandbox with `400 invalid_request`, scope `openid email https://uri.paypal.com/services/paypalattributes`). No PayPal password, no manually typed email.
-  - `PayPalCheckout`: payments via the Orders API v2. Create order → payer approves at PayPal (`payer-action` link) → with `intent=CAPTURE` capture (top-ups in `accounting`, return URLs from the configuration), with `intent=AUTHORIZE` first `authorize` (money reserved), then `captureAuthorization` (`final_capture`) or `voidAuthorization` (release, e.g. if the booking fails). `refundCapture` refunds in full. Return and cancel URL per order (`createOrder(…, intent, returnUrl, cancelUrl)`), e.g. back to the sub-route of the alternatives.
-  - `PayPalPayouts`: payouts via the Payouts API to the `payer_id` (`recipient_type=PAYPAL_ID`). Asynchronous: status later via `GET /v1/payments/payouts/{batchId}`.
+  - `PayPalCheckout`: payments via the Orders API v2. Create order → payer approves at PayPal (`payer-action` link) → with `intent=CAPTURE` capture, with `intent=AUTHORIZE` first `authorize` (money reserved), then `captureAuthorization` (`final_capture`) or `voidAuthorization` (release, e.g. if the booking fails). `refundCapture` refunds in full. Return and cancel URL per order (`createOrder(…, intent, returnUrl, cancelUrl)`), e.g. back to the sub-route of the alternatives.
+- **Removed (2026-11-12):** `PayPalConnect` ("Log in with PayPal") and `PayPalPayouts` (Payouts API) together with the legacy modules `accounting` and `onboarding` of the former token market. Before using them again, restore them from git history (commit before the removal).
 - **`client/PayPalHttp`:** app token via client credentials, cached until 60 s before expiry, fetched again once on 401. Errors: 4xx → `PayPalRejectedException` (with `issue`, e.g. `INSTRUMENT_DECLINED`, without effect), 5xx/IO → `PayPalUnavailableException` (outcome unknown).
 - **Idempotency:**
-  - Create order and capture with `PayPal-Request-Id` (`create-top-up-{id}`, `capture-top-up-{id}`), a repetition returns the first result. `ORDER_ALREADY_CAPTURED` → the order is read.
+  - Every write call carries a `PayPal-Request-Id`, a repetition returns the first result. `ORDER_ALREADY_CAPTURED` → the order is read.
   - Alternatives: `create-stay-{id}`, `authorize-stay-{id}`, `capture-stay-{id}`, `void-stay-{id}`. `ORDER_ALREADY_AUTHORIZED` → the order is read, `AUTHORIZATION_ALREADY_VOIDED` counts as done.
-  - Payouts with `sender_batch_id = nfv-payout-{id}`, PayPal rejects a second batch with the same id (30 days).
 
 ## Configuration and credentials
 
@@ -19,29 +17,24 @@
   nfv.paypal.environment=${PAYPAL_ENVIRONMENT:sandbox}   # sandbox | live
   nfv.paypal.client-id=${PAYPAL_CLIENT_ID:}
   nfv.paypal.client-secret=${PAYPAL_CLIENT_SECRET:}
-  nfv.paypal.connect-redirect-uri=${nfv.frontend-url}/paypal/connected
-  nfv.paypal.checkout-return-url=${nfv.frontend-url}/consumer/guthaben/paypal
-  nfv.paypal.checkout-cancel-url=${nfv.frontend-url}/consumer/guthaben/paypal?abgebrochen=1
   ```
 
-- All return URLs depend on `nfv.frontend-url` (env `NFV_FRONTEND_URL`, default `http://localhost:18173`), as do login redirect URIs and CORS. The frontend pages behind the PayPal URLs (`/paypal/connected`, `/consumer/guthaben/paypal`) have been removed.
+- Return and cancel URLs are passed per order by `bookings` and depend on `nfv.frontend-url` (env `NFV_FRONTEND_URL`, default `http://localhost:18173`), as do login redirect URIs and CORS.
 
 - **Local:** set environment variables in the IntelliJ run configuration, or create `backend/config/application-local.properties` and start with profile `local` (`mvn spring-boot:run -Dspring-boot.run.profiles=local`). `backend/config/` and `.env` are in `.gitignore`.
 - **Production:** Docker secrets `nfv_paypal_client_id`/`nfv_paypal_client_secret`, in the container as `/run/secrets/PAYPAL_CLIENT_ID`/`PAYPAL_CLIENT_SECRET` and read via `configtree`, plus `PAYPAL_ENVIRONMENT=live`, see [deployment.md](deployment.md).
-- The secret is never logged (`PayPalProperties.toString()` masks it). If the credentials are missing, the app still starts; linking, top-up and payout then respond with 503 `PAYPAL_NOT_CONFIGURED`, the frontend shows a notice.
+- The secret is never logged (`PayPalProperties.toString()` masks it). If the credentials are missing, the app still starts; payments then respond with 503 `PAYPAL_NOT_CONFIGURED`, the frontend shows a notice.
 - Tests never call PayPal: facades mocked, `PayPalClientTest` against `MockRestServiceServer`.
 
 ## Setting up the PayPal app (sandbox)
 
 1. developer.paypal.com → Apps & Credentials → Sandbox → open the app, set client ID and secret as env variables.
-2. Features: enable **Log in with PayPal**, enter return URL `${NFV_FRONTEND_URL}/paypal/connected` (must match `connect-redirect-uri` exactly), locally therefore `https://<ngrok-host>/paypal/connected`, see below. Under "Advanced options" → "Information requested from customers" tick **Email**, **PayPal account ID (payer ID)** and **Account verification status** and save. If they are missing, PayPal rejects the userinfo request after approval with `400 invalid_request` "Unable to fetch details to serve the request" (frontend: 502 `PAYPAL_ERROR`); the backend then logs requested and granted scopes.
-3. Features: enable **Payouts**.
-4. Test with sandbox personal accounts (payer and provider).
+2. Test with a sandbox personal account as payer.
 
 ## Local without localhost (sandbox)
 
 - PayPal does not accept `localhost` as return URL, therefore open the frontend via an ngrok tunnel.
-- **Docker Compose:** start `ngrok http 18173`, enter the HTTPS URL as `LOCAL_FRONTEND_URL` in `.env`, restart the stack and open the app under the ngrok URL. Set the return URL in the PayPal app to `https://<ngrok-host>/paypal/connected`; without a fixed ngrok host both change with every tunnel start.
+- **Docker Compose:** start `ngrok http 18173`, enter the HTTPS URL as `LOCAL_FRONTEND_URL` in `.env`, restart the stack and open the app under the ngrok URL. Without a fixed ngrok host the URL changes with every tunnel start.
 - ngrok terminates TLS, nginx detects the browser's scheme via `X-Forwarded-Proto` (`frontend/nginx.conf`).
 - The backend accepts only this origin (CORS, OIDC redirect URI), therefore nginx then redirects `http://localhost:18173` to `LOCAL_FRONTEND_URL` (`CANONICAL_FRONTEND_URL`, `frontend/nginx.conf`).
 - The backend derives login redirect URIs, CORS and all PayPal URLs from `NFV_FRONTEND_URL`. It stays `http://localhost:18180`; browsers allow calls to `http://localhost` also from HTTPS pages. The tunnel is therefore only usable for the browser on this machine.
@@ -70,5 +63,5 @@ As of 2026-11-06, tested with mocked responses (`AlternativeApiTest`, `LiteApiTe
 
 ## Open
 
-- Webhooks (`PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.PAYOUTSBATCH.*`) instead of polling; needs a public URL and webhook id.
-- Fees: PayPal withholds fees on top-ups and charges for payouts; who bears them is an open domain question.
+- Webhooks (`PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`) instead of polling; needs a public URL and webhook id.
+- Fees: PayPal withholds fees on payments; who bears them is an open domain question.

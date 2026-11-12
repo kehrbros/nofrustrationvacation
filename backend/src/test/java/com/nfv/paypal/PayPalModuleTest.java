@@ -11,7 +11,7 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 /**
  * The PayPal module is the technical connection only, business logic lives in the modules that pay with it
- * (accounting, bookings), see Docs/paypal.md.
+ * (bookings), see Docs/paypal.md.
  */
 class PayPalModuleTest {
     private static final String PAYPAL = "com.nfv.paypal..";
@@ -29,8 +29,8 @@ class PayPalModuleTest {
     }
 
     @Test
-    void onlyAccountingAndBookingsUsePayPal() {
-        noClasses().that().resideOutsideOfPackages(PAYPAL, "com.nfv.accounting..", "com.nfv.bookings..")
+    void onlyBookingsUsePayPal() {
+        noClasses().that().resideOutsideOfPackages(PAYPAL, "com.nfv.bookings..")
                 .should().dependOnClassesThat().resideInAPackage(PAYPAL)
                 .check(classes);
     }
