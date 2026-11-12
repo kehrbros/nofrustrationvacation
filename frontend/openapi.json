@@ -3610,6 +3610,11 @@
               "format" : "int64"
             }
           },
+          "runId" : {
+            "type" : "integer",
+            "format" : "int64",
+            "description" : "The run the plan came from, to search for new solutions when a hotel is gone"
+          },
           "status" : {
             "type" : "string",
             "enum" : [ "AWAITING_PAYMENT", "APPLYING", "APPLIED", "FAILED", "APPLIED_PARTLY" ]

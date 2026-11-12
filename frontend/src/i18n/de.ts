@@ -198,6 +198,10 @@ export const de = {
     bannerHint: 'Tippen zum Ansehen und Übernehmen.',
     noActionNeeded: 'Dieser Hinweis ändert nichts an deiner Ankunft, es gibt nichts umzuplanen.',
     searchFailed: 'Die Suche konnte nicht gestartet werden. Bitte versuche es noch einmal.',
+    searchingAgain: {
+      OFFER_UNAVAILABLE: 'Ein Hotel aus dem Plan ist nicht mehr verfügbar, es wurde nichts abgebucht. Wir suchen neue Lösungen.',
+      PRICE_EXCEEDED: 'Ein Hotel aus dem Plan ist teurer geworden, es wurde nichts abgebucht. Wir suchen neue Lösungen.',
+    },
     notApplicable: 'Das geht so nicht mehr, die Reise hat sich inzwischen geändert. Bitte aktualisiere die Lösungen.',
     loading: 'Lösungen werden geladen …',
     intro: 'Wir suchen für dich, wie du trotzdem gut ankommst: andere Strecke, andere Abfahrt oder eine Übernachtung.',

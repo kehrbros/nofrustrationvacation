@@ -1,12 +1,12 @@
 import { HomeOutlined, NodeIndexOutlined, RightOutlined, WarningOutlined } from '@ant-design/icons';
-import { useState } from 'react';
-import { Link, useParams } from 'react-router';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { useAsync } from '../api/useAsync';
 import Sheet from '../components/Sheet';
 import { t } from '../i18n';
 import { HOME_PATH } from '../layout/navigation';
-import ProposalsPanel from '../proposals/ProposalsPanel';
+import ProposalsPanel, { type SearchAgainState } from '../proposals/ProposalsPanel';
 import { tripAlternatives, type TripAlternative } from '../trips/alternatives';
 import { categoryLabel, consequenceText, formatMinutes, incidentTitle, incidentTypeLabel } from '../trips/incidentText';
 import type { RouteIncidentSummary } from '../trips/model';
@@ -16,12 +16,22 @@ import { fetchRouteSummaries } from '../trips/tripsApi';
 
 /**
  * Opens when a consequence on the map is tapped: what it means for the trip, the solutions found for it (proposals,
- * taken with one tap) and, below, the ways to plan again by hand (another route, another accommodation).
+ * taken with one tap) and, below, the ways to plan again by hand (another route, another accommodation). Coming back
+ * from a plan whose hotel was gone, the solutions are searched again right away.
  */
 export default function TripAlternativesSheet() {
   const { routeId, incidentId } = useParams();
   const { trip, incidents, stopById, bookings, reload, close } = useTripContext();
   const [manualOpen, setManualOpen] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // read once: a reload or reopening of the dialog does not search again
+  const [searchAgain] = useState(() => (location.state as SearchAgainState | null)?.searchAgain ?? null);
+  useEffect(() => {
+    if (searchAgain) {
+      navigate('.', { replace: true, state: null });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const consequence = incidents.find(
     (candidate) => candidate.routeId === Number(routeId) && candidate.incidentId === Number(incidentId),
   );
@@ -81,6 +91,7 @@ export default function TripAlternativesSheet() {
               onChanged={reload}
               manualOpen={manualOpen}
               onToggleManual={setManualOpen}
+              searchAgain={searchAgain}
             />
             {manualOpen && (
               <div id="va-manual-planning" className="va-column va-gap">

@@ -259,6 +259,8 @@ export interface PlanHotel {
 export interface PlanExecution {
   executionId: number;
   tripId: number;
+  /** The run the plan came from: where to search again when a hotel is gone. */
+  runId: number;
   status: PlanExecutionStatus;
   failure: string | null;
   orderId: string | null;
@@ -273,6 +275,7 @@ function toExecution(dto: PlanExecutionDto): PlanExecution {
   return {
     executionId: dto.executionId ?? 0,
     tripId: dto.tripId ?? 0,
+    runId: dto.runId ?? 0,
     status: (dto.status ?? 'FAILED') as PlanExecutionStatus,
     failure: dto.failure ?? null,
     orderId: dto.orderId ?? null,

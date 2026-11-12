@@ -200,6 +200,10 @@ export const en: Messages<typeof de> = {
     bannerHint: 'Tap to view and apply.',
     noActionNeeded: 'This alert doesn’t change your arrival, there is nothing to replan.',
     searchFailed: 'The search could not be started. Please try again.',
+    searchingAgain: {
+      OFFER_UNAVAILABLE: 'A hotel of the plan is no longer available, nothing was charged. We are looking for new solutions.',
+      PRICE_EXCEEDED: 'A hotel of the plan has become more expensive, nothing was charged. We are looking for new solutions.',
+    },
     notApplicable: 'This no longer works, the trip has changed in the meantime. Please refresh the solutions.',
     loading: 'Loading solutions …',
     intro: 'We look for ways to still get there well: a different road, a different departure or a night on the way.',

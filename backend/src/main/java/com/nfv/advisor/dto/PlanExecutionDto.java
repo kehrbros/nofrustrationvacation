@@ -16,6 +16,8 @@ import java.util.List;
 public record PlanExecutionDto(
         long executionId,
         long tripId,
+        @Schema(description = "The run the plan came from, to search for new solutions when a hotel is gone")
+        long runId,
         PlanExecutionStatus status,
         @Nullable String failure,
         @Nullable PlanPaymentStatus paymentStatus,

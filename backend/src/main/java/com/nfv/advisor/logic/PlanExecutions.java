@@ -65,8 +65,8 @@ public class PlanExecutions {
      *
      * @param payment null for a plan without hotels
      */
-    public record ExecutionView(long executionId, long tripId, PlanExecutionStatus status, @Nullable String failure,
-                                @Nullable PlanPayments.PlanPaymentView payment, List<Long> plannedRouteIds,
+    public record ExecutionView(long executionId, long tripId, long runId, PlanExecutionStatus status,
+                                @Nullable String failure, @Nullable PlanPayments.PlanPaymentView payment, List<Long> plannedRouteIds,
                                 int todosAdded) {
     }
 
@@ -379,7 +379,7 @@ public class PlanExecutions {
         PlanPayments.PlanPaymentView current = payment != null ? payment : execution.getPlanPaymentId() == null ? null
                 : planPayments.get(execution.getAppUserId(), execution.getPlanPaymentId());
         Outcome outcome = outcome(execution);
-        return new ExecutionView(executionId, execution.getTripId(), execution.getStatus(), execution.getFailure(),
-                current, outcome.plannedRouteIds(), outcome.todosAdded());
+        return new ExecutionView(executionId, execution.getTripId(), execution.getRunId(), execution.getStatus(),
+                execution.getFailure(), current, outcome.plannedRouteIds(), outcome.todosAdded());
     }
 }
