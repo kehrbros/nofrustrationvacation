@@ -255,6 +255,13 @@ export const en: Messages<typeof de> = {
     noPast: 'No past trips.',
     add: 'Add trip',
   },
+  demoTrip: {
+    title: 'Try the demo trip',
+    text: 'Eleven days across New Zealand’s South Island, under way since the day before yesterday, now in Kaikōura: routes, accommodation and incidents are already set up, solutions are being prepared. Each load creates a new trip.',
+    create: 'Load demo trip',
+    creating: 'Creating the trip and planning routes … this takes up to a minute.',
+    failed: 'The demo trip could not be created. Please try again.',
+  },
   newTrip: {
     title: 'New trip',
     missing: 'Please enter a name, start and end.',

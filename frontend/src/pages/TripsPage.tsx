@@ -10,6 +10,7 @@ import ProfileButton from '../profile/ProfileButton';
 import SharedBookingNote from '../bookings/SharedBookingNote';
 import { InstallBanner } from '../pwa/InstallApp';
 import CoverImage from '../trips/CoverImage';
+import DemoTripCard from '../trips/DemoTripCard';
 import { groupTrips } from '../trips/grouping';
 import type { TripSummary } from '../trips/model';
 import { formatPeriod, tripDay, untilStart } from '../trips/time';
@@ -131,6 +132,8 @@ export default function TripsPage() {
               </p>
             )}
           </div>
+
+          <DemoTripCard />
         </>
       )}
 

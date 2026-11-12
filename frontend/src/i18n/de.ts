@@ -253,6 +253,13 @@ export const de = {
     noPast: 'Keine vergangenen Reisen.',
     add: 'Reise hinzufügen',
   },
+  demoTrip: {
+    title: 'Demo-Reise ausprobieren',
+    text: 'Elf Tage über die Südinsel Neuseelands, seit vorgestern unterwegs, gerade in Kaikōura: Routen, Unterkünfte und Störungen sind schon angelegt, Lösungen werden vorbereitet. Jedes Laden legt eine neue Reise an.',
+    create: 'Demo-Reise laden',
+    creating: 'Reise wird angelegt, Routen werden geplant … das dauert bis zu einer Minute.',
+    failed: 'Die Demo-Reise konnte nicht angelegt werden. Bitte versuch es noch einmal.',
+  },
   newTrip: {
     title: 'Neue Reise',
     missing: 'Bitte Name, Beginn und Ende angeben.',
