@@ -1567,9 +1567,23 @@ a.va-button {
 }
 
 /* ---------- guest data of a booking ---------- */
-.va-field-invalid input {
+/* ---------- validation feedback of all forms (components/form) ---------- */
+.va-field-invalid input,
+.va-field-invalid select,
+.va-field-invalid textarea {
   border-color: var(--danger);
   background: #fff6f4;
+}
+.va-required {
+  margin-left: 3px;
+  color: var(--danger);
+  font-weight: 700;
+}
+.va-required-note {
+  margin: 0;
+}
+.va-required-note .va-required {
+  margin-left: 0;
 }
 .va-field-error {
   margin: 0;

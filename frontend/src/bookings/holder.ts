@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
+import { failedField, useFieldErrors } from '../components/form/validation';
 import { t } from '../i18n';
-import { forgetTripGuest, rememberTripGuest, TripsApiError } from '../trips/tripsApi';
+import { forgetTripGuest, rememberTripGuest } from '../trips/tripsApi';
 import type { TripDetail } from '../trips/model';
 import { rememberedHolder, rememberHolder, type Holder } from './alternativesApi';
 
@@ -48,53 +49,35 @@ export function holderComplete(holder: Holder): boolean {
 
 /** The guest field the backend refused (problem detail "field"), null if the input as a whole was wrong. */
 export function failedHolderField(failure: unknown): HolderField | null {
-  const field = failure instanceof TripsApiError ? failure.body?.field : undefined;
-  return typeof field === 'string' && (FIELDS as string[]).includes(field) ? field as HolderField : null;
+  return failedField(failure, FIELDS);
 }
 
 /**
  * Guest data of a booking sheet: prefilled from the trip (remembered for it) or this device, errors shown once a
- * field was left or the user tried to continue, and the backend's verdict on a field.
+ * field was left or the user tried to continue, and the backend's verdict on a field (useFieldErrors, as in every
+ * form).
  */
 export function useHolder(trip: TripDetail, reload: () => void) {
   const [holder, setHolderState] = useState<Holder>(() => trip.guest ?? rememberedHolder() ?? EMPTY_HOLDER);
   const [rememberForTrip, setRememberForTrip] = useState(trip.guest !== null);
-  const [touched, setTouched] = useState<Partial<Record<HolderField, boolean>>>({});
-  const [submitted, setSubmitted] = useState(false);
-  const [serverField, setServerField] = useState<HolderField | null>(null);
-
-  const all = holderErrors(holder);
-  const errors: HolderErrors = {};
-  for (const field of FIELDS) {
-    if (all[field] && (submitted || touched[field])) {
-      errors[field] = all[field];
-    }
-  }
-  if (serverField && !errors[serverField]) {
-    errors[serverField] = t('alternatives.guestError.server');
-  }
+  const validation = useFieldErrors<HolderField>(holderErrors(holder), holder);
+  const errors: HolderErrors = validation.errors;
 
   return {
     holder,
     errors,
     rememberForTrip,
     setRememberForTrip,
-    setHolder: (next: Holder) => {
-      if (serverField && next[serverField] !== holder[serverField]) {
-        setServerField(null);
-      }
-      setHolderState(next);
-    },
-    touch: (field: HolderField) => setTouched((current) => ({ ...current, [field]: true })),
+    setHolder: setHolderState,
+    touch: validation.touch,
     /** Before continuing: true if the data can be sent, otherwise all errors are shown. */
-    check: (): boolean => {
-      setSubmitted(true);
-      return holderComplete(holder);
-    },
+    check: validation.check,
     /** A refused booking: marks the guest field the backend named, true if it named one. */
     refused: (failure: unknown): boolean => {
       const field = failedHolderField(failure);
-      setServerField(field);
+      if (field) {
+        validation.refuse(field, t('alternatives.guestError.server'));
+      }
       return field !== null;
     },
     /** After the price is secured: remembers the guest on this device and, if asked, for the trip. */

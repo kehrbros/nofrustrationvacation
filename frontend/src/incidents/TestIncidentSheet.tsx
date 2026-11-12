@@ -2,6 +2,8 @@ import { AimOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
 import { useEffect, useState } from 'react';
 
+import Field, { RequiredNote } from '../components/form/Field';
+import { useFieldErrors, type FieldErrors } from '../components/form/validation';
 import Sheet from '../components/Sheet';
 import { formatNumber, t } from '../i18n';
 import type { LinePoint } from '../trips/model';
@@ -24,6 +26,25 @@ import {
 import { forgetTestIncident, storedTestIncidents, storeTestIncident, type StoredTestIncident } from './testIncidentStore';
 
 type Step = 'type' | 'place' | 'details' | 'result';
+type DetailField = 'validFrom' | 'validTo' | 'delay';
+
+/** What is wrong with times and delay, per field. */
+function detailErrors(validFrom: string, validTo: string, delay: string): FieldErrors<DetailField> {
+  const errors: FieldErrors<DetailField> = {};
+  const from = localDateTimeIso(validFrom);
+  if (!from) {
+    errors.validFrom = t('testIncident.fromMissing');
+  }
+  const to = validTo ? localDateTimeIso(validTo) : null;
+  if (validTo && (!to || (from && new Date(to) <= new Date(from)))) {
+    errors.validTo = t('testIncident.toBeforeFrom');
+  }
+  const minutes = delay.trim() ? Number(delay) : null;
+  if (minutes != null && !(Number.isInteger(minutes) && minutes >= 0)) {
+    errors.delay = t('testIncident.delayInvalid');
+  }
+  return errors;
+}
 
 /**
  * Test tool "Störung melden" (role tester): kind, a point tapped on the map (near a route of the trip: placed onto
@@ -111,6 +132,7 @@ export default function TestIncidentSheet() {
     setDelay(input.delayMinutes == null ? '' : String(input.delayMinutes));
     setText(input.text ?? '');
     setError(null);
+    details.reset();
     setStep('place');
   };
   const send = async (id: string, input: TestIncident, resolved: boolean) => {
@@ -132,11 +154,10 @@ export default function TestIncidentSheet() {
   const from = localDateTimeIso(validFrom);
   const to = validTo ? localDateTimeIso(validTo) : null;
   const delayMinutes = delay.trim() ? Number(delay) : null;
-  const detailsValid = !!from && (!validTo || (!!to && new Date(to) > new Date(from)))
-    && (delayMinutes == null || (Number.isInteger(delayMinutes) && delayMinutes >= 0));
+  const details = useFieldErrors(detailErrors(validFrom, validTo, delay), { validFrom, validTo, delay });
 
   const submit = () => {
-    if (type && point && from) {
+    if (details.check() && type && point && from) {
       void send(editingId ?? newTestIncidentId(), {
         type,
         point,
@@ -266,22 +287,21 @@ export default function TestIncidentSheet() {
 
         {step === 'details' && (
           <div className="va-form">
+            <RequiredNote />
             <div className="va-field-row">
-              <div className="va-field">
-                <label htmlFor="ti-from">{t('testIncident.from')}</label>
-                <input id="ti-from" type="datetime-local" value={validFrom} onChange={(event) => setValidFrom(event.target.value)} />
-              </div>
-              <div className="va-field">
-                <label htmlFor="ti-to">{t('testIncident.to')}</label>
-                <input id="ti-to" type="datetime-local" min={validFrom || undefined} value={validTo}
-                  onChange={(event) => setValidTo(event.target.value)} />
-              </div>
+              <Field id="ti-from" label={t('testIncident.from')} required error={details.errors.validFrom}>
+                <input type="datetime-local" value={validFrom} onChange={(event) => setValidFrom(event.target.value)}
+                  onBlur={() => details.touch('validFrom')} />
+              </Field>
+              <Field id="ti-to" label={t('testIncident.to')} error={details.errors.validTo}>
+                <input type="datetime-local" min={validFrom || undefined} value={validTo}
+                  onChange={(event) => setValidTo(event.target.value)} onBlur={() => details.touch('validTo')} />
+              </Field>
             </div>
-            <div className="va-field">
-              <label htmlFor="ti-delay">{t('testIncident.delay')}</label>
-              <input id="ti-delay" type="number" min={0} inputMode="numeric" placeholder={t('testIncident.delayPlaceholder')}
-                value={delay} onChange={(event) => setDelay(event.target.value)} />
-            </div>
+            <Field id="ti-delay" label={t('testIncident.delay')} error={details.errors.delay}>
+              <input type="number" min={0} inputMode="numeric" placeholder={t('testIncident.delayPlaceholder')}
+                value={delay} onChange={(event) => setDelay(event.target.value)} onBlur={() => details.touch('delay')} />
+            </Field>
             <div className="va-field">
               <label htmlFor="ti-text">{t('testIncident.text')}</label>
               <textarea id="ti-text" rows={3} placeholder={t('testIncident.textPlaceholder')} value={text}
@@ -317,7 +337,7 @@ export default function TestIncidentSheet() {
     }
     if (step === 'details') {
       return (
-        <button type="button" className="va-button va-button-accent va-block" disabled={sending || !detailsValid} onClick={submit}>
+        <button type="button" className="va-button va-button-accent va-block" disabled={sending} onClick={submit}>
           {sending ? t('testIncident.sending') : editingId ? t('testIncident.submitChange') : t('testIncident.submit')}
         </button>
       );

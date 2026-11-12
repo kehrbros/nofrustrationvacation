@@ -214,36 +214,62 @@ export function liteApiHotelId(form: AccommodationForm): string | null {
 const blank = (value: string) => (value.trim() ? value.trim() : null);
 const time = (value: string) => (value ? `${value.slice(0, 5)}:00` : null);
 
-/** Message for the first problem of the form (current language), null if it can be saved. */
-export function validateForm(form: AccommodationForm): string | null {
+/** Fields of the form the backend may name when it refuses a booking (problem detail "field"). */
+export const FORM_FIELDS: FormField[] = [
+  'name', 'addressLine', 'phone', 'email', 'website', 'provider', 'reference', 'manageUrl', 'checkInDate',
+  'checkOutDate', 'guests', 'rooms', 'price', 'currency', 'notes',
+];
+
+/** API names of the booking input (BookingLogic) → field of the form; others are named alike. */
+export const API_FIELDS: Partial<Record<string, FormField>> = {
+  checkIn: 'checkInDate',
+  checkOut: 'checkOutDate',
+  // not shown on its own, comes with the address
+  countryCode: 'addressLine',
+  placeRef: 'name',
+  latitude: 'name',
+};
+
+/** What is wrong with the form, per field (current language, same rules as BookingLogic); empty if it can be saved. */
+export function formErrors(form: AccommodationForm): Partial<Record<FormField, string>> {
+  const errors: Partial<Record<FormField, string>> = {};
   if (!form.name.trim()) {
-    return t('form.nameMissing');
+    errors.name = t('form.nameMissing');
   }
-  if (!form.checkInDate || !form.checkOutDate) {
-    return t('form.datesMissing');
+  if (!form.checkInDate) {
+    errors.checkInDate = t('form.checkInMissing');
   }
-  const { checkIn, checkOut } = stayTimes(form);
-  if (`${form.checkOutDate}T${checkOut}` <= `${form.checkInDate}T${checkIn}`) {
-    return t('form.checkOutBeforeCheckIn');
+  if (!form.checkOutDate) {
+    errors.checkOutDate = t('form.checkOutMissing');
+  } else if (form.checkInDate) {
+    const { checkIn, checkOut } = stayTimes(form);
+    if (`${form.checkOutDate}T${checkOut}` <= `${form.checkInDate}T${checkIn}`) {
+      errors.checkOutDate = t('form.checkOutBeforeCheckIn');
+    }
   }
   const price = form.price.trim().replace(',', '.');
   if (price && !/^\d{1,10}(\.\d{1,2})?$/.test(price)) {
-    return t('form.priceInvalid');
+    errors.price = t('form.priceInvalid');
   }
   if (price && !/^[A-Za-z]{3}$/.test(form.currency.trim())) {
-    return t('form.currencyInvalid');
+    errors.currency = t('form.currencyInvalid');
   }
-  for (const [value, label] of [[form.manageUrl, t('form.manageUrl')], [form.website, t('form.website')]] as const) {
-    if (value.trim() && !/^https?:\/\/\S+$/i.test(value.trim())) {
-      return t('form.urlInvalid', { label });
+  for (const field of ['manageUrl', 'website'] as const) {
+    if (form[field].trim() && !/^https?:\/\/\S+$/i.test(form[field].trim())) {
+      errors[field] = t('form.urlInvalid');
     }
   }
-  for (const [value, label] of [[form.guests, t('form.guests')], [form.rooms, t('form.rooms')]] as const) {
-    if (value.trim() && !/^([1-9]|[1-9]\d)$/.test(value.trim())) {
-      return t('form.numberInvalid', { label });
+  for (const field of ['guests', 'rooms'] as const) {
+    if (form[field].trim() && !/^([1-9]|[1-9]\d)$/.test(form[field].trim())) {
+      errors[field] = t('form.numberInvalid');
     }
   }
-  return null;
+  return errors;
+}
+
+/** Message for the first problem of the form (current language), null if it can be saved. */
+export function validateForm(form: AccommodationForm): string | null {
+  return Object.values(formErrors(form))[0] ?? null;
 }
 
 /** Request body, call only after validateForm returned null. */

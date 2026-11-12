@@ -221,7 +221,7 @@ public class TripLogic {
                                      @Nullable OffsetDateTime departureAt, BookingFit fit) {
         Stop stop = stop(appUserId, stopId).orElseThrow(() -> new TripItemNotFoundException("stop", stopId));
         if (arrivalAt != null && departureAt != null && departureAt.isBefore(arrivalAt)) {
-            throw new InvalidTripInputException("departure before arrival");
+            throw new InvalidTripInputException("departureAt", "departure before arrival");
         }
         return reschedule(stop, false, arrivalAt, departureAt, fit);
     }
@@ -466,11 +466,11 @@ public class TripLogic {
     private String validate(NewStop stop) {
         String name = requireName(stop.name());
         if (stop.latitude() == null || stop.longitude() == null) {
-            throw new InvalidTripInputException("latitude and longitude are required");
+            throw new InvalidTripInputException("latitude", "latitude and longitude are required");
         }
         requireCoordinates(stop.latitude(), stop.longitude());
         if (stop.arrivalAt() != null && stop.departureAt() != null && stop.departureAt().isBefore(stop.arrivalAt())) {
-            throw new InvalidTripInputException("departure before arrival");
+            throw new InvalidTripInputException("departureAt", "departure before arrival");
         }
         return name;
     }
@@ -495,10 +495,10 @@ public class TripLogic {
 
     private static void requirePeriod(OffsetDateTime startAt, OffsetDateTime endAt) {
         if (startAt == null || endAt == null) {
-            throw new InvalidTripInputException("start and end of the trip are required");
+            throw new InvalidTripInputException(startAt == null ? "startAt" : "endAt", "start and end of the trip are required");
         }
         if (endAt.isBefore(startAt)) {
-            throw new InvalidTripInputException("trip ends before it starts");
+            throw new InvalidTripInputException("endAt", "trip ends before it starts");
         }
     }
 
@@ -529,16 +529,16 @@ public class TripLogic {
 
     private static void requireTravelers(@Nullable Integer travelers) {
         if (travelers != null && (travelers < 1 || travelers > 99)) {
-            throw new InvalidTripInputException("travelers must be between 1 and 99");
+            throw new InvalidTripInputException("travelers", "travelers must be between 1 and 99");
         }
     }
 
     private static String requireName(String name) {
         if (name == null || name.isBlank()) {
-            throw new InvalidTripInputException("name is required");
+            throw new InvalidTripInputException("name", "name is required");
         }
         if (name.strip().length() > 255) {
-            throw new InvalidTripInputException("name has at most 255 characters");
+            throw new InvalidTripInputException("name", "name has at most 255 characters");
         }
         return name.strip();
     }

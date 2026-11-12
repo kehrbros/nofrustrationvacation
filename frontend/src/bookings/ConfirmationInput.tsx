@@ -1,5 +1,6 @@
 import { FileTextOutlined, LinkOutlined, PaperClipOutlined, SnippetsOutlined } from '@ant-design/icons';
 import { Alert } from 'antd';
+import { useState } from 'react';
 
 import { t } from '../i18n';
 import type { SharedContent } from './shareTarget';
@@ -17,6 +18,8 @@ interface Props {
   error: string | null;
   onError: (error: string | null) => void;
   onManual: () => void;
+  /** The user tried to read without text or file: marked at the text. */
+  missing?: boolean;
 }
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024;
@@ -36,7 +39,9 @@ export default function ConfirmationInput({
   error,
   onError,
   onManual,
+  missing = false,
 }: Props) {
+  const [fileError, setFileError] = useState<string | null>(null);
   const sharedText = shared?.text.trim() ?? '';
   const sharedFile = file ? null : (shared?.file ?? null);
   const shownFile = file ?? sharedFile;
@@ -71,11 +76,13 @@ export default function ConfirmationInput({
           <span className="va-small va-muted">{t('confirmation.sharedHint')}</span>
         </div>
       )}
-      <div className="va-field">
+      <div className={missing ? 'va-field va-field-invalid' : 'va-field'}>
         <label htmlFor="booking-text">{sharedText ? t('confirmation.moreText') : t('confirmation.text')}</label>
         <textarea
           id="booking-text"
           rows={7}
+          aria-invalid={missing ? true : undefined}
+          aria-describedby={missing ? 'booking-text-error' : undefined}
           placeholder={t('confirmation.placeholder')}
           value={text}
           onChange={(event) => onTextChange(event.target.value)}
@@ -91,9 +98,10 @@ export default function ConfirmationInput({
             <SnippetsOutlined aria-hidden="true" /> {t('confirmation.pasteClipboard')}
           </button>
         )}
+        {missing && <p id="booking-text-error" className="va-field-error" role="alert">{t('confirmation.empty')}</p>}
       </div>
       <div className="va-divider" role="separator"><span>{t('confirmation.andOr')}</span></div>
-      <div className="va-field">
+      <div className={fileError ? 'va-field va-field-invalid' : 'va-field'}>
         <span className="va-label">{t('confirmation.file')}</span>
         {shownFile ? (
           <span className="va-file">
@@ -111,15 +119,17 @@ export default function ConfirmationInput({
               onChange={(event) => {
                 const chosen = event.target.files?.[0] ?? null;
                 if (chosen && chosen.size > MAX_FILE_BYTES) {
-                  onError(t('confirmation.fileTooLarge'));
+                  setFileError(t('confirmation.fileTooLarge'));
                   return;
                 }
+                setFileError(null);
                 onError(null);
                 onFileChange(chosen);
               }}
             />
           </label>
         )}
+        {fileError && <p className="va-field-error" role="alert">{fileError}</p>}
       </div>
       <p className="va-small va-muted">
         {t('confirmation.privacy')}
