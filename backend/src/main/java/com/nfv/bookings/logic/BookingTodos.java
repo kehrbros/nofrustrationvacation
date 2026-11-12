@@ -6,6 +6,7 @@ import com.nfv.bookings.data.BookingReservationRepository;
 import com.nfv.bookings.data.BookingTodoRepository;
 import com.nfv.bookings.entities.AccommodationDetails;
 import com.nfv.bookings.entities.Booking;
+import com.nfv.bookings.entities.BookingReservation;
 import com.nfv.bookings.entities.BookingStatus;
 import com.nfv.bookings.entities.BookingTodo;
 import com.nfv.bookings.entities.BookingType;
@@ -45,6 +46,11 @@ public class BookingTodos {
     public List<BookingTodo> list(long appUserId, long tripId) {
         tripLogic.get(appUserId, tripId);
         return todoRepository.findByTripIdOrderByCreatedAtDescIdDesc(tripId);
+    }
+
+    /** @throws BookingNotFoundException unknown to-do or one of another user */
+    public BookingTodo get(long appUserId, long todoId) {
+        return owned(appUserId, todoId);
     }
 
     /**
@@ -122,11 +128,50 @@ public class BookingTodos {
         }
     }
 
+    /**
+     * A booking made and paid in the app is removed from the trip without cancelling it: it goes on the list, to be
+     * cancelled later (in the app, with a refund). Other bookings need nothing, the user removed their own entry.
+     * Called before the booking is deleted, in the same transaction.
+     */
+    @Transactional
+    void bookingRemoved(long tripId, Booking booking) {
+        boolean paidInApp = reservationRepository.findByBookingId(booking.getId())
+                .filter(reservation -> reservation.getStatus() == ReservationStatus.BOOKED).isPresent();
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        if (paidInApp && (booking.getEndsAt() == null || booking.getEndsAt().isAfter(now))) {
+            add(tripId, booking, TodoKind.CANCEL, TodoReason.BOOKING_REMOVED, null);
+        }
+    }
+
+    /**
+     * The open cancellation to-do that can cancel its reservation in the app, with a refund.
+     *
+     * @return the id of the reservation
+     * @throws BookingNotFoundException unknown to-do or one of another user
+     * @throws CancellationNotPossibleException done already, not a cancellation, or not booked in the app
+     */
+    public long reservationToCancel(long appUserId, long todoId) {
+        BookingTodo todo = owned(appUserId, todoId);
+        if (todo.getKind() != TodoKind.CANCEL || !todo.isOpen() || todo.getReservationId() == null) {
+            throw new CancellationNotPossibleException("to-do " + todoId + " cannot be cancelled in the app");
+        }
+        return todo.getReservationId();
+    }
+
     /** Marked cancelled in the app (by hand or by a cancellation in the app): its open cancellations are done. */
     @Transactional
     void cancelled(long bookingId) {
         OffsetDateTime now = OffsetDateTime.now(clock);
         todoRepository.findByBookingIdIn(List.of(bookingId)).stream()
+                .filter(todo -> todo.getKind() == TodoKind.CANCEL)
+                .forEach(todo -> todo.done(now));
+    }
+
+    /** The reservation was cancelled in the app: its open cancellations are done (also those without booking). */
+    @Transactional
+    void reservationCancelled(long reservationId) {
+        OffsetDateTime now = OffsetDateTime.now(clock);
+        todoRepository.findByReservationId(reservationId).stream()
                 .filter(todo -> todo.getKind() == TodoKind.CANCEL)
                 .forEach(todo -> todo.done(now));
     }
@@ -138,10 +183,11 @@ public class BookingTodos {
             return null;
         }
         AccommodationDetails details = accommodationRepository.findByBookingId(booking.getId()).orElse(null);
-        boolean bookedInApp = reservationRepository.findByBookingId(booking.getId())
-                .filter(reservation -> reservation.getStatus() == ReservationStatus.BOOKED).isPresent();
+        Long reservationId = reservationRepository.findByBookingId(booking.getId())
+                .filter(reservation -> reservation.getStatus() == ReservationStatus.BOOKED)
+                .map(BookingReservation::getId).orElse(null);
         return todoRepository.save(new BookingTodo(tripId, booking, details == null ? null : details.getPhone(),
-                details == null ? null : details.getEmail(), kind, reason, bookedInApp, arrivalOn,
+                details == null ? null : details.getEmail(), kind, reason, reservationId, arrivalOn,
                 OffsetDateTime.now(clock)));
     }
 

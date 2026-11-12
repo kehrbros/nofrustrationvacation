@@ -45,6 +45,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -81,6 +82,8 @@ class AlternativeApiTest {
     private StructuredExtraction extraction;
     @Autowired
     private com.nfv.bookings.logic.AlternativeReservations reservations;
+    @Autowired
+    private com.nfv.bookings.data.BookingReservationRepository reservationRepository;
 
     private final JsonMapper jsonMapper = JsonMapper.builder().build();
     private RequestPostProcessor user;
@@ -589,6 +592,115 @@ class AlternativeApiTest {
         reservations.recover(reservationId);
         mockMvc.perform(get("/api/v1/booking-reservations/{id}", reservationId).with(user))
                 .andExpect(jsonPath("$.refunded").value(true));
+    }
+
+    @Test
+    void bookingMadeInTheAppRemovedWithoutCancellingCanBeCancelledFromTheList() throws Exception {
+        long reservationId = reserve("O-9");
+        mockPaymentAndBooking(reservationId, "O-9");
+        String booked = mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user)
+                .with(csrf())).andReturn().getResponse().getContentAsString();
+        long newBookingId = ((Number) JsonPath.read(booked, "$.bookingId")).longValue();
+
+        mockMvc.perform(delete("/api/v1/bookings/{id}", newBookingId).with(user).with(csrf()))
+                .andExpect(status().isNoContent());
+        String todos = mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].reason").value("BOOKING_REMOVED"))
+                .andExpect(jsonPath("$[0].title").value("Hotel Sole"))
+                .andExpect(jsonPath("$[0].bookingId").doesNotExist())
+                .andExpect(jsonPath("$[0].bookedInApp").value(true))
+                .andExpect(jsonPath("$[0].cancellableInApp").value(true))
+                // the replaced booking was not made in the app
+                .andExpect(jsonPath("$[1].reason").value("REPLACED"))
+                .andExpect(jsonPath("$[1].cancellableInApp").value(false))
+                .andReturn().getResponse().getContentAsString();
+        long todoId = ((Number) JsonPath.read(todos, "$[0].id")).longValue();
+        long replacedTodoId = ((Number) JsonPath.read(todos, "$[1].id")).longValue();
+
+        when(liteApi.cancel("LB-1")).thenReturn(new LiteApi.Cancellation("CANCELLED", null));
+        when(checkout.refundCapture("C-1", null, "refund-stay-" + reservationId))
+                .thenReturn(new PayPalCheckout.Payment("R-9", "COMPLETED", null));
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", todoId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refundAmount").value("165.00"))
+                .andExpect(jsonPath("$.currency").value("EUR"))
+                .andExpect(jsonPath("$.refunded").value(true))
+                .andExpect(jsonPath("$.todo.doneAt").exists())
+                .andExpect(jsonPath("$.todo.cancellableInApp").value(false));
+        // once only
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", todoId).with(user).with(csrf()))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("CANCELLATION_NOT_POSSIBLE"));
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", replacedTodoId).with(user).with(csrf()))
+                .andExpect(status().isConflict());
+        verify(liteApi).cancel("LB-1");
+    }
+
+    @Test
+    void paidReservationStaysWhenItsStopIsDeletedSoTheListCanCancelIt() throws Exception {
+        long reservationId = reserve("O-10");
+        mockPaymentAndBooking(reservationId, "O-10");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", reservationId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("BOOKED"));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, stopId).with(user).with(csrf()))
+                .andExpect(status().is2xxSuccessful());
+        String todos = mockMvc.perform(get("/api/v1/trips/{id}/booking-todos", tripId).with(user))
+                .andExpect(jsonPath("$[?(@.reason == 'STOP_REMOVED')]", hasSize(1)))
+                .andExpect(jsonPath("$[?(@.reason == 'STOP_REMOVED')].cancellableInApp").value(true))
+                .andReturn().getResponse().getContentAsString();
+        long todoId = ((Number) JsonPath.<List<Object>>read(todos, "$[?(@.reason == 'STOP_REMOVED')].id").getFirst())
+                .longValue();
+        // without its stop the reservation is not shown any more
+        mockMvc.perform(get("/api/v1/booking-reservations/{id}", reservationId).with(user))
+                .andExpect(status().isNotFound());
+
+        when(liteApi.cancel("LB-1")).thenReturn(new LiteApi.Cancellation("CANCELLED", null));
+        when(checkout.refundCapture("C-1", null, "refund-stay-" + reservationId))
+                .thenReturn(new PayPalCheckout.Payment("R-10", "COMPLETED", null));
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", todoId).with(user).with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.refunded").value(true))
+                .andExpect(jsonPath("$.todo.doneAt").exists());
+        // another user cannot cancel it
+        mockMvc.perform(post("/api/v1/booking-todos/{id}/refund-cancellation", todoId)
+                        .with(login("other-" + UUID.randomUUID())).with(csrf()))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deletingTheTripDeletesItsReservationsWithoutCancelling() throws Exception {
+        // a paid booking at a stop deleted earlier, which only its to-do still knows
+        long paidId = reserve("O-11");
+        mockPaymentAndBooking(paidId, "O-11");
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", paidId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("BOOKED"));
+        mockMvc.perform(delete("/api/v1/trips/{id}/stops/{stopId}", tripId, stopId).with(user).with(csrf()))
+                .andExpect(status().is2xxSuccessful());
+        // and one at a new stop that needs attention (booked, capture refused)
+        String trip = mockMvc.perform(post("/api/v1/trips/{id}/stops", tripId).with(user).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(stop("Rom", WELLINGTON)))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        stopId = ((Number) JsonPath.read(trip, "$.stops[0].id")).longValue();
+        bookingId = id(mockMvc.perform(post("/api/v1/stops/{id}/accommodation-bookings", stopId).with(user).with(csrf())
+                .contentType(MediaType.APPLICATION_JSON).content(BOOKING)).andExpect(status().isCreated()));
+        long stuckId = reserve("O-12");
+        when(checkout.authorize(eq("O-12"), anyString())).thenReturn(
+                new PayPalCheckout.Payment("A-12", "CREATED", new PayPalAmount("EUR", new BigDecimal("165.00"))));
+        when(liteApi.book(anyString(), any(), anyInt(), anyString()))
+                .thenReturn(new LiteApi.ProviderBooking("LB-12", null, "CONFIRMED"));
+        when(checkout.captureAuthorization(eq("A-12"), anyString()))
+                .thenThrow(new com.nfv.paypal.PayPalRejectedException(422, "AUTHORIZATION_EXPIRED", "d-1", "expired"));
+        mockMvc.perform(post("/api/v1/booking-reservations/{id}/booking", stuckId).with(user).with(csrf()))
+                .andExpect(jsonPath("$.status").value("NEEDS_ATTENTION"));
+
+        mockMvc.perform(delete("/api/v1/trips/{id}", tripId).with(user).with(csrf()))
+                .andExpect(status().is2xxSuccessful());
+        mockMvc.perform(get("/api/v1/trips/{id}", tripId).with(user)).andExpect(status().isNotFound());
+        assertThat(reservationRepository.findById(paidId)).isEmpty();
+        assertThat(reservationRepository.findById(stuckId)).isEmpty();
+        verify(liteApi, org.mockito.Mockito.never()).cancel(anyString());
     }
 
     private long reserve(String orderId) throws Exception {

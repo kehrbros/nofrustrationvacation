@@ -49,3 +49,11 @@ describe('tripDeletionText', () => {
     expect(tripDeletionText({ ...trip, stops: [] }, [])).toBe('Die Reise wird gelöscht.');
   });
 });
+
+describe('tripDeletionText with bookings made in the app', () => {
+  it('warns that they are not cancelled', () => {
+    const inApp = { id: 2, stopId: 1, title: 'Hotel Sole', source: 'SEARCH', status: 'CONFIRMED' } as Booking;
+    expect(tripDeletionText(trip, [inApp])).toContain('nicht storniert');
+    expect(tripDeletionText(trip, [{ ...inApp, source: 'DOCUMENT' }])).not.toContain('Achtung');
+  });
+});

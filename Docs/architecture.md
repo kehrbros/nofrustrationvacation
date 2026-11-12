@@ -45,6 +45,7 @@ Every module is a package under `com.nfv`.
 | `incidents` | Incidents, consequences, matching logic | new |
 | `recommendations` | Route suggestions from scenarios: during planning and as an alternative to consequences (detour, later departure), see [recommendations.md](recommendations.md) | new (planning), incidents draft |
 | `advisor` | Agent that proposes and stores solutions for incidents, automatically for `TOO_LATE`, otherwise on request, see [advisor.md](advisor.md) | new, automatic mode switched off for now |
+| `demo` | Demo trip for the jury and testers: trip, routes, bookings and test incidents through the normal logic, only with the manual test source, see [demo-trip.md](demo-trip.md) | new |
 | `auth` | Own identity provider (OAuth2/OIDC, MCP clients via CIMD), independent of all other modules | base |
 | `user` | `AppUser`, securing `/api/**` and `/mcp`, `CurrentUser` | base |
 | `common` | `AbstractEntity`, Envers revision, converters, error handling, OpenAPI | base |
@@ -89,6 +90,10 @@ flowchart LR
     advisor --> bookings
     incidents -.->|RouteTooLate| advisor
     network -.->|NetworkRefreshed| trips
+    demo --> trips
+    demo --> bookings
+    demo --> incidents
+    demo --> input
 ```
 
 - **References across module boundaries only by id** (`appUserId`, `segmentId`, `stopId`, `routeId`, `routeSectionId`, `incidentId`), with a foreign key in the database. JPA relationships (`@ManyToOne`) only within a module. The arrows above show these id references and the calls.
@@ -98,6 +103,7 @@ flowchart LR
 - **`input` and `incidents`** (decided 2026-11-04, implemented): `input` receives, stores, reads and enriches (`→ assistant`), does not know `network`. `incidents` locates via `network.SegmentMatching` (`IncidentReporting`), creates incidents and assesses consequences. Assessment on a changed arrival via the event `StopArrivalChanged` from `trips`.
 - **`recommendations`** reads routes via `trips.logic`, calculates suggestions transiently (nothing stored) and stores the chosen route via `TripEditing.replaceWaypoints` (then planning). It is not in `trips` because it needs `incidents` and `incidents` depends on `trips`, see [recommendations.md](recommendations.md).
 - **`advisor`** sits at the very top, no module knows it: it calls `recommendations` as tools of the agent and stores its runs and proposals itself. This keeps `recommendations` deterministic and without a model. Backwards only via the event `RouteTooLate` from `incidents`, after the commit, see [advisor.md](advisor.md).
+- **`demo`** sits at the very top like `advisor`, no module knows it, see [demo-trip.md](demo-trip.md).
 - **`auth`** is isolated via ArchUnit (`AuthModuleIsolationTest`). There are no ArchUnit rules for the new modules yet.
 
 ## Runtime View
@@ -138,7 +144,7 @@ flowchart LR
 - Modifying calls plan affected routes immediately (`TripEditing`, see [domain.md](domain.md#trips)). The result is on every route as `planOutcome`/`planReason`.
 - `GET /trips/{id}/incidents` (current notices per route with assessment, sorted by ranking), `GET /trips/{id}/incidents/routes` (situation per route: worst category, expected arrival, slack), `GET /incidents/trip-counts` (counters for the trip list, only `TOO_LATE` and `DELAYED`), see [consequence-assessment.md](consequence-assessment.md#api-and-frontend).
 - Foreign or unknown trips: 404 with `code` `TRIP_NOT_FOUND`, stops, routes, waypoints that do not belong to the trip: 404 with `STOP_NOT_FOUND`, `ROUTE_NOT_FOUND`, `WAYPOINT_NOT_FOUND`, invalid inputs: 400 with `INVALID_TRIP_INPUT` (`TripExceptionHandler`, only for `trips` and `incidents`), with `field` naming the input at fault where there is one (the frontend marks it, see [i18n.md](i18n.md#forms)).
-- Bookings (`BookingController`): `GET /trips/{id}/bookings`, `POST /stops/{stopId}/accommodation-bookings`, `PUT /accommodation-bookings/{id}`, `DELETE /bookings/{id}`, `GET /bookings/assistant` (extraction available?), `POST /bookings/accommodation-drafts` (multipart `text` and/or `file`, returns an unsaved draft), `GET /bookings/accommodation-suggestions?query=…&latitude=…&longitude=…` (LiteAPI hotels for the name, empty without LiteAPI), `POST /bookings/accommodation-facts` (contact and house rules: LiteAPI, the rest via web search of the assistant, with origin per field), to-do list `GET /trips/{id}/booking-todos`, `POST`/`DELETE /booking-todos/{id}/completion` ([domain.md](domain.md#bookings)).
+- Bookings (`BookingController`): `GET /trips/{id}/bookings`, `POST /stops/{stopId}/accommodation-bookings`, `PUT /accommodation-bookings/{id}`, `DELETE /bookings/{id}`, `GET /bookings/assistant` (extraction available?), `POST /bookings/accommodation-drafts` (multipart `text` and/or `file`, returns an unsaved draft), `GET /bookings/accommodation-suggestions?query=…&latitude=…&longitude=…` (LiteAPI hotels for the name, empty without LiteAPI), `POST /bookings/accommodation-facts` (contact and house rules: LiteAPI, the rest via web search of the assistant, with origin per field), to-do list `GET /trips/{id}/booking-todos`, `POST`/`DELETE /booking-todos/{id}/completion`, `POST /booking-todos/{id}/refund-cancellation` (bookings made in the app, also after the booking or stop was deleted) ([domain.md](domain.md#bookings)).
 - Alternative accommodations (`AlternativeController`, see [accommodation-alternatives.md](accommodation-alternatives.md#api-proposal)): `GET /bookings/alternatives/status`, `GET /accommodation-bookings/{id}/alternative-criteria`, `POST /accommodation-bookings/{id}/alternative-searches`, `POST /accommodation-bookings/{id}/alternative-reservations`, `POST /stops/{stopId}/stay-reservations` (hotel of a proposal at the stop without a replaced booking), `GET /booking-reservations/{id}`, `POST /booking-reservations/{id}/booking`, `POST /booking-reservations/{id}/abort`, `POST /bookings/{id}/cancellation` (only mark as cancelled in the app).
 - Errors of the bookings (`BookingExceptionHandler`): 404 `STOP_NOT_FOUND`/`BOOKING_NOT_FOUND`/`TRIP_NOT_FOUND`, 400 `INVALID_BOOKING_INPUT` (with `field` where one input is at fault, see [i18n.md](i18n.md#forms)), 503 `ASSISTANT_UNAVAILABLE` (no key, model failed), 429 `ASSISTANT_RATE_LIMITED`; alternatives: 404 `RESERVATION_NOT_FOUND`, 409 `OFFER_UNAVAILABLE`/`PRICE_EXCEEDED`, 422 `PAYMENT_NOT_APPROVED`/`PAYMENT_DECLINED`, 429 `ALTERNATIVES_RATE_LIMITED`, 503 `ALTERNATIVES_UNAVAILABLE`/`PAYPAL_NOT_CONFIGURED`, 502 `PAYPAL_ERROR`.
 - **MCP tools** (`trips.api.TripTools`, same logic and DTOs as REST): `list_trips`, `get_trip`, `get_route` (scope `mcp:read`, `nfv.mcp.read-tools`), `create_trip`, `update_trip`, `add_stop`, `update_stop`, `move_stop`, `remove_stop`, `set_waypoints`, `plan_route` (additionally `mcp:write`). Deleting trips deliberately not via MCP. There are no MCP tools for bookings yet.
@@ -170,7 +176,7 @@ flowchart LR
 - **Search alternative** (`src/bookings/AlternativesSheet.tsx`, sub-route `buchungen/:bookingId/alternativen`, button in the booking details, only if LiteAPI is configured): check criteria from the booking, results with recommendation and justification (✦), guest data, secure price, "Pay with PayPal" (redirect). PayPal returns to the same sub-route with `?reservierung=<id>` (cancelled: `&abgebrochen=1`), the page then books and offers to mark the old booking as cancelled.
 - Shared content not yet saved also appears in the sheet "Add booking" under "Paste confirmation" and is read along in the same way there; `source` is `SHARE` as soon as shared content was read, otherwise `DOCUMENT`. If the login interrupts, the trip list points to the waiting booking.
 - **Proposals for incidents** (`src/proposals/`, see [advisor.md](advisor.md#frontend)): in the dialog `alternativen/:routeId/:incidentId` first "Solutions" (proposals of the agent, accept or "I'll replan myself"), below collapsed "Replan myself". Banner on the trip page for open proposals. Booking the hotel of a proposal: `stops/:stopId/unterkunft` (`StayBookingSheet`).
-- **To-do list** (`src/bookings/TodoList.tsx`) on the trip page: bookings to cancel or inform yourself, with link, phone, email, "Done", for those booked in the app "Cancel".
+- **To-do list** (`src/bookings/TodoList.tsx`) on the trip page: bookings to cancel or inform yourself, with link, phone, email, "Done", for those booked in the app "Cancel" (with refund, also after the booking or its stop was deleted). Deleting a booking made in the app, or its stop, opens `src/bookings/RemoveAppBookingDialog.tsx`: cancel as well or only remove (then it goes on the list).
 - The data layer `src/trips/tripsApi.ts` maps the generated types (all fields optional) to own types (`src/trips/model.ts`).
 
 ## Assistant

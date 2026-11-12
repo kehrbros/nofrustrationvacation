@@ -3,8 +3,10 @@ package com.nfv.bookings.logic;
 import com.nfv.bookings.data.AccommodationDetailsRepository;
 import com.nfv.bookings.data.BookingRepository;
 import com.nfv.bookings.data.BookingReservationRepository;
+import com.nfv.bookings.data.BookingTodoRepository;
 import com.nfv.bookings.entities.Booking;
 import com.nfv.bookings.entities.BookingReservation;
+import com.nfv.bookings.entities.BookingTodo;
 import com.nfv.bookings.entities.ReservationStatus;
 import com.nfv.trips.logic.StopInUseException;
 import com.nfv.trips.logic.StopsDeleting;
@@ -12,14 +14,17 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /**
  * Deletes the bookings and reservations of alternatives at stops that are deleted, in the transaction of the
- * deletion. Only while money is reserved at PayPal and the booking is not finished yet, the deletion is refused: the
- * payment would be left without its reservation.
+ * deletion. Deleting single stops: while money is reserved at PayPal and the booking is not finished yet, the deletion
+ * is refused (the payment would be left without its reservation); reservations booked and paid in the app stay without
+ * their stop. Deleting the whole trip deletes all its reservations, nothing is cancelled (the user confirmed it).
  */
 @Component
 @RequiredArgsConstructor
@@ -32,23 +37,39 @@ class StopDeletionListener {
     private final AccommodationDetailsRepository accommodationRepository;
     private final BookingReservationRepository reservationRepository;
     private final BookingTodos todos;
+    private final BookingTodoRepository todoRepository;
 
     @EventListener
     public void onStopsDeleting(StopsDeleting event) {
         List<BookingReservation> reservations = reservationRepository.findByStopIdIn(event.stopIds());
-        if (reservations.stream().anyMatch(reservation -> PAYMENT_RUNNING.contains(reservation.getStatus()))) {
+        if (!event.withTrip()
+                && reservations.stream().anyMatch(reservation -> PAYMENT_RUNNING.contains(reservation.getStatus()))) {
             throw new StopInUseException("an alternative accommodation is being booked at the stop, try again later");
         }
         List<Booking> bookings = bookingRepository.findByStopIdInOrderByStartsAtAscIdAsc(event.stopIds());
-        if (!event.withTrip() && !bookings.isEmpty()) {
-            // planned again by hand: what is not needed any more goes on the to-do list of the trip (the copy stays,
-            // the database detaches it from the booking)
-            todos.stopsRemoved(event.tripId(), bookings);
+        if (event.withTrip()) {
+            // the whole trip goes (cleaning up, Philipp 2026-11-12): the user confirmed it, nothing is cancelled; also
+            // the paid reservations of stops deleted earlier, which only its to-dos still point to
+            List<BookingReservation> all = new ArrayList<>(reservations);
+            todoRepository.findByTripIdOrderByCreatedAtDescIdDesc(event.tripId()).stream()
+                    .map(BookingTodo::getReservationId).filter(Objects::nonNull).distinct()
+                    .forEach(id -> reservationRepository.findById(id)
+                            .filter(reservation -> reservation.getStopId() == null).ifPresent(all::add));
+            reservationRepository.deleteAll(all);
+        } else {
+            if (!bookings.isEmpty()) {
+                // planned again by hand: what is not needed any more goes on the to-do list of the trip (the copy
+                // stays, the database detaches it from the booking)
+                todos.stopsRemoved(event.tripId(), bookings);
+            }
+            // booked and paid (or a refund still due): the reservation stays without its stop, so it can still be
+            // cancelled with a refund from the to-do list (and the background job finishes a refund that is due)
+            reservations.stream().filter(BookingReservation::holdsMoney).forEach(BookingReservation::detachFromStop);
+            reservationRepository.deleteAll(
+                    reservations.stream().filter(reservation -> !reservation.holdsMoney()).toList());
         }
-        reservationRepository.deleteAll(reservations);
         if (!bookings.isEmpty()) {
             accommodationRepository.deleteAll(
-
                     accommodationRepository.findByBookingIdIn(bookings.stream().map(Booking::getId).toList()));
             bookingRepository.deleteAll(bookings);
         }

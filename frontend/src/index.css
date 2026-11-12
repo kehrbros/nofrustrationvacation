@@ -1607,3 +1607,14 @@ a.va-button {
 .va-dates-fix {
   align-self: flex-start;
 }
+
+/* "Load demo trip" below the trip list (DemoTripCard) */
+.va-demo-trip {
+  margin-top: 20px;
+}
+.va-demo-trip .va-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
