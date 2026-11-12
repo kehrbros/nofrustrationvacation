@@ -46,6 +46,8 @@ export const de = {
     stopOnly: 'Der Stop wird aus der Reise entfernt.',
     tripCascade: '{{items}} mit allen Routen werden mitgelöscht.',
     tripOnly: 'Die Reise wird gelöscht.',
+    tripAppBookings_one: 'Achtung: Eine Unterkunft hast du über die App gebucht und bezahlt. Sie wird nicht storniert und nicht erstattet, auch die Reservierung wird gelöscht.',
+    tripAppBookings_other: 'Achtung: {{count}} Unterkünfte hast du über die App gebucht und bezahlt. Sie werden nicht storniert und nicht erstattet, auch die Reservierungen werden gelöscht.',
   },
   removeBooking: {
     titleBooking: '{{title}} auch stornieren?',
