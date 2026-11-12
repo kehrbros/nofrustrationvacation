@@ -1604,3 +1604,77 @@ a.va-button {
   gap: 8px;
   margin: 0;
 }
+
+/* ---------- undo hint at the bottom (UndoSnackbar) ---------- */
+.va-snackbar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 900;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: max-content;
+  max-width: min(480px, calc(100vw - 32px));
+  padding: 8px 8px 8px 16px;
+  overflow: hidden;
+  background: var(--ink);
+  color: #ffffff;
+  border-radius: 12px;
+  font-size: 15px;
+}
+.va-snackbar-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.va-snackbar-countdown {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.va-snackbar-action {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+/* thin bar along the bottom edge that runs out with the countdown */
+.va-snackbar-progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left;
+  animation-name: va-snackbar-run-out;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+.va-snackbar-progress-paused {
+  animation-play-state: paused;
+}
+@keyframes va-snackbar-run-out {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .va-snackbar-progress {
+    display: none;
+  }
+}
