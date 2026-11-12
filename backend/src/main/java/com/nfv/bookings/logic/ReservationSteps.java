@@ -40,7 +40,7 @@ class ReservationSteps {
     @Transactional(readOnly = true)
     BookingReservation owned(long appUserId, long reservationId) {
         return repository.findById(reservationId)
-                .filter(reservation -> tripLogic.stop(appUserId, reservation.getStopId()).isPresent())
+                .filter(reservation -> atOwnStop(appUserId, reservation))
                 .orElseThrow(() -> new ReservationNotFoundException(reservationId));
     }
 
@@ -57,7 +57,21 @@ class ReservationSteps {
     @Transactional(readOnly = true)
     java.util.Optional<BookingReservation> ofBooking(long appUserId, long bookingId) {
         return repository.findByBookingId(bookingId)
-                .filter(reservation -> tripLogic.stop(appUserId, reservation.getStopId()).isPresent());
+                .filter(reservation -> atOwnStop(appUserId, reservation));
+    }
+
+    /**
+     * A reservation of the user that no longer has a stop (deleted while it was booked and paid), e.g. to cancel it
+     * from the to-do list.
+     */
+    @Transactional(readOnly = true)
+    java.util.Optional<BookingReservation> withoutStop(long appUserId, long reservationId) {
+        return repository.findById(reservationId)
+                .filter(reservation -> reservation.getStopId() == null && reservation.getAppUserId() == appUserId);
+    }
+
+    private boolean atOwnStop(long appUserId, BookingReservation reservation) {
+        return reservation.getStopId() != null && tripLogic.stop(appUserId, reservation.getStopId()).isPresent();
     }
 
     /** Reservations the background job may have to continue: payment running, or a refund still due. */
@@ -120,6 +134,7 @@ class ReservationSteps {
         if (reservation.getBookingId() != null) {
             bookingLogic.cancel(reservation.getAppUserId(), reservation.getBookingId());
         }
+        todos.reservationCancelled(reservationId);
         return reservation;
     }
 

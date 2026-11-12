@@ -9,12 +9,14 @@ import com.nfv.bookings.dto.BookingDto;
 import com.nfv.bookings.dto.ReservationDto;
 import com.nfv.bookings.dto.ReservationInputDto;
 import com.nfv.bookings.dto.StayRouteCheckDto;
+import com.nfv.bookings.dto.TodoCancellationDto;
 import com.nfv.bookings.entities.BookingReservation;
 import com.nfv.bookings.logic.AlternativeCandidate;
 import com.nfv.bookings.logic.AlternativeCriteria;
 import com.nfv.bookings.logic.AlternativeReservations;
 import com.nfv.bookings.logic.AlternativeSearch;
 import com.nfv.bookings.logic.BookingLogic;
+import com.nfv.bookings.logic.BookingTodos;
 import com.nfv.bookings.logic.CriteriaProposal;
 import com.nfv.bookings.logic.InvalidBookingInputException;
 import com.nfv.bookings.logic.ReservationView;
@@ -47,6 +49,7 @@ public class AlternativeController {
     private final AlternativeSearch search;
     private final AlternativeReservations reservations;
     private final BookingLogic bookingLogic;
+    private final BookingTodos todos;
     private final PayPalCheckout checkout;
     private final StayRouteCheck stayRouteCheck;
 
@@ -164,6 +167,18 @@ public class AlternativeController {
     @PostMapping("/bookings/{bookingId}/refund-cancellation")
     public ReservationDto cancelWithRefund(@AuthenticationPrincipal CurrentUser user, @PathVariable long bookingId) {
         return toDto(reservations.cancel(user.appUserId(), bookingId));
+    }
+
+    @Operation(summary = "Cancel the booking of a to-do in the app and refund it",
+            description = "For open cancellations with cancellableInApp, also when the booking or its stop was "
+                    + "deleted: cancels at LiteAPI, PayPal refunds, the to-do is done. 409 CANCELLATION_NOT_POSSIBLE, "
+                    + "409 OFFER_UNAVAILABLE (LiteAPI refused), 503 ALTERNATIVES_UNAVAILABLE.")
+    @PostMapping("/booking-todos/{todoId}/refund-cancellation")
+    public TodoCancellationDto cancelTodoWithRefund(@AuthenticationPrincipal CurrentUser user,
+                                                    @PathVariable long todoId) {
+        BookingReservation reservation = reservations.cancelTodo(user.appUserId(), todoId);
+        return new TodoCancellationDto(BookingController.toDto(todos.get(user.appUserId(), todoId)),
+                reservation.getRefundAmount(), reservation.getCurrency(), reservation.getPayPalRefundId() != null);
     }
 
     @Operation(summary = "Mark a booking as cancelled",

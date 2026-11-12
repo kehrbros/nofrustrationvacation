@@ -6,7 +6,7 @@ function todo(patch: Partial<BookingTodo>): BookingTodo {
   return {
     id: 1, bookingId: 2, kind: 'CANCEL', reason: 'REPLACED', title: 'Hotel Adler', provider: 'Booking.com',
     reference: '4711', manageUrl: null, phone: null, email: null, startsAt: null, endsAt: null,
-    cancellationDeadline: null, bookedInApp: false, newArrivalOn: null, doneAt: null, ...patch,
+    cancellationDeadline: null, bookedInApp: false, cancellableInApp: false, newArrivalOn: null, doneAt: null, ...patch,
   };
 }
 

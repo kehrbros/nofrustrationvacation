@@ -10,8 +10,10 @@ import StayConflictDialog from '../trips/StayConflictDialog';
 import { bookingOutsideStop, stopDaysLabel, type BookingOutsideStop } from '../trips/stayConflict';
 import AddBookingSheet, { SubmitCancelled } from './AddBookingSheet';
 import { cancelWithRefund, fetchAlternativesStatus } from './alternativesApi';
+import { isAppBooked, isFreeToCancel } from './appBookings';
 import { changeAccommodationBooking, deleteBooking } from './bookingsApi';
 import { formFromBooking, toInput } from './form';
+import RemoveAppBookingDialog from './RemoveAppBookingDialog';
 import { stopPoint } from './stayDefaults';
 import { formatLocalDateTime, formatStay, shortTime } from './localTime';
 import { checkInLabel, checkOutLabel, directionsUrl, priceLabel, stayLabel } from './text';
@@ -29,6 +31,7 @@ export default function BookingSheet() {
   const [alternativesAvailable, setAlternativesAvailable] = useState(false);
   const [refund, setRefund] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
+  const [removing, setRemoving] = useState(false);
   const [conflict, setConflict] = useState<{
     outside: BookingOutsideStop;
     /** Check-in and check-out as entered, local at the place. */
@@ -128,8 +131,7 @@ export default function BookingSheet() {
     }
   };
   // booked in the app and still free to cancel: cancel at the hotel, PayPal refunds
-  const refundable = booking.source === 'SEARCH' && booking.status !== 'CANCELLED' && booking.cancellationDeadline != null
-    && new Date(booking.cancellationDeadline).getTime() > Date.now();
+  const refundable = isFreeToCancel(booking);
   const cancelAndRefund = async () => {
     setCancelling(true);
     setError(null);
@@ -163,17 +165,24 @@ export default function BookingSheet() {
           <button type="button" className="va-button va-button-outline va-grow" onClick={() => setEditing(true)}>
             <EditOutlined aria-hidden="true" /> {t('booking.edit')}
           </button>
-          <Popconfirm
-            title={t('booking.deleteTitle')}
-            description={t('booking.deleteText')}
-            okText={t('common.delete')}
-            cancelText={t('common.cancel')}
-            onConfirm={() => void remove()}
-          >
-            <button type="button" className="va-button va-button-outline" aria-label={t('booking.delete')}>
+          {isAppBooked(booking) ? (
+            // booked and paid in the app: ask whether to cancel it as well
+            <button type="button" className="va-button va-button-outline" aria-label={t('booking.delete')} onClick={() => setRemoving(true)}>
               <DeleteOutlined aria-hidden="true" />
             </button>
-          </Popconfirm>
+          ) : (
+            <Popconfirm
+              title={t('booking.deleteTitle')}
+              description={t('booking.deleteText')}
+              okText={t('common.delete')}
+              cancelText={t('common.cancel')}
+              onConfirm={() => void remove()}
+            >
+              <button type="button" className="va-button va-button-outline" aria-label={t('booking.delete')}>
+                <DeleteOutlined aria-hidden="true" />
+              </button>
+            </Popconfirm>
+          )}
         </div>
       }
     >
@@ -303,6 +312,9 @@ export default function BookingSheet() {
         <p className="va-small va-muted">{t('booking.noPosition', { zone: accommodation.timeZone })}</p>
       )}
       {error && <Alert type="error" showIcon message={error} />}
+      {removing && (
+        <RemoveAppBookingDialog bookings={[booking]} remove={remove} onClose={() => setRemoving(false)} />
+      )}
     </Sheet>
   );
 }

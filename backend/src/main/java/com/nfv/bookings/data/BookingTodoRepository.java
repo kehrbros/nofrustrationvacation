@@ -12,5 +12,7 @@ public interface BookingTodoRepository extends JpaRepository<BookingTodo, Long> 
 
     List<BookingTodo> findByBookingIdIn(Collection<Long> bookingIds);
 
+    List<BookingTodo> findByReservationId(long reservationId);
+
     boolean existsByBookingIdAndKindAndDoneAtIsNull(long bookingId, TodoKind kind);
 }

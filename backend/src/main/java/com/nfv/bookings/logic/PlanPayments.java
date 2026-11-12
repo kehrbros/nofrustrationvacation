@@ -79,7 +79,7 @@ public class PlanPayments {
 
     /** @param bookingId once settled */
     public record Item(String key, long reservationId, String hotelName, BigDecimal price, String currency,
-                       ReservationStatus status, long stopId, @Nullable Long bookingId) {
+                       ReservationStatus status, @Nullable Long stopId, @Nullable Long bookingId) {
     }
 
     /** The money is reserved and every hotel booked: the plan can change the trip. Also from the background job. */
@@ -238,7 +238,7 @@ public class PlanPayments {
                 continue;
             }
             Long stopId = reservation.getPlanKey() == null ? null : stopIdByKey.get(reservation.getPlanKey());
-            if (stopId != null && stopId != reservation.getStopId()) {
+            if (stopId != null && !stopId.equals(reservation.getStopId())) {
                 reservation = steps.assignStop(reservation.getId(), stopId);
             }
             String captureId = reservations.capture(reservation);

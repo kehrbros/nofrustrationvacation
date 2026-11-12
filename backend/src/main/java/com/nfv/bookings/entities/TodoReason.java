@@ -6,6 +6,8 @@ public enum TodoReason {
     REPLACED,
     /** Its stop was deleted, e.g. while planning again by hand. */
     STOP_REMOVED,
+    /** The booking was removed from the trip without cancelling it (booked in the app). */
+    BOOKING_REMOVED,
     /** A night on the way makes the arrival at its stop a day later. */
     ARRIVAL_LATER
 }

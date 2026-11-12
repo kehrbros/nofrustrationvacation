@@ -48,6 +48,11 @@ public class BookingTodo extends AbstractEntity {
     private @Nullable OffsetDateTime cancellationDeadline;
     /** Booked and paid in the app: it can be cancelled there, with a refund. */
     private boolean bookedInApp;
+    /**
+     * The reservation it was booked and paid with in the app; it stays when the booking is deleted, so the to-do can
+     * still cancel it with a refund. {@code null} if not booked in the app.
+     */
+    private @Nullable Long reservationId;
     /** {@code NOTIFY_LATE_ARRIVAL}: the day of the new arrival, local at the stop. */
     private @Nullable LocalDate newArrivalOn;
     @Column(nullable = false)
@@ -58,7 +63,7 @@ public class BookingTodo extends AbstractEntity {
     }
 
     public BookingTodo(long tripId, Booking booking, @Nullable String phone, @Nullable String email, TodoKind kind,
-                       TodoReason reason, boolean bookedInApp, @Nullable LocalDate newArrivalOn,
+                       TodoReason reason, @Nullable Long reservationId, @Nullable LocalDate newArrivalOn,
                        OffsetDateTime createdAt) {
         this.tripId = tripId;
         this.bookingId = booking.getId();
@@ -73,13 +78,19 @@ public class BookingTodo extends AbstractEntity {
         this.startsAt = booking.getStartsAt();
         this.endsAt = booking.getEndsAt();
         this.cancellationDeadline = booking.getCancellationDeadline();
-        this.bookedInApp = bookedInApp;
+        this.bookedInApp = reservationId != null;
+        this.reservationId = reservationId;
         this.newArrivalOn = newArrivalOn;
         this.createdAt = createdAt;
     }
 
     public boolean isOpen() {
         return doneAt == null;
+    }
+
+    /** Open cancellation of a booking made and paid in the app: the app can cancel it, with a refund. */
+    public boolean isCancellableInApp() {
+        return kind == TodoKind.CANCEL && isOpen() && reservationId != null;
     }
 
     public void done(OffsetDateTime at) {

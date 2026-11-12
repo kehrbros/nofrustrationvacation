@@ -2,10 +2,9 @@ import { CheckOutlined, MailOutlined, PhoneOutlined, UndoOutlined } from '@ant-d
 import { Alert, Popconfirm } from 'antd';
 import { useEffect, useState } from 'react';
 
-import { t } from '../i18n';
-import { cancelWithRefund } from './alternativesApi';
+import { formatMoney, t } from '../i18n';
 import { formatLocalDateTime, formatStay } from './localTime';
-import { fetchTodos, markTodoDone, reopenTodoAgain, todoActionText, todoReasonText, type BookingTodo } from './todosApi';
+import { cancelTodoInApp, fetchTodos, markTodoDone, reopenTodoAgain, todoActionText, todoReasonText, type BookingTodo } from './todosApi';
 import { formatShortDate } from '../proposals/proposalText';
 
 /**
@@ -25,6 +24,8 @@ export default function TodoList({ tripId, version, onChanged, compact, onExpand
   const [todos, setTodos] = useState<BookingTodo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
+  const [refund, setRefund] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<number | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -51,13 +52,19 @@ export default function TodoList({ tripId, version, onChanged, compact, onExpand
     }
   };
   const cancelInApp = async (todo: BookingTodo) => {
-    if (todo.bookingId == null) return;
+    setError(null);
+    setCancelling(todo.id);
     try {
-      await cancelWithRefund(todo.bookingId);
+      const result = await cancelTodoInApp(todo.id);
+      setRefund(result.refunded && result.refundAmount
+        ? t('todo.refunded', { amount: formatMoney(result.refundAmount, result.currency) })
+        : t('todo.refundPending'));
       setTodos(await fetchTodos(tripId));
       onChanged();
     } catch {
       setError(t('todo.cancelFailed'));
+    } finally {
+      setCancelling(null);
     }
   };
 
@@ -82,16 +89,19 @@ export default function TodoList({ tripId, version, onChanged, compact, onExpand
         {open.length > 0 ? t('todo.titleCount', { count: open.length }) : t('todo.title')}
       </h3>
       {error && <Alert type="error" showIcon closable message={error} onClose={() => setError(null)} />}
+      {refund && <Alert type="success" showIcon closable message={refund} onClose={() => setRefund(null)} />}
       {open.length === 0 && <p className="va-small va-muted">{t('todo.allDone')}</p>}
       <ul className="va-plain-list va-column va-gap">
         {open.map((todo) => (
           <li key={todo.id} className="va-todo">
             <TodoText todo={todo} />
             <div className="va-row va-gap va-wrap">
-              {todo.bookedInApp && todo.bookingId != null && todo.kind === 'CANCEL' ? (
+              {todo.cancellableInApp ? (
                 <Popconfirm title={t('todo.cancelTitle', { title: todo.title })} description={t('todo.cancelText')}
                   okText={t('booking.cancelOk')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')} onConfirm={() => cancelInApp(todo)}>
-                  <button type="button" className="va-button va-button-outline">{todoActionText(todo)}</button>
+                  <button type="button" className="va-button va-button-outline" disabled={cancelling === todo.id}>
+                    {cancelling === todo.id ? t('removeBooking.working') : todoActionText(todo)}
+                  </button>
                 </Popconfirm>
               ) : todo.manageUrl ? (
                 <a className="va-button va-button-outline" href={todo.manageUrl} target="_blank" rel="noopener noreferrer">

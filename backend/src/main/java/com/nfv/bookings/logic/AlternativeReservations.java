@@ -48,6 +48,7 @@ public class AlternativeReservations {
 
     private final BookingLogic bookingLogic;
     private final TripLogic tripLogic;
+    private final BookingTodos todos;
     private final TripEditing tripEditing;
     private final LiteApi liteApi;
     private final PayPalCheckout checkout;
@@ -207,6 +208,25 @@ public class AlternativeReservations {
                 .orElseThrow(() -> new CancellationNotPossibleException("booking " + bookingId
                         + " was not booked in the app"));
         long tripId = tripId(appUserId, reservation);
+        reservation = cancelAndRefund(reservation);
+        return view(appUserId, steps.find(reservation.getId()), tripId);
+    }
+
+    /**
+     * Cancels the reservation of an open cancellation to-do in the app, like {@link #cancel}, also when its booking
+     * or stop is deleted already; the to-do is done then.
+     *
+     * @throws CancellationNotPossibleException not booked in the app, done already or no longer free to cancel
+     */
+    public BookingReservation cancelTodo(long appUserId, long todoId) {
+        long reservationId = todos.reservationToCancel(appUserId, todoId);
+        BookingReservation reservation = steps.withoutStop(appUserId, reservationId)
+                .or(() -> java.util.Optional.of(steps.owned(appUserId, reservationId)))
+                .orElseThrow();
+        return steps.find(cancelAndRefund(reservation).getId());
+    }
+
+    private BookingReservation cancelAndRefund(BookingReservation reservation) {
         if (reservation.getStatus() == ReservationStatus.BOOKED) {
             if (!reservation.isRefundable()) {
                 throw new CancellationNotPossibleException("the rate is not refundable");
@@ -228,7 +248,7 @@ public class AlternativeReservations {
                 log.warn("Refund of reservation {} failed, retried later: {}", reservation.getId(), e.getMessage());
             }
         }
-        return view(appUserId, steps.find(reservation.getId()), tripId);
+        return reservation;
     }
 
     /** The user cancelled at PayPal or left: the reservation fails, nothing was paid. */
@@ -417,7 +437,8 @@ public class AlternativeReservations {
     }
 
     private long tripId(long appUserId, BookingReservation reservation) {
-        return tripLogic.stop(appUserId, reservation.getStopId()).map(stop -> stop.getTrip().getId())
+        return (reservation.getStopId() == null ? java.util.Optional.<Stop>empty()
+                : tripLogic.stop(appUserId, reservation.getStopId())).map(stop -> stop.getTrip().getId())
                 .orElseThrow(() -> new ReservationNotFoundException(reservation.getId()));
     }
 
